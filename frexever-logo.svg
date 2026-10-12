@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 380">
+  <defs>
+    <marker id="ahG" markerUnits="userSpaceOnUse" markerWidth="64" markerHeight="64" refX="44" refY="30" orient="auto">
+      <path d="M6 8 L54 30 L6 52 Z" fill="#22d3b0"/>
+    </marker>
+    <marker id="ahB" markerUnits="userSpaceOnUse" markerWidth="64" markerHeight="64" refX="44" refY="30" orient="auto">
+      <path d="M6 8 L54 30 L6 52 Z" fill="#3b6ef6"/>
+    </marker>
+  </defs>
+  <path d="M76.1 97.3 A118 118 0 0 1 248.0 257.7" fill="none" stroke="#22d3b0" stroke-width="31" stroke-linecap="round" marker-end="url(#ahG)"/>
+  <path d="M227.7 278.0 A118 118 0 0 1 62.0 112.3" fill="none" stroke="#3b6ef6" stroke-width="31" stroke-linecap="round" marker-end="url(#ahB)"/>
+  <circle cx="155" cy="185" r="82" fill="#f5a623"/>
+  <path d="M112 214 L140 184 L159 205 L196 152" fill="none" stroke="#ffffff" stroke-width="15" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M199 149 L165 152 L191 181 Z" fill="#ffffff"/>
+  <text x="342" y="222" font-family="Poppins,Montserrat,'Segoe UI',Arial,sans-serif" font-size="152" font-weight="800" letter-spacing="-4">
+    <tspan fill="#2b2e36">Fre</tspan><tspan fill="#f5a623">x</tspan><tspan fill="#2b2e36">ever</tspan>
+  </text>
+  <text x="350" y="300" font-family="Poppins,Montserrat,'Segoe UI',Arial,sans-serif" font-size="50" font-weight="600" letter-spacing="11" fill="#8a9199">Trade Free Forever</text>
+</svg>

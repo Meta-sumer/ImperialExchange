@@ -1,0 +1,25 @@
+{
+  "expo": {
+    "name": "Frexever",
+    "slug": "tradepro-mobile",
+    "version": "1.0.0",
+    "orientation": "default",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "scheme": "tradepro",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.tradepro.mobile"
+    },
+    "android": {
+      "package": "com.tradepro.mobile"
+    },
+    "plugins": [
+      "expo-asset",
+      "expo-font"
+    ]
+  }
+}

@@ -1,0 +1,1380 @@
+const mongoose = require('mongoose');
+const OrderBook = require('./OrderBook');
+const Order = require('../models/Order');
+const Trade = require('../models/Trade');
+const Instrument = require('../models/Instrument');
+const Position = require('../models/Position');
+const TradingAccount = require('../models/TradingAccount');
+const { ORDER_STATUS, ORDER_SIDE, POSITION_STATUS, ROUTING } = require('../config/constants');
+const { add, sub, mul, div, eq, gt, lte, D } = require('../utils/decimal');
+const { computeInstrumentCommission } = require('../utils/commission');
+const LedgerCache = require('./LedgerCache');
+
+// Which book an order's resulting position belongs to: A_BOOK = forwarded to
+// LP; everything else (B_BOOK, internal matching) = broker is the counterparty.
+const bookOf = (o) => (String(o?.routingResult || '').toUpperCase() === 'A_BOOK' ? 'A_BOOK' : 'B_BOOK');
+
+/**
+ * In-process Matching Engine.
+ * - One OrderBook per symbol.
+ * - Process incoming orders sequentially per symbol (single-writer principle).
+ *
+ * Limitation: This is for MVP/dev only. For production:
+ *   - Move state to Redis sorted sets
+ *   - Use BullMQ / Redis Streams for serialized intake per symbol
+ *   - Port hot path to Rust/Go when >1000 orders/sec/instrument
+ */
+class MatchingEngine {
+  constructor() {
+    this.books = new Map(); // symbol -> OrderBook
+    this.queues = new Map(); // symbol -> Promise (serializer)
+    this.broadcaster = null; // injected: WebSocket broadcaster
+    // Phase 0 throughput: short-TTL instrument cache so the per-order intake
+    // read + the per-settle read don't both hit Mongo every order. Safe under
+    // the per-symbol single-writer model (no concurrent mutation within a
+    // symbol). TTL bounds price staleness for B-book fills.
+    this._instrCache = new Map(); // instrumentId -> { doc, exp }
+    this._instrCacheMs = Number(process.env.MATCHING_INSTRUMENT_CACHE_MS) || 50;
+    // Account META cache (baseCurrency + accountType ONLY — both static). Never
+    // caches balance/locked; those are always read/written fresh by the wallet
+    // service. Used to drop the per-settle account read.
+    this._acctCache = new Map(); // accountId -> { doc, exp }
+
+    // ── Phase 1 write-behind SHADOW mode (flag, default OFF) ──────────────
+    // When MATCHING_WRITE_BEHIND=shadow, every B-book fill is ALSO settled in a
+    // transient in-memory LedgerCache and reconciled against the real DB result
+    // — purely to validate the in-memory engine on live traffic before the real
+    // cutover. It NEVER affects the live result (wrapped in try/catch, the real
+    // synchronous path is untouched). Divergences are logged + counted.
+    //   unset / 'false' → no shadow (byte-for-byte today's behavior)
+    //   'shadow'        → validate-only (this increment)
+    //   'on'            → reserved for the actual cutover (next increment)
+    this._wbMode = String(process.env.MATCHING_WRITE_BEHIND || '').toLowerCase();
+    this._shadowOn = this._wbMode === 'shadow';
+    this._shadowStats = { checked: 0, diverged: 0 };
+    if (this._shadowOn) console.log('[ME] write-behind SHADOW mode ON — validating in-memory ledger vs DB (no effect on live results)');
+
+    // ── Phase 1 CUTOVER (MATCHING_WRITE_BEHIND=on) — staged ───────────────
+    // Stage 1a (this): the durable Journal (WAL) + WriteBehind pipeline + crash
+    // recovery, with the B-book TRADE record moved off the hot path. Positions
+    // and the WALLET settle stay SYNCHRONOUS (zero money risk) — they move in
+    // later stages after staging load-tests. The Trade is an idempotent audit
+    // doc (unique _id), so async-flush + replay can never double-insert it.
+    this._wbOn = this._wbMode === 'on';
+    this.journal = null;
+    this.writeBehind = null;
+    if (this._wbOn) console.log('[ME] write-behind CUTOVER mode ON (stage 1a: Trade → WAL + write-behind; positions/wallet still synchronous)');
+  }
+
+  // Start the WAL + write-behind workers and replay any un-applied journal
+  // entries (crash recovery). Call once at boot AFTER the DB is connected.
+  async startWriteBehind() {
+    if (!this._wbOn || this.journal) return;
+    const { Journal } = require('./Journal');
+    const WriteBehind = require('./WriteBehind');
+    this.journal = new Journal({
+      commitMs: Number(process.env.MATCHING_JOURNAL_COMMIT_MS) || 5,
+      maxBatch: Number(process.env.MATCHING_JOURNAL_MAX_BATCH) || 1000,
+    });
+    this.writeBehind = new WriteBehind({
+      flushMs: Number(process.env.MATCHING_WRITEBEHIND_FLUSH_MS) || 25,
+      maxBatch: Number(process.env.MATCHING_WRITEBEHIND_MAX_BATCH) || 1000,
+      onFlushed: (seqs) => { this.journal.markApplied(seqs).catch(() => {}); },
+    });
+    this.journal.start();
+    this.writeBehind.start();
+    try {
+      const n = await this.journal.replayUnapplied((e) => this._replayJournalEntry(e));
+      if (n) console.log(`[ME] journal replay: re-enqueued ${n} un-applied entr${n === 1 ? 'y' : 'ies'}`);
+    } catch (e) {
+      console.error('[ME] journal replay failed:', e.message);
+    }
+  }
+
+  // Flush WAL + derived writes on graceful shutdown so nothing is lost.
+  async drainWriteBehind() {
+    try { if (this.journal) await this.journal.drain(); } catch (_) { /* */ }
+    try { if (this.writeBehind) await this.writeBehind.drain(); } catch (_) { /* */ }
+  }
+
+  // Re-apply an un-applied journal entry on boot (idempotent). Stage 1a only
+  // journals the Trade insert; the unique _id makes the re-insert a no-op if it
+  // had already flushed before the crash.
+  _replayJournalEntry(entry) {
+    if (entry.type === 'BBOOK_TRADE' && entry.payload && entry.payload.trade) {
+      this.writeBehind.enqueue(Trade, { insertOne: { document: entry.payload.trade } }, entry.seq);
+    }
+  }
+
+  setBroadcaster(broadcaster) {
+    this.broadcaster = broadcaster;
+  }
+
+  getBook(symbol) {
+    if (!this.books.has(symbol)) this.books.set(symbol, new OrderBook(symbol));
+    return this.books.get(symbol);
+  }
+
+  // Short-TTL instrument fetch (Phase 0). Returns the cached Mongoose doc when
+  // fresh, else reloads. Removes the redundant intake + settle reads per order.
+  async _getInstrument(instrumentId) {
+    const key = String(instrumentId);
+    const hit = this._instrCache.get(key);
+    if (hit && hit.exp > Date.now()) return hit.doc;
+    const doc = await Instrument.findById(instrumentId);
+    if (doc) this._instrCache.set(key, { doc, exp: Date.now() + this._instrCacheMs });
+    return doc;
+  }
+
+  // Static account fields (baseCurrency + accountType) for fee/currency
+  // resolution at settle. Balance/locked are NEVER taken from here.
+  async _getAccountMeta(accountId) {
+    const key = String(accountId);
+    const hit = this._acctCache.get(key);
+    if (hit && hit.exp > Date.now()) return hit.doc;
+    const doc = await TradingAccount.findById(accountId).select('baseCurrency accountType').lean();
+    if (doc) this._acctCache.set(key, { doc, exp: Date.now() + this._instrCacheMs });
+    return doc;
+  }
+
+  // Effective spread for this instrument on the ORDER's account type:
+  // per-account override → plan default → instrument global (spreadService).
+  // Falls back to the instrument's own spread on any error so a fill never
+  // throws over pricing.
+  async _resolveSpread(instrument, accountId) {
+    try {
+      const meta = await this._getAccountMeta(accountId);
+      return await require('../services/spreadService').resolveSpread(instrument, meta?.accountType);
+    } catch (_) {
+      return { spreadValue: instrument?.spreadValue || '0', spreadType: instrument?.spreadType || 'FIXED' };
+    }
+  }
+
+  // Persist a new lastPrice WITHOUT a full doc.save() — updateOne avoids
+  // Mongoose version conflicts when the same cached doc is reused across orders,
+  // and stays fire-and-forget (off the hot path). Also updates the cached doc
+  // so the next order in the TTL window sees the latest price.
+  _persistLastPrice(instrument, price) {
+    if (!instrument || price == null) return;
+    instrument.lastPrice = price;
+    instrument.lastPriceUpdatedAt = new Date();
+    Instrument.updateOne(
+      { _id: instrument._id },
+      { $set: { lastPrice: price, lastPriceUpdatedAt: instrument.lastPriceUpdatedAt } }
+    ).catch(() => {});
+  }
+
+  /** Rebuild order books from open orders on engine start (crash recovery). */
+  async hydrateFromDB() {
+    const openOrders = await Order.find({
+      status: { $in: [ORDER_STATUS.PENDING, ORDER_STATUS.PARTIALLY_FILLED] },
+      type: { $in: ['LIMIT', 'STOP'] },
+    }).sort({ createdAt: 1 });
+
+    let restored = 0;
+    for (const o of openOrders) {
+      // LIMIT orders go in immediately. A STOP that has already been triggered
+      // and turned into a STOP-LIMIT (triggeredAt set + price present) ALSO
+      // lives on the book; pre-fix it would be orphaned across a restart and
+      // never fill.
+      if (o.type === 'LIMIT') {
+        this.getBook(o.symbol).add(o);
+        restored++;
+      } else if (o.type === 'STOP' && o.triggeredAt && o.price) {
+        this.getBook(o.symbol).add(o);
+        restored++;
+      }
+      // Untriggered STOP and STOP-MARKET (no limit price after trigger) stay
+      // off-book; the worker handles their lifecycle.
+    }
+    console.log(`[ME] Hydrated ${restored}/${openOrders.length} open orders into order books`);
+  }
+
+  /**
+   * Serialization key for an order.
+   *   • Book-matched orders (internal LIMIT/STOP) mutate the SHARED per-symbol
+   *     order book → must serialize per SYMBOL.
+   *   • B-book / EXTERNAL fills are synthetic: they never touch the order book,
+   *     and they only mutate their OWN position + (atomically) their OWN wallet.
+   *     So they serialize per (account, symbol) — which lets DIFFERENT accounts
+   *     trade the SAME symbol fully in parallel (the real-market case, and the
+   *     key lever for per-symbol throughput).
+   */
+  _queueKey(order) {
+    const r = String(order.routing || '').toUpperCase();
+    if (r === 'B_BOOK' || r === 'EXTERNAL') return `pos:${order.accountId}:${order.symbol}`;
+    return `sym:${order.symbol}`;
+  }
+
+  /** Serialize processing per queue key (see _queueKey). */
+  async submit(order) {
+    const key = this._queueKey(order);
+    const prev = this.queues.get(key) || Promise.resolve();
+    const next = prev.then(() => this._processOrder(order)).catch((e) => {
+      console.error('[ME] processOrder error:', e);
+      throw e;
+    });
+    const tracked = next.catch(() => {}); // chain even on error
+    this.queues.set(key, tracked);
+    // Drop the key once its chain fully drains (prevents unbounded growth of
+    // per-account keys), but only if no newer order has chained onto it.
+    tracked.finally(() => { if (this.queues.get(key) === tracked) this.queues.delete(key); });
+    return next;
+  }
+
+  async _processOrder(order) {
+    const instrument = await this._getInstrument(order.instrumentId);
+    if (!instrument || !instrument.isActive) {
+      order.status = ORDER_STATUS.REJECTED;
+      order.rejectionReason = 'Instrument inactive';
+      await order.save();
+      return order;
+    }
+
+    // A triggered STOP order is processed as STOP-LIMIT (when price set) or
+    // STOP-MARKET (when not). The original type stays 'STOP' for the audit
+    // trail; we use this local alias for the matching logic below.
+    const effectiveType =
+      order.type === 'STOP' && order.triggeredAt
+        ? (order.price ? 'LIMIT' : 'MARKET')
+        : order.type;
+
+    // B-book route: broker is counterparty. Fill at last price (or quote price for limits).
+    // No matching against the order book - this is a separate execution path.
+    if (order.routing === 'B_BOOK') {
+      return this._processBBookOrder(order, instrument);
+    }
+
+    // EXTERNAL route: in production this would forward to a real LP / Binance via API.
+    // For MVP without a real LP integration, we simulate the fill at last price so
+    // the platform stays functional. Trade is marked routing='EXTERNAL' for the audit
+    // trail. PROFITABLE traders end up here so the broker doesn't take their flow.
+    //
+    // TODO: wire to a real LP adapter (Binance trading API, LMAX FIX, etc.) for true STP.
+    if (order.routing === 'EXTERNAL') {
+      return this._processExternalOrder(order, instrument);
+    }
+
+    const book = this.getBook(order.symbol);
+    // For triggered STOP we feed the matcher a view with the effective type
+    // (so STOP-LIMIT respects price compatibility, STOP-MARKET crosses freely),
+    // while the persisted order keeps type='STOP'.
+    const matchView = effectiveType !== order.type ? { ...order.toObject?.() ?? order, type: effectiveType } : order;
+    const { fills, remaining } = book.match(matchView);
+
+    let avgFillPrice = '0';
+    let totalFilled = '0';
+
+    if (fills.length) {
+      // Persist trades and update orders/positions
+      let weightedSum = '0';
+      for (const f of fills) {
+        // Update maker order
+        const maker = await Order.findById(f.makerOrderId);
+        if (maker) {
+          maker.filledQuantity = add(maker.filledQuantity, f.qty);
+          if (eq(maker.filledQuantity, maker.quantity)) {
+            maker.status = ORDER_STATUS.FILLED;
+            maker.filledAt = new Date();
+          } else {
+            maker.status = ORDER_STATUS.PARTIALLY_FILLED;
+          }
+          // Update avg fill on maker
+          const prevAvg = maker.avgFillPrice || '0';
+          const prevQty = sub(maker.filledQuantity, f.qty);
+          const newAvg =
+            eq(maker.filledQuantity, '0')
+              ? f.price
+              : div(add(mul(prevAvg, prevQty), mul(f.price, f.qty)), maker.filledQuantity);
+          maker.avgFillPrice = newAvg;
+          await maker.save();
+        }
+
+        // Create Trade
+      const isIncomingBuy = order.side === ORDER_SIDE.BUY;
+        const newTrade = await Trade.create({
+          instrumentId: order.instrumentId,
+          symbol: order.symbol,
+          buyOrderId: isIncomingBuy ? order._id : f.makerOrderId,
+          sellOrderId: isIncomingBuy ? f.makerOrderId : order._id,
+          buyUserId: isIncomingBuy ? order.userId : f.makerUserId,
+          sellUserId: isIncomingBuy ? f.makerUserId : order.userId,
+          buyAccountId: isIncomingBuy ? order.accountId : f.makerAccountId,
+          sellAccountId: isIncomingBuy ? f.makerAccountId : order.accountId,
+          price: f.price,
+          quantity: f.qty,
+          // A real user↔user match in INTERNAL_MATCHING mode is tagged as
+          // such so reports can split true peer matching from legacy
+          // internalised fills. Buyer and seller are distinct users.
+          routing: order.routing === ROUTING.INTERNAL_MATCHING ? ROUTING.INTERNAL_MATCHING : ROUTING.INTERNAL,
+        });
+
+        // Affiliate / IB commission is generated ONLY on CLOSE now (see
+        // accrueCloseCommission fired from _updatePosition's close branch).
+        // Opening fills pay nothing; both legs earn on their own closes.
+
+        // Update positions for both sides. Same tradeId is passed to both
+        // sides so each derives its own dedupeKey of "TRADE_SETTLE:<tradeId>".
+        // (Idempotency is per (wallet, dedupeKey) so taker and maker each
+        // get one settle on their own wallet.)
+        await this._updatePosition(order.accountId, order.userId, order.instrumentId, order.symbol, order.side, f.qty, f.price, order.leverage, newTrade._id, order.closeOnly, order.stopLoss, order.takeProfit, order.positionSide, bookOf(order), order.productType);
+
+        // Maker side: skip the position update if we couldn't load the maker
+        // doc (deleted out from under us, etc.). Defaulting leverage to 1
+        // would distort their margin calc; better to log loudly and rely on
+        // the worker's reconciliation pass than silently corrupt state.
+        if (maker) {
+          await this._updatePosition(
+            f.makerAccountId,
+            f.makerUserId,
+            order.instrumentId,
+            order.symbol,
+            maker.side,
+            f.qty,
+            f.price,
+            maker.leverage || 1,
+            newTrade._id,
+            maker.closeOnly,
+            maker.stopLoss,
+            maker.takeProfit,
+            maker.positionSide,
+            bookOf(maker),
+            maker.productType
+          );
+        } else {
+          console.error(
+            `[ME] Maker order ${f.makerOrderId} not found while settling trade ${newTrade._id} — maker-side position not updated`
+          );
+        }
+
+        weightedSum = add(weightedSum, mul(f.price, f.qty));
+        totalFilled = add(totalFilled, f.qty);
+
+        // Broadcast trade
+        if (this.broadcaster) {
+          this.broadcaster.broadcastTrade({
+            symbol: order.symbol,
+            price: f.price,
+            quantity: f.qty,
+            side: order.side,
+            ts: Date.now(),
+          });
+        }
+      }
+      avgFillPrice = eq(totalFilled, '0') ? '0' : div(weightedSum, totalFilled);
+
+      // Update last price on instrument
+      this._persistLastPrice(instrument, fills[fills.length - 1].price);
+    }
+
+    // Update incoming order
+    order.filledQuantity = add(order.filledQuantity, totalFilled);
+    if (gt(totalFilled, '0')) {
+      // weighted avg with prior avgFillPrice
+      const priorFilled = sub(order.filledQuantity, totalFilled);
+      const priorAvg = order.avgFillPrice || '0';
+      order.avgFillPrice = eq(order.filledQuantity, '0')
+        ? '0'
+        : div(add(mul(priorAvg, priorFilled), mul(avgFillPrice, totalFilled)), order.filledQuantity);
+    }
+
+    if (eq(remaining, '0')) {
+      order.status = ORDER_STATUS.FILLED;
+      order.filledAt = new Date();
+    } else if (gt(order.filledQuantity, '0')) {
+      order.status = ORDER_STATUS.PARTIALLY_FILLED;
+    } else if (effectiveType === 'MARKET' && !(order.routing === ROUTING.INTERNAL_MATCHING && !order.closeOnly)) {
+      // MARKET (or triggered STOP-MARKET) with no resting liquidity.
+      // B-book, legacy internal, and INTERNAL_MATCHING *closes* internalise
+      // at last price so the user can always be filled / always exit.
+      //
+      // Pre-fix behavior: reject with "No liquidity for market order" — which
+      // left positions stuck OPEN whenever a user tried to close them on a
+      // thin/empty book, so PnL never settled and the wallet never moved.
+      // Real brokers don't do that — they internalize at last-traded price.
+      //
+      // Fallback: synthetic fill at instrument.lastPrice (with side-adjusted
+      // spread). The trade is tagged routing='INTERNAL_FALLBACK' so audit
+      // logs distinguish it from a true book match. _updatePosition then
+      // settles PnL through walletService.settleTradeClose as usual.
+      const refPrice = instrument.lastPrice;
+      // Stuck-feed guard (opens only): refuse to synthesize a NEW-position fill
+      // against a stale / frozen price. Closes always fill (never trap a
+      // position or block a stop-out). B-book opens are also caught earlier in
+      // orderRouter — this is the backstop for any path that bypasses it.
+      let _feedBlock = null;
+      if (!order.closeOnly) {
+        const fg = require('../utils/feedGuard').checkFeed(instrument);
+        if (!fg.ok) _feedBlock = fg.reason;
+      }
+      if (_feedBlock) {
+        order.status = ORDER_STATUS.REJECTED;
+        order.rejectionReason = _feedBlock === 'FROZEN_FEED'
+          ? 'No liquidity — price not moving right now'
+          : 'No liquidity — price feed is stale';
+      } else if (refPrice && !eq(refPrice, '0')) {
+        const remainingQty = remaining;
+        // Half-spread per side — matches the quoted bid/ask (see B-book note).
+        const _spr = await this._resolveSpread(instrument, order.accountId);
+        const halfSpread = D(_spr.spreadValue || '0').times(D('0.5'));
+        let executed = D(refPrice);
+        if (_spr.spreadType === 'PERCENTAGE') {
+          executed = order.side === 'BUY'
+            ? executed.times(D('1').plus(halfSpread))
+            : executed.times(D('1').minus(halfSpread));
+        } else {
+          executed = order.side === 'BUY' ? executed.plus(halfSpread) : executed.minus(halfSpread);
+        }
+        const fillPx = executed.toString();
+
+        // Persist a synthetic Trade so the audit trail and reports are correct.
+        const fbTrade = await Trade.create({
+          instrumentId: order.instrumentId,
+          symbol: order.symbol,
+          buyOrderId: order._id,
+          sellOrderId: order._id,
+          buyUserId: order.userId,
+          sellUserId: order.userId,
+          buyAccountId: order.accountId,
+          sellAccountId: order.accountId,
+          price: fillPx,
+          quantity: remainingQty,
+          routing: 'INTERNAL', // fallback still counts as internalized
+        });
+
+        // Settle the position (this is where the user's wallet PnL lands).
+        // tradeId enables idempotent settle via dedupeKey.
+        await this._updatePosition(
+          order.accountId,
+          order.userId,
+          order.instrumentId,
+          order.symbol,
+          order.side,
+          remainingQty,
+          fillPx,
+          order.leverage,
+          fbTrade._id,
+          order.closeOnly,
+          order.stopLoss,
+          order.takeProfit,
+          order.positionSide,
+          bookOf(order),
+          order.productType
+        );
+
+        order.filledQuantity = add(order.filledQuantity, remainingQty);
+        order.avgFillPrice = fillPx;
+        order.status = ORDER_STATUS.FILLED;
+        order.filledAt = new Date();
+        order.rejectionReason = undefined;
+
+        // Update instrument last-price + broadcast tape so the chart & UI
+        // reflect this fill, same as a real match would.
+        this._persistLastPrice(instrument, fillPx);
+        {
+          const { updateCandlesForTrade } = require('../services/candleService');
+          updateCandlesForTrade({
+            symbol: order.symbol,
+            price: fillPx,
+            quantity: remainingQty,
+            ts: Date.now(),
+          }).catch(() => {}); // fire-and-forget: candle aggregation off the hot path
+        }
+
+        if (this.broadcaster) {
+          this.broadcaster.broadcastTrade({
+            symbol: order.symbol,
+            price: fillPx,
+            quantity: remainingQty,
+            side: order.side,
+            ts: Date.now(),
+          });
+          // Without these, the wallet/positions panels stay stale until the
+          // next polling tick — user wouldn't see their PnL credit/debit
+          // immediately after closing through the fallback path.
+          this.broadcaster.notifyUser(String(order.userId), 'orders', {
+            event: 'FILLED',
+            accountId: order.accountId ? String(order.accountId) : null,
+            orderId: String(order._id),
+            symbol: order.symbol,
+            avgPrice: fillPx,
+          });
+          this.broadcaster.notifyUser(String(order.userId), 'positions', { event: 'UPDATED' });
+          this.broadcaster.notifyUser(String(order.userId), 'wallet', { event: 'UPDATED' });
+        }
+
+        console.log(`[ME] INTERNAL fallback fill: ${order.symbol} ${order.side} ${remainingQty} @ ${fillPx} (no book liquidity)`);
+      } else {
+        // Genuine zero-data state — no last price to fill against.
+        order.status = ORDER_STATUS.REJECTED;
+        order.rejectionReason = 'No reference price for market order';
+      }
+    } else if (effectiveType === 'MARKET') {
+      // INTERNAL_MATCHING *opening* market order with no opposing book
+      // liquidity. This is a pure user↔user venue — the broker is NOT the
+      // counterparty — so we reject the unmatched remainder rather than
+      // synthesising a broker fill. (Closes are handled by the branch above.)
+      order.status = ORDER_STATUS.REJECTED;
+      order.rejectionReason = 'No matching liquidity (internal matching)';
+    }
+
+    // Rest-on-book applies to LIMIT orders, including a triggered STOP-LIMIT.
+    if (effectiveType === 'LIMIT' && gt(remaining, '0') && order.status !== ORDER_STATUS.REJECTED) {
+      book.add(order);
+    }
+
+    await order.save();
+
+    // Broadcast updated order book snapshot
+    if (this.broadcaster) {
+      this.broadcaster.broadcastOrderBook(order.symbol, book.snapshot(25));
+    }
+
+    // Notify the order owner privately on fills
+    if (this.broadcaster && fills.length) {
+      this.broadcaster.notifyUser(String(order.userId), 'orders', {
+        event: order.status === ORDER_STATUS.FILLED ? 'FILLED' : 'PARTIAL_FILL',
+        accountId: order.accountId ? String(order.accountId) : null,
+        orderId: String(order._id),
+        symbol: order.symbol,
+        side: order.side,
+        filled: order.filledQuantity,
+        avgPrice: order.avgFillPrice,
+      });
+      this.broadcaster.notifyUser(String(order.userId), 'positions', { event: 'UPDATED' });
+      this.broadcaster.notifyUser(String(order.userId), 'wallet', { event: 'UPDATED' });
+      // Notify makers (uniquely)
+      const notifiedMakers = new Set();
+      for (const f of fills) {
+        if (!notifiedMakers.has(f.makerUserId)) {
+          this.broadcaster.notifyUser(f.makerUserId, 'orders', {
+            event: 'FILLED',
+            accountId: f.makerAccountId ? String(f.makerAccountId) : null,
+            orderId: f.makerOrderId,
+            symbol: order.symbol,
+          });
+          this.broadcaster.notifyUser(f.makerUserId, 'positions', { event: 'UPDATED' });
+          this.broadcaster.notifyUser(f.makerUserId, 'wallet', { event: 'UPDATED' });
+          notifiedMakers.add(f.makerUserId);
+        }
+      }
+    }
+
+    return order;
+  }
+
+  /**
+   * B-book execution: broker becomes the counterparty.
+   * Fills the order at instrument's last price (with spread if configured).
+   * Trader's PnL is the broker's PnL inverted - so broker keeps losing trades.
+   *
+   * Per doc §9.3: B-book is enabled per-instrument and for specific user groups,
+   * never in INTERNAL-Only mode (validated upstream).
+   */
+  async _processBBookOrder(order, instrument) {
+    const fillPrice = order.price || instrument.lastPrice;
+    // Stuck-feed guard (opens only) — don't fill a NEW B-book position against a
+    // stale / frozen price. Closes always fill. (orderRouter guards this too;
+    // this is the backstop for the worker's direct-submit B-book path.)
+    if (!order.closeOnly) {
+      const fg = require('../utils/feedGuard').checkFeed(instrument);
+      if (!fg.ok) {
+        order.status = ORDER_STATUS.REJECTED;
+        order.rejectionReason = fg.reason === 'FROZEN_FEED'
+          ? 'No liquidity — price not moving right now'
+          : 'No liquidity — price feed is stale';
+        await order.save();
+        return order;
+      }
+    }
+    if (!fillPrice || eq(fillPrice, '0')) {
+      order.status = ORDER_STATUS.REJECTED;
+      order.rejectionReason = 'No reference price for B-book fill';
+      await order.save();
+      return order;
+    }
+
+    // Apply broker spread (markup) on B-book fills. HALF the spread per side so
+    // the executed fill matches the quoted bid/ask (ask = mid + spread/2,
+    // bid = mid − spread/2). `spreadValue` is the total bid-ask width.
+    const _spr = await this._resolveSpread(instrument, order.accountId);
+    const halfSpread = D(_spr.spreadValue || '0').times(D('0.5'));
+    let executedPrice = D(fillPrice);
+    if (_spr.spreadType === 'PERCENTAGE') {
+      executedPrice = order.side === 'BUY'
+        ? executedPrice.times(D('1').plus(halfSpread))
+        : executedPrice.times(D('1').minus(halfSpread));
+    } else {
+      executedPrice = order.side === 'BUY' ? executedPrice.plus(halfSpread) : executedPrice.minus(halfSpread);
+    }
+    const finalPrice = executedPrice.toString();
+
+    // Record a Trade with the broker as the synthetic counterparty.
+    // We use the user as both buyer and seller (with B_BOOK routing flag) for simplicity;
+    // real systems use a "broker account" entity. Either way, the trail is in the routing field.
+    // Pre-generate the trade id so the trade record and the position settle can
+    // be persisted IN PARALLEL — the settle only needs the id (for its
+    // idempotent dedupeKey), not the persisted Trade doc.
+    const tradeId = new mongoose.Types.ObjectId();
+
+    // Update instrument lastPrice (version-safe) + aggregate into candles.
+    this._persistLastPrice(instrument, finalPrice);
+    {
+      const { updateCandlesForTrade } = require('../services/candleService');
+      updateCandlesForTrade({
+        symbol: order.symbol,
+        price: finalPrice,
+        quantity: order.quantity,
+        ts: Date.now(),
+      }).catch((e) => console.error('[ME] B-book candle update failed:', e.message)); // fire-and-forget
+    }
+
+    // Phase 1 SHADOW validation (flag-gated). Snapshot pre-state + settle the
+    // fill in a transient in-memory ledger BEFORE the real settle, so we can
+    // reconcile after. Never throws into the live path.
+    let _shadow = null;
+    if (this._shadowOn) { try { _shadow = await this._shadowBBookPre(order, instrument, finalPrice); } catch (_) { _shadow = null; } }
+
+    const tradeDoc = {
+      _id: tradeId,
+      instrumentId: order.instrumentId,
+      symbol: order.symbol,
+      buyOrderId: order._id,
+      sellOrderId: order._id,
+      buyUserId: order.userId,
+      sellUserId: order.userId,
+      buyAccountId: order.accountId,
+      sellAccountId: order.accountId,
+      price: finalPrice,
+      quantity: order.quantity,
+      routing: 'B_BOOK',
+    };
+    const settle = () => this._updatePosition(
+      order.accountId, order.userId, order.instrumentId, order.symbol, order.side,
+      order.quantity, finalPrice, order.leverage, tradeId, order.closeOnly,
+      order.stopLoss, order.takeProfit, order.positionSide, bookOf(order),
+    );
+
+    if (this._wbOn) {
+      // CUTOVER stage 1a: the Trade goes through the WAL (durable) + write-behind
+      // (async flush), so it's OFF the hot path. The ACK waits only for the
+      // group-committed journal append, not the Trade insert. Position + wallet
+      // settle stay SYNCHRONOUS here (money-safe) — they move in later stages.
+      const seq = await this.journal.append({ symbol: order.symbol, type: 'BBOOK_TRADE', payload: { trade: tradeDoc } });
+      this.writeBehind.enqueue(Trade, { insertOne: { document: tradeDoc } }, seq);
+      console.log(`[ME wb] ${order.symbol} ${order.side}${order.closeOnly ? ' close' : ''} — trade WAL seq=${seq} + queued (wb buf=${this.writeBehind.size})`);
+      await settle();
+    } else {
+      // Trade record + position settle are independent writes → run in parallel.
+      await Promise.all([Trade.create(tradeDoc), settle()]);
+    }
+
+    order.status = ORDER_STATUS.FILLED;
+    order.filledQuantity = order.quantity;
+    order.avgFillPrice = finalPrice;
+    order.filledAt = new Date();
+    await order.save();
+
+    // Phase 1 SHADOW reconcile — compare the in-memory ledger result vs the
+    // real DB position (fire-and-forget; logs divergences, never blocks).
+    if (_shadow) this._shadowBBookPost(order, _shadow).catch(() => {});
+
+    // Affiliate / IB commission is generated ONLY on CLOSE now (see
+    // accrueCloseCommission fired from _updatePosition's close branch).
+    // The opening B-book fill pays nothing.
+
+    // Broadcast ticker and trade tape so chart and last-price update
+    if (this.broadcaster) {
+      this.broadcaster.broadcastTrade({
+        symbol: order.symbol,
+        price: finalPrice,
+        quantity: order.quantity,
+        side: order.side,
+        ts: Date.now(),
+      });
+      this.broadcaster.notifyUser(String(order.userId), 'orders', {
+        event: 'FILLED',
+        accountId: order.accountId ? String(order.accountId) : null,
+        orderId: String(order._id),
+        symbol: order.symbol,
+        routing: 'B_BOOK',
+        avgPrice: finalPrice,
+      });
+      this.broadcaster.notifyUser(String(order.userId), 'positions', { event: 'UPDATED' });
+      this.broadcaster.notifyUser(String(order.userId), 'wallet', { event: 'UPDATED' });
+    }
+
+    return order;
+  }
+
+  // ── Phase 1 write-behind SHADOW helpers ────────────────────────────────
+  // Mirror _updatePosition's target-side selection so the shadow looks at the
+  // same position bucket the real settle mutates.
+  _targetPositionSide(order) {
+    if (order.positionSide) return order.positionSide;
+    if (order.closeOnly) return order.side === 'SELL' ? 'LONG' : 'SHORT';
+    return order.side === 'BUY' ? 'LONG' : 'SHORT';
+  }
+
+  // Snapshot the pre-fill position + wallet, settle the fill in a transient
+  // LedgerCache (with the engine's EXACT close-fee logic), and return the
+  // ledger's expected post-position AND expected balance/locked for later
+  // reconciliation.
+  async _shadowBBookPre(order, instrument, finalPrice) {
+    const ps = this._targetPositionSide(order);
+    const { Wallet } = require('../models/Wallet');
+    const [pre, wallet, account] = await Promise.all([
+      Position.findOne({
+        accountId: order.accountId, symbol: order.symbol, positionSide: ps,
+        status: { $in: [POSITION_STATUS.OPEN, POSITION_STATUS.CLOSING] },
+      }).lean(),
+      Wallet.findOne({ accountId: order.accountId }).lean(),
+      this._getAccountMeta(order.accountId),
+    ]);
+    const ledger = new LedgerCache();
+    ledger.loadBalance(order.accountId, {
+      balance: wallet ? wallet.balance : '0',
+      locked: wallet ? wallet.locked : '0',
+      currency: wallet ? wallet.currency : 'USD',
+    });
+    if (pre) {
+      ledger.loadPosition({
+        accountId: pre.accountId, symbol: pre.symbol,
+        positionSide: pre.positionSide || ps, side: pre.side,
+        quantity: pre.quantity, entryPrice: pre.entryPrice, margin: pre.margin || '0',
+      });
+    }
+    // Replicate _updatePosition's exact close-fee so the ledger's balance math
+    // matches the engine (no false divergence from a fee mismatch).
+    const accountFeeService = require('../services/accountFeeService');
+    const subscriptionService = require('../services/subscriptionService');
+    const computeFee = async ({ closeQty, closePrice, closePnl }) => {
+      let fee = await accountFeeService.computeCloseFee({ account, instrument, closeQty, closePrice, closePnl });
+      try { fee = await subscriptionService.applyFeeDiscount(order.userId, fee); } catch (_) { /* keep raw */ }
+      const psr = instrument?.profitSharePercent || '0';
+      if (gt(psr, '0') && gt(closePnl, '0')) fee = add(fee, mul(closePnl, div(psr, '100')));
+      return fee;
+    };
+    const res = await ledger.applyFill({
+      accountId: String(order.accountId), symbol: order.symbol, side: order.side,
+      quantity: String(order.quantity), price: String(finalPrice), leverage: order.leverage,
+      closeOnly: !!order.closeOnly, positionSide: ps, computeFee,
+    });
+    const bal = ledger.getBalance(order.accountId);
+    // FULL-SETTLE shadow — expected values of the DB Position's accumulated
+    // audit fields after this fill, so the eventual 1b cutover is proven
+    // field-for-field (not just qty/entry). Only meaningful on REDUCE/CLOSE.
+    let settle = null;
+    if (pre && (res.action === 'CLOSE' || res.action === 'REDUCE')) {
+      const reqQty = String(order.quantity);
+      const overflow = gt(reqQty, pre.quantity); // non-closeOnly fill bigger than position (legacy)
+      const closeQty = overflow ? pre.quantity : reqQty;
+      settle = {
+        posId: String(pre._id),
+        expStatus: res.action === 'CLOSE' ? POSITION_STATUS.CLOSED : POSITION_STATUS.OPEN,
+        expRealizedPnl: add(pre.realizedPnl || '0', res.realizedPnl),
+        // overflow close path doesn't bump closedQuantity in the engine — skip it there
+        expClosedQty: overflow ? null : add(pre.closedQuantity || '0', closeQty),
+        expCommission: add(pre.commission || '0', res.fee),
+        // settlementAmount = released margin + pnl − fee, stamped only on full close
+        expSettlement: res.action === 'CLOSE'
+          ? D(res.marginReleased).plus(D(res.realizedPnl)).minus(D(res.fee || '0')).toString()
+          : null,
+      };
+    }
+    return { ps, expected: res.position, action: res.action, hadWallet: !!wallet, expBalance: bal.balance, expLocked: bal.locked, settle };
+  }
+
+  // Reconcile the ledger's expected position vs the real DB position after the
+  // live settle. Logs + counts divergences; never affects anything.
+  async _shadowBBookPost(order, snap) {
+    this._shadowStats.checked += 1;
+    const { Wallet } = require('../models/Wallet');
+    // Balance is validated only on closes/reduces (where the settle changes the
+    // wallet). Opens lock margin at PLACEMENT — before this fill — so the wallet
+    // wouldn't change here; comparing it would falsely diverge.
+    const checkBal = snap.hadWallet && (snap.action === 'CLOSE' || snap.action === 'REDUCE');
+    const [real, w] = await Promise.all([
+      Position.findOne({
+        accountId: order.accountId, symbol: order.symbol, positionSide: snap.ps,
+        status: { $in: [POSITION_STATUS.OPEN, POSITION_STATUS.CLOSING] },
+      }).lean(),
+      checkBal ? Wallet.findOne({ accountId: order.accountId }).lean() : Promise.resolve(null),
+    ]);
+    const exp = snap.expected; // null = ledger says fully closed
+    let diverged = false;
+    const reasons = [];
+    if (!exp) {
+      if (real && !eq(real.quantity, '0')) { diverged = true; reasons.push('pos-still-open'); }
+    } else if (!real) {
+      diverged = true; reasons.push('pos-missing');
+    } else if (!eq(real.quantity, exp.quantity) || !eq(real.entryPrice, exp.entryPrice)) {
+      diverged = true; reasons.push('pos-qty/entry');
+    }
+    // Tiny tolerance for decimal rounding on the money comparison.
+    const approx = (a, b) => { try { return lte(D(a).minus(D(b)).abs(), D('0.00000001')); } catch (_) { return false; } };
+    if (w) {
+      if (!approx(w.balance, snap.expBalance)) { diverged = true; reasons.push('balance'); }
+      if (!approx(w.locked, snap.expLocked)) { diverged = true; reasons.push('locked'); }
+    }
+    // FULL-SETTLE field check — fetch by _id so a CLOSED doc is still visible
+    // (the OPEN/CLOSING query above excludes it). Proves the accumulated audit
+    // fields the engine stamps on settle, so the 1b cutover is field-for-field.
+    let settleDoc = null;
+    if (snap.settle) {
+      settleDoc = await Position.findById(snap.settle.posId).lean();
+      if (!settleDoc) { diverged = true; reasons.push('settle-pos-missing'); }
+      else {
+        if (settleDoc.status !== snap.settle.expStatus) { diverged = true; reasons.push('settle-status'); }
+        if (!approx(settleDoc.realizedPnl || '0', snap.settle.expRealizedPnl)) { diverged = true; reasons.push('settle-realizedPnl'); }
+        if (snap.settle.expClosedQty != null && !eq(settleDoc.closedQuantity || '0', snap.settle.expClosedQty)) { diverged = true; reasons.push('settle-closedQty'); }
+        if (!approx(settleDoc.commission || '0', snap.settle.expCommission)) { diverged = true; reasons.push('settle-commission'); }
+        if (snap.settle.expSettlement != null && !approx(settleDoc.settlementAmount || '0', snap.settle.expSettlement)) { diverged = true; reasons.push('settle-settlementAmount'); }
+      }
+    }
+    if (diverged) {
+      this._shadowStats.diverged += 1;
+      console.warn('[ME shadow] DIVERGENCE', {
+        symbol: order.symbol, account: String(order.accountId), positionSide: snap.ps, action: snap.action, reasons,
+        ledgerQty: exp ? exp.quantity : null, dbQty: real ? real.quantity : null,
+        ledgerEntry: exp ? exp.entryPrice : null, dbEntry: real ? real.entryPrice : null,
+        ledgerBal: snap.expBalance, dbBal: w ? w.balance : null,
+        ledgerLocked: snap.expLocked, dbLocked: w ? w.locked : null,
+        ...(snap.settle ? {
+          expStatus: snap.settle.expStatus, dbStatus: settleDoc ? settleDoc.status : null,
+          expRealizedPnl: snap.settle.expRealizedPnl, dbRealizedPnl: settleDoc ? settleDoc.realizedPnl : null,
+          expClosedQty: snap.settle.expClosedQty, dbClosedQty: settleDoc ? settleDoc.closedQuantity : null,
+          expCommission: snap.settle.expCommission, dbCommission: settleDoc ? settleDoc.commission : null,
+          expSettlement: snap.settle.expSettlement, dbSettlement: settleDoc ? settleDoc.settlementAmount : null,
+        } : {}),
+      });
+    }
+    // Log EVERY B-book fill so the result is visible immediately. "+bal" marks
+    // fills where balance was reconciled; "+settle" where the full audit fields
+    // (pnl/closedQty/commission/settlement/status) were reconciled.
+    console.log(`[ME shadow] ${diverged ? '✗ DIVERGED' : '✓ match'} ${order.symbol} ${snap.action}${w ? ' +bal' : ''}${snap.settle ? ' +settle' : ''} · total ${this._shadowStats.checked} checked, ${this._shadowStats.diverged} diverged`);
+  }
+
+  /**
+   * EXTERNAL execution path.
+   *
+   * In a real STP/A-book broker, this would call the LP/exchange API to place
+   * the order externally. For MVP, we simulate the fill at last price so:
+   *   - Profitable traders' orders don't sit pending forever
+   *   - The audit trail is preserved (trade.routing = 'EXTERNAL')
+   *   - Broker accounting can later show "this should have been hedged externally"
+   *
+   * Production TODO: replace simulated fill with real LP adapter:
+   *   - Binance: place a corresponding spot/futures order via authenticated API
+   *   - LMAX/Refinitiv: forward via FIX protocol
+   *   - cTrader: route via OpenAPI
+   * The broker's hedge position lives on the LP side, P&L is netted off-platform.
+   */
+  async _processExternalOrder(order, instrument) {
+    const refPrice = order.type === 'LIMIT' && order.price ? order.price : instrument.lastPrice;
+    if (!refPrice || lte(refPrice, '0')) {
+      order.status = ORDER_STATUS.REJECTED;
+      order.rejectionReason = 'No reference price available for external routing';
+      await order.save();
+      return order;
+    }
+
+    // Apply spread (broker still earns even on STP - usually a small commission/markup).
+    // Honor PERCENTAGE vs FIXED spread the same way B-book does, so EXTERNAL
+    // fills aren't silently mispriced when an instrument is configured with a
+    // percent spread.
+    // Half-spread per side — matches the quoted bid/ask (see B-book note).
+    const _sprE = await this._resolveSpread(instrument, order.accountId);
+    const halfSpreadD = D(_sprE.spreadValue || '0').times(D('0.5'));
+    let executedExt = D(refPrice);
+    if (_sprE.spreadType === 'PERCENTAGE') {
+      executedExt = order.side === 'BUY'
+        ? executedExt.times(D('1').plus(halfSpreadD))
+        : executedExt.times(D('1').minus(halfSpreadD));
+    } else {
+      executedExt = order.side === 'BUY'
+        ? executedExt.plus(halfSpreadD)
+        : executedExt.minus(halfSpreadD);
+    }
+    const finalPrice = executedExt.toString();
+
+    // Record the trade with EXTERNAL routing
+    const externalTrade = await Trade.create({
+      instrumentId: order.instrumentId,
+      symbol: order.symbol,
+      buyOrderId: order._id,
+      sellOrderId: order._id,
+      buyUserId: order.userId,
+      sellUserId: order.userId,
+      buyAccountId: order.accountId,
+      sellAccountId: order.accountId,
+      price: finalPrice,
+      quantity: order.quantity,
+      routing: 'EXTERNAL',
+    });
+
+    // Update lastPrice + candles so chart reflects the activity
+    this._persistLastPrice(instrument, finalPrice);
+    {
+      const { updateCandlesForTrade } = require('../services/candleService');
+      updateCandlesForTrade({
+        symbol: order.symbol,
+        price: finalPrice,
+        quantity: order.quantity,
+        ts: Date.now(),
+      }).catch(() => {}); // fire-and-forget: candle aggregation off the hot path
+    }
+
+    // Update trader's position (broker has no position - it's "hedged" externally)
+    await this._updatePosition(
+      order.accountId,
+      order.userId,
+      order.instrumentId,
+      order.symbol,
+      order.side,
+      order.quantity,
+      finalPrice,
+      order.leverage,
+      externalTrade._id,
+      order.closeOnly,
+      order.stopLoss,
+      order.takeProfit,
+      order.positionSide,
+      bookOf(order)
+    );
+
+    order.status = ORDER_STATUS.FILLED;
+    order.filledQuantity = order.quantity;
+    order.avgFillPrice = finalPrice;
+    order.filledAt = new Date();
+    await order.save();
+
+    // Affiliate / IB commission is generated ONLY on CLOSE now (see
+    // accrueCloseCommission fired from _updatePosition's close branch).
+    // The opening external/LP fill pays nothing.
+
+    // Broadcast
+    if (this.broadcaster) {
+      this.broadcaster.broadcastTrade({
+        symbol: order.symbol,
+        price: finalPrice,
+        quantity: order.quantity,
+        side: order.side,
+        ts: Date.now(),
+      });
+      this.broadcaster.notifyUser(String(order.userId), 'orders', {
+        event: 'FILLED',
+        accountId: order.accountId ? String(order.accountId) : null,
+        orderId: String(order._id),
+        symbol: order.symbol,
+        routing: 'EXTERNAL',
+        avgPrice: finalPrice,
+      });
+      this.broadcaster.notifyUser(String(order.userId), 'positions', { event: 'UPDATED' });
+      this.broadcaster.notifyUser(String(order.userId), 'wallet', { event: 'UPDATED' });
+    }
+
+    return order;
+  }
+
+  /**
+   * Apply a fill to the user's net position for one symbol.
+   *
+   * Same-side fill → grow position with weighted-average entry.
+   * Opposite-side fill → reduce / fully close / flip, settling PnL via
+   * walletService.settleTradeClose. Settle path uses tradeId-derived
+   * dedupeKey for idempotency, and Position.findOneAndUpdate (NOT
+   * doc.save) for the CLOSED transition so concurrent SL+TP+manual
+   * closes can't double-settle.
+   */
+  async _updatePosition(accountId, userId, instrumentId, symbol, side, qty, price, leverage, tradeId, closeOnly = false, stopLoss = null, takeProfit = null, positionSide = null, book = 'B_BOOK', productType = 'NORMAL') {
+    // HEDGE MODE — LONG and SHORT positions on the same instrument coexist.
+    // Position identity is (accountId, symbol, positionSide), so a BUY fill
+    // never auto-closes a SHORT position and vice versa.
+    //
+    // For OPENING fills (closeOnly=false): the position side comes from the
+    // order's `side` — BUY opens/grows the LONG bucket, SELL opens/grows the
+    // SHORT bucket. The opposite-side bucket is untouched.
+    //
+    // For CLOSE fills (closeOnly=true): the controller stamps the order's
+    // `positionSide` from the source position so the engine targets the
+    // correct bucket. The order's `side` is the opposite of the position
+    // (a SELL closes the LONG, a BUY closes the SHORT) but its
+    // `positionSide` still points at the bucket being reduced.
+    const targetPositionSide = positionSide
+      || (closeOnly
+        ? (side === 'SELL' ? 'LONG' : 'SHORT')  // legacy fallback: opposite of close side
+        : (side === 'BUY'  ? 'LONG' : 'SHORT'));
+
+    // Accept both OPEN and CLOSING — controller may have stamped the
+    // position to CLOSING as an atomic claim, but the engine still needs
+    // to settle it.
+    let pos = await Position.findOne({
+      accountId,
+      symbol,
+      positionSide: targetPositionSide,
+      status: { $in: [POSITION_STATUS.OPEN, POSITION_STATUS.CLOSING] },
+    });
+
+    // Legacy fallback — if no position matches by positionSide (old docs
+    // written before the field existed), fall back to a side-only lookup
+    // and on-the-fly attach the derived positionSide before we update it.
+    if (!pos) {
+      const legacy = await Position.findOne({
+        accountId,
+        symbol,
+        positionSide: { $exists: false },
+        status: { $in: [POSITION_STATUS.OPEN, POSITION_STATUS.CLOSING] },
+      });
+      if (legacy) {
+        const derived = legacy.side === 'BUY' ? 'LONG' : 'SHORT';
+        if (derived === targetPositionSide) {
+          legacy.positionSide = derived;
+          await legacy.save();
+          pos = legacy;
+        }
+      }
+    }
+
+    // closeOnly orders must NOT open a new position. They were generated
+    // for the express purpose of closing existing exposure (manual close,
+    // partial close, SL/TP, stop-out, trailing). If no matching-side
+    // position exists, skip.
+    if (closeOnly) {
+      if (!pos) {
+        console.warn(
+          `[ME] closeOnly order arrived but no open ${targetPositionSide} position exists for ${symbol} acc=${accountId} — skipping`
+        );
+        return null;
+      }
+      if (gt(qty, pos.quantity)) {
+        console.log(
+          `[ME] closeOnly capping qty: requested ${qty}, position has ${pos.quantity} (${symbol} ${targetPositionSide})`
+        );
+        qty = pos.quantity;
+      }
+    }
+
+    const margin = div(mul(qty, price), leverage || 1);
+
+    if (!pos) {
+      // Open a new position on the target side. Side is the order's side
+      // (BUY for LONG, SELL for SHORT) — never the opposite, because we
+      // arrived here only if no matching-side position existed AND this is
+      // not a closeOnly order.
+      pos = await Position.create({
+        userId,
+        accountId,
+        instrumentId,
+        symbol,
+        side,
+        positionSide: targetPositionSide,
+        book: book === 'A_BOOK' ? 'A_BOOK' : 'B_BOOK',
+        quantity: qty,
+        entryPrice: price,
+        leverage: leverage || 1,
+        productType: productType || 'NORMAL',
+        margin,
+        // Carry SL/TP from the opening order onto the new position. Without
+        // this, the order-time inputs were stored on the Order doc but
+        // never on Position, so backgroundWorker never tripped them — the
+        // user had to re-enter them via the modify endpoint after fill.
+        ...(stopLoss   ? { stopLoss:   String(stopLoss)   } : {}),
+        ...(takeProfit ? { takeProfit: String(takeProfit) } : {}),
+      });
+      // Tell the risk engine this symbol now carries exposure. Its real-time
+      // hook ignores symbols missing from its active set, and that set is only
+      // rebuilt by the 5s sweep — so without this a brand-new position went
+      // unwatched by the fast path until the next refresh. Best-effort: a
+      // failure here must never break a fill (the 5s poll still covers it).
+      try { require('../services/stopOutService').noteOpenSymbol(symbol); } catch (_) { /* */ }
+      return pos;
+    }
+
+    // SAME-SIDE OPENING FILL — grow the existing position (weighted-avg
+    // entry). In hedge mode this happens when the new order's side matches
+    // the position's open side (e.g. another BUY adds to LONG). No
+    // settlement; just lock more margin (already locked at placeOrder).
+    if (!closeOnly && pos.side === side) {
+      const newQty = add(pos.quantity, qty);
+      const newEntry = div(add(mul(pos.entryPrice, pos.quantity), mul(price, qty)), newQty);
+      pos.quantity = newQty;
+      pos.entryPrice = newEntry;
+      pos.margin = add(pos.margin, margin);
+      await pos.save();
+      return pos;
+    }
+
+    // From here on we're either:
+    //   (a) a closeOnly fill against the target-side position, OR
+    //   (b) (legacy) an opposite-side fill that found a same-positionSide
+    //       position via the fallback lookup above
+    // Both cases reduce the position. In hedge mode we no longer "flip" —
+    // an opposite-side opening order opens a separate position on the
+    // other positionSide, which is handled by the targetPositionSide
+    // calculation at the top.
+    const Instrument = require('../models/Instrument');
+    const TradingAccount = require('../models/TradingAccount');
+    const walletService = require('../services/walletService');
+    const subscriptionService = require('../services/subscriptionService');
+
+    const instrument = await this._getInstrument(instrumentId);
+    const account = await this._getAccountMeta(accountId);
+    const currency = account?.baseCurrency || 'USD';
+
+    // Reduce qty caps at remaining size — no flip leg in hedge mode.
+    const closeQty = (gt(pos.quantity, qty) || eq(pos.quantity, qty)) ? qty : pos.quantity;
+    const closePnl = pos.side === 'BUY'
+      ? mul(sub(price, pos.entryPrice), closeQty)
+      : mul(sub(pos.entryPrice, price), closeQty);
+
+    // Commission: account-tier driven (STANDARD/PRO/FREE + IC variants).
+    // accountFeeService dispatches on the tier's fee model:
+    //   STANDARD/_IC  → 0.005% of closing notional
+    //   PRO/_IC       → flat $0.10 per close
+    //   FREE/_IC      → 1% of profit, $0 on losing closes (lossWaive)
+    // Legacy accounts (REAL/DEMO/VIRTUAL) fall through to STANDARD via
+    // getAccountTypeDef. Subscription discount was removed when the
+    // app subscription tier system was retired.
+    const accountFeeService = require('../services/accountFeeService');
+    let fee = await accountFeeService.computeCloseFee({
+      account,
+      instrument,
+      closeQty,
+      closePrice: price,
+      closePnl,
+      productType: pos.productType,
+      entryPrice: pos.entryPrice,
+    });
+    try { fee = await subscriptionService.applyFeeDiscount(userId, fee); } catch (_) { /* keep raw fee */ }
+
+    // Profit-share fee (doc §5): only charged when this close leg is in
+    // profit. Folded into the same `fee` line so the wallet ledger shows
+    // one consolidated trading fee. profitSharePercent stored as a
+    // percent (e.g. "2" = 2% of profit), default 0 = disabled.
+    const profitShareRate = instrument?.profitSharePercent || '0';
+    if (gt(profitShareRate, '0') && gt(closePnl, '0')) {
+      const shareFee = mul(closePnl, div(profitShareRate, '100'));
+      fee = add(fee, shareFee);
+    }
+
+    // Affiliate / IB commission on CLOSE — the referrer earns their tier % of
+    // the ACTUAL fee the referral just paid on this close (revenue share on
+    // referral fees). Reported one-side volume = entryPrice × closeQty. Fired
+    // once per (closing trade, referee) — idempotent inside
+    // accrueCloseCommission — and only AFTER a settle succeeds (see branches).
+    // DEMO / VIRTUAL accounts trade fake money → they earn NO referral
+    // commission and their volume is excluded from the partner reports.
+    const _entryPrice = pos.entryPrice;
+    const _closeFee = fee;
+    const _isDemoAcct = ['DEMO', 'VIRTUAL'].includes(account?.accountType);
+    const fireCloseCommission = () => {
+      if (_isDemoAcct) return;
+      setImmediate(() =>
+        require('../services/affiliateService')
+          .accrueCloseCommission({
+            position: { _id: pos._id, userId, entryPrice: _entryPrice },
+            closeQty, feeAmount: _closeFee, instrument, tradeId, currency,
+          })
+          .catch(() => {}));
+    };
+
+    // dedupeKey scopes the settle to (this fill, this user) — both sides of
+    // an internal match share a tradeId but are credited to different
+    // wallets, so we include userId to avoid the maker's settle colliding
+    // with the taker's. When no tradeId (B-book/external/fallback paths
+    // that pass tradeId, OR worker calls without one), fall back to a
+    // positionId+timestamp key — fine because those paths are 1 settle each.
+    const dedupeKey = tradeId
+      ? `TRADE_SETTLE:${tradeId}:${userId}`
+      : `POSITION_PARTIAL_SETTLE:${pos._id}:${Date.now()}`;
+
+    if (gt(pos.quantity, qty)) {
+      // Reduce only — keep position open, release proportional margin.
+      // Atomic Position update via findOneAndUpdate (no doc.save) so a
+      // concurrent close can't overwrite our reduction with stale qty.
+      const marginToRelease = div(mul(pos.margin, qty), pos.quantity);
+      const newQty = sub(pos.quantity, qty);
+      const newMargin = sub(pos.margin, marginToRelease);
+      const newRealizedPnl = add(pos.realizedPnl, closePnl);
+      const newCommission = add(pos.commission || '0', fee);
+      await Position.findOneAndUpdate(
+        { _id: pos._id, status: { $in: [POSITION_STATUS.OPEN, POSITION_STATUS.CLOSING] } },
+        {
+          $set: {
+            quantity: newQty,
+            margin: newMargin,
+            realizedPnl: newRealizedPnl,
+            commission: newCommission,
+            closedQuantity: add(pos.closedQuantity || '0', closeQty),
+          },
+        }
+      );
+      await walletService.settleTradeClose({
+        userId, accountId, currency,
+        marginToRelease, pnl: closePnl, fee,
+        positionId: pos._id, tradeId,
+        dedupeKey, symbol: pos.symbol,
+      });
+      fireCloseCommission();
+      return pos;
+    }
+
+    if (eq(pos.quantity, qty)) {
+      // Fully closed — settled flag + status transition done atomically.
+      // The {settled: {$ne: true}} guard means a duplicate settle attempt
+      // (e.g. SL fired then user clicked close before SL completed) is a
+      // no-op at the position level, complementing the wallet-level
+      // dedupeKey idempotency.
+      const marginToRelease = pos.margin;
+      const newRealizedPnl = add(pos.realizedPnl, closePnl);
+      const newCommission = add(pos.commission || '0', fee);
+      const settlementAmount = D(marginToRelease).plus(D(closePnl)).minus(D(fee || '0')).toString();
+      const updated = await Position.findOneAndUpdate(
+        { _id: pos._id, settled: { $ne: true } },
+        // Pipeline update so closeReason can be resolved against the STORED
+        // value. It used to test `pos.closeReason` — an in-memory snapshot —
+        // and stamp MANUAL when that was empty. stopOutService claims the
+        // position with closeReason STOP_OUT and only THEN submits the closing
+        // order, so whenever `pos` was read before that claim the engine
+        // overwrote a genuine STOP_OUT with MANUAL, and the trade history
+        // reported a liquidation as a user-initiated close. Same race for
+        // SL/TP, TRAILING_STOP, EXPIRY and ADMIN closes.
+        [{
+          $set: {
+            status: POSITION_STATUS.CLOSED,
+            closedAt: new Date(),
+            closePrice: price,
+            realizedPnl: newRealizedPnl,
+            commission: newCommission,
+            closedQuantity: add(pos.closedQuantity || '0', closeQty),
+            quantity: '0',
+            margin: '0',
+            settled: true,
+            settledAt: new Date(),
+            settlementAmount,
+            // Only default when nothing is stored — MANUAL must never win over
+            // a reason another path already recorded.
+            closeReason: { $ifNull: ['$closeReason', 'MANUAL'] },
+          },
+        }],
+        { new: true }
+      );
+      if (!updated) {
+        // Already settled by a concurrent path — short-circuit. Wallet
+        // settle is also idempotent (same dedupeKey), so calling it would
+        // be a safe no-op anyway, but skipping saves a roundtrip.
+        return pos;
+      }
+      await walletService.settleTradeClose({
+        userId, accountId, currency,
+        marginToRelease, pnl: closePnl, fee,
+        positionId: pos._id, tradeId,
+        dedupeKey, symbol: pos.symbol,
+      });
+      fireCloseCommission();
+      return updated;
+    }
+
+    // HEDGE MODE — no flip leg. If a closeOnly fill exceeds the position
+    // size, the engine has already capped qty above. If a (legacy) opening
+    // fill from the wrong side somehow reached here, fully close the
+    // existing position and stop — do NOT open a new opposite-side bucket
+    // here, because the hedge-mode lookup at the top routes opposite-side
+    // opens to their own positionSide bucket already.
+    const marginToRelease = pos.margin;
+    const newRealizedPnl = add(pos.realizedPnl, closePnl);
+    const newCommission = add(pos.commission || '0', fee);
+    const settlementAmount = D(marginToRelease).plus(D(closePnl)).minus(D(fee || '0')).toString();
+    const updated = await Position.findOneAndUpdate(
+      { _id: pos._id, settled: { $ne: true } },
+      // Same stale-snapshot fix as the netting branch above — resolve
+      // closeReason against the stored value, not against `pos`.
+      [{
+        $set: {
+          status: POSITION_STATUS.CLOSED,
+          closedAt: new Date(),
+          closePrice: price,
+          realizedPnl: newRealizedPnl,
+          commission: newCommission,
+          quantity: '0',
+          margin: '0',
+          settled: true,
+          settledAt: new Date(),
+          settlementAmount,
+          closeReason: { $ifNull: ['$closeReason', 'MANUAL'] },
+        },
+      }],
+      { new: true }
+    );
+    if (updated) {
+      await walletService.settleTradeClose({
+        userId, accountId, currency,
+        marginToRelease, pnl: closePnl, fee,
+        positionId: pos._id, tradeId,
+        dedupeKey, symbol: pos.symbol,
+      });
+      fireCloseCommission();
+    }
+    return updated || pos;
+  }
+
+  /** Cancel an order from the book. Routed through the per-symbol queue so we
+   * don't mutate the book while another order on the same symbol is mid-match. */
+  async cancel(order) {
+    const symbol = order.symbol;
+    const prev = this.queues.get(symbol) || Promise.resolve();
+    const next = prev.then(async () => {
+      const book = this.getBook(symbol);
+      book.remove(String(order._id), order.side);
+      order.status = ORDER_STATUS.CANCELLED;
+      order.cancelledAt = new Date();
+      await order.save();
+      if (this.broadcaster) this.broadcaster.broadcastOrderBook(symbol, book.snapshot(25));
+      return order;
+    });
+    this.queues.set(symbol, next.catch(() => {}));
+    return next;
+  }
+
+  /**
+   * Queued book.remove without persisting CANCELLED status. Used by the
+   * modify flow to take an order out of the book temporarily before
+   * re-inserting it under new params (or restoring originals on failure).
+   */
+  async removeFromBook(symbol, orderId, side) {
+    const prev = this.queues.get(symbol) || Promise.resolve();
+    const next = prev.then(() => {
+      const book = this.getBook(symbol);
+      const removed = book.remove(orderId, side);
+      if (this.broadcaster) this.broadcaster.broadcastOrderBook(symbol, book.snapshot(25));
+      return removed;
+    });
+    this.queues.set(symbol, next.catch(() => {}));
+    return next;
+  }
+
+  /**
+   * Queued book.add. Used by the modify-revert path to put an order back on
+   * the book WITHOUT re-running the matcher (which would risk surprise fills
+   * at the original price after a failed margin top-up).
+   */
+  async addToBook(order) {
+    const symbol = order.symbol;
+    const prev = this.queues.get(symbol) || Promise.resolve();
+    const next = prev.then(() => {
+      const book = this.getBook(symbol);
+      book.add(order);
+      if (this.broadcaster) this.broadcaster.broadcastOrderBook(symbol, book.snapshot(25));
+      return order;
+    });
+    this.queues.set(symbol, next.catch(() => {}));
+    return next;
+  }
+
+  getSnapshot(symbol, depth = 25) {
+    return this.getBook(symbol).snapshot(depth);
+  }
+}
+
+module.exports = new MatchingEngine();

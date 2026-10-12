@@ -1,0 +1,159 @@
+import { useEffect, lazy, Suspense } from 'react';
+import { Routes, Route, Navigate } from 'react-router-dom';
+import { useAuthStore } from './store/auth';
+import ProtectedRoute from './components/ProtectedRoute';
+import Layout from './components/Layout';
+import ComingSoon from './components/ComingSoon';
+import ErrorBoundary from './components/ErrorBoundary';
+import WatchlistModalProvider from './components/WatchlistModalProvider';
+import ImpersonationBanner from './components/ImpersonationBanner';
+import GlobalAlertPopup from './components/GlobalAlertPopup';
+
+// Auth pages are eager-loaded — they're the first thing a logged-out
+// user sees, and they're small.
+import Login from './pages/Login';
+import Register from './pages/Register';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
+import VerifyEmail from './pages/VerifyEmail';
+
+// Authenticated pages are code-split so the initial JS bundle stays small.
+// Each route becomes its own chunk — Trade alone pulls in lightweight-charts
+// (~80KB) and we don't want to ship that to users who only check the dashboard.
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const Trade = lazy(() => import('./pages/Trade'));
+const StockDetail = lazy(() => import('./pages/StockDetail'));
+const Wallet = lazy(() => import('./pages/Wallet'));
+const NewAccountTiers = lazy(() => import('./pages/NewAccountTiers'));
+const NewAccountConfigure = lazy(() => import('./pages/NewAccountConfigure'));
+const Profile = lazy(() => import('./pages/Profile'));
+const Positions = lazy(() => import('./pages/Positions'));
+const Orders = lazy(() => import('./pages/Orders'));
+const Reports = lazy(() => import('./pages/Reports'));
+const Affiliate = lazy(() => import('./pages/Affiliate'));
+const Partner   = lazy(() => import('./pages/Partner'));
+const PriceAlerts = lazy(() => import('./pages/PriceAlerts'));
+const Plans = lazy(() => import('./pages/Plans'));
+const SubscriptionWallet = lazy(() => import('./pages/SubscriptionWallet'));
+const BonusWallet = lazy(() => import('./pages/BonusWallet'));
+const CopyTrade = lazy(() => import('./pages/CopyTrade'));
+const TraderDashboard = lazy(() => import('./pages/TraderDashboard'));
+const Feedback = lazy(() => import('./pages/Feedback'));
+const Helpdesk = lazy(() => import('./pages/Helpdesk'));
+const HelpdeskChat = lazy(() => import('./pages/HelpdeskChat'));
+const Explore = lazy(() => import('./pages/Explore'));
+const MarketList = lazy(() => import('./pages/MarketList'));
+const Watchlist = lazy(() => import('./pages/Watchlist'));
+const OrderModalPreview = lazy(() => import('./pages/OrderModalPreview'));
+
+// Public marketing landing (shown at "/" to logged-out visitors).
+const Landing = lazy(() => import('./pages/Landing'));
+
+// Public CMS-driven content pages (no auth wrapper — SEO-friendly URLs).
+const CmsPageView = lazy(() => import('./pages/CmsPageView'));
+const News = lazy(() => import('./pages/News'));
+const NewsArticle = lazy(() => import('./pages/NewsArticle'));
+
+// Minimal fallback while a chunk is fetched. Branded so it doesn't feel
+// jarring; lasts <100ms on a warm cache, <500ms on first cold load.
+const RouteFallback = () => (
+  <div className="min-h-[60vh] flex items-center justify-center">
+    <div className="flex flex-col items-center gap-3">
+      <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+      <div className="text-xs text-text-muted">Loading…</div>
+    </div>
+  </div>
+);
+
+const Page = ({ children }) => (
+  <ProtectedRoute>
+    <Layout>
+      <Suspense fallback={<RouteFallback />}>{children}</Suspense>
+    </Layout>
+  </ProtectedRoute>
+);
+
+// Root route: logged-out visitors see the marketing landing; signed-in users
+// go straight to the app.
+function RootRoute() {
+  const { user, loading } = useAuthStore();
+  if (loading) return <RouteFallback />;
+  if (user) return <Navigate to="/explore" replace />;
+  return <Suspense fallback={<RouteFallback />}><Landing /></Suspense>;
+}
+
+export default function App() {
+  const { init } = useAuthStore();
+
+  useEffect(() => {
+    init();
+  }, []);
+
+  return (
+    <ErrorBoundary>
+      <ImpersonationBanner />
+      <GlobalAlertPopup />
+      <WatchlistModalProvider>
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="/verify-email" element={<VerifyEmail />} />
+
+        {/* Public CMS content — footer pages + Daily News Updates. */}
+        <Route path="/page/:slug" element={<Suspense fallback={<RouteFallback />}><CmsPageView /></Suspense>} />
+        <Route path="/news" element={<Suspense fallback={<RouteFallback />}><News /></Suspense>} />
+        <Route path="/news/:slug" element={<Suspense fallback={<RouteFallback />}><NewsArticle /></Suspense>} />
+
+        <Route path="/" element={<RootRoute />} />
+        <Route path="/dashboard" element={<Page><Dashboard /></Page>} />
+        <Route path="/explore" element={<Page><Explore /></Page>} />
+        <Route path="/markets" element={<Page><MarketList /></Page>} />
+        <Route path="/watchlist" element={<Page><Watchlist /></Page>} />
+        <Route path="/wishlist" element={<Navigate to="/watchlist" replace />} />
+        <Route path="/favorites" element={<Navigate to="/watchlist" replace />} />
+        <Route path="/preview/order-modal" element={<Page><OrderModalPreview /></Page>} />
+        <Route path="/trade" element={<Page><Trade /></Page>} />
+        <Route path="/stock/:symbol" element={<Page><StockDetail /></Page>} />
+        <Route path="/positions" element={<Page><Positions /></Page>} />
+        <Route path="/orders" element={<Page><Orders /></Page>} />
+        <Route path="/reports" element={<Page><Reports /></Page>} />
+        <Route path="/alerts" element={<Page><PriceAlerts /></Page>} />
+        <Route path="/affiliate" element={<Page><Partner /></Page>} />
+        <Route path="/partner" element={<Page><Partner /></Page>} />
+        <Route path="/plans" element={<Page><Plans /></Page>} />
+        <Route path="/subscription-wallet" element={<Page><SubscriptionWallet /></Page>} />
+        <Route path="/bonus-wallet" element={<Page><BonusWallet /></Page>} />
+        <Route path="/copy-trading" element={<Page><CopyTrade /></Page>} />
+        <Route path="/copy-trading/trader/:id" element={<Page><TraderDashboard /></Page>} />
+        <Route path="/wallet" element={<Page><Wallet /></Page>} />
+        <Route path="/accounts/new" element={<Page><NewAccountTiers /></Page>} />
+        <Route path="/accounts/new/:tierCode" element={<Page><NewAccountConfigure /></Page>} />
+        <Route path="/accounts" element={<Navigate to="/wallet" replace />} />
+        <Route path="/profile" element={<Page><Profile /></Page>} />
+        <Route path="/funds" element={<Navigate to="/wallet" replace />} />
+        <Route path="/ib-room" element={<Page><Partner /></Page>} />
+        <Route path="/bonuses" element={<Page><Plans /></Page>} />
+        <Route path="/helpdesk" element={<Page><Helpdesk /></Page>} />
+        <Route path="/helpdesk/chat" element={<Page><HelpdeskChat /></Page>} />
+        <Route path="/feedback" element={<Page><Feedback /></Page>} />
+        <Route
+          path="/download"
+          element={
+            <Page>
+              <ComingSoon
+                title="Download Mobile App"
+                description="Native iOS and Android trading apps."
+                phase="Phase 4"
+              />
+            </Page>
+          }
+        />
+
+        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      </Routes>
+      </WatchlistModalProvider>
+    </ErrorBoundary>
+  );
+}

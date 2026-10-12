@@ -1,0 +1,2012 @@
+const mongoose = require('mongoose');
+const Order = require('../models/Order');
+const Instrument = require('../models/Instrument');
+const TradingAccount = require('../models/TradingAccount');
+const Position = require('../models/Position');
+const matchingEngine = require('../matching-engine/MatchingEngine');
+const { updateCandlesForTrade } = require('../services/candleService');
+const orderRouter = require('../services/orderRouter.service');
+const walletService = require('../services/walletService');
+const Trade = require('../models/Trade');
+const { sendSuccess, asyncHandler, AppError } = require('../utils/errors');
+const { ORDER_TYPE, ORDER_SIDE, ORDER_STATUS, POSITION_STATUS, BASE_CURRENCY } = require('../config/constants');
+const { gt, lt, mul, div, sub, eq, add } = require('../utils/decimal');
+const { applyDateRange } = require('../utils/dateRange');
+// Short trade ticket ("#726B5A") — the only order id a user ever sees.
+const { ticketShort } = require('../utils/ticket');
+
+// Best-effort live push so every device/view refetches immediately. The WS
+// server publishes user-scoped channels (user:<channel>:<userId>); consumers
+// refetch the relevant REST endpoint on receipt. Never throws into a handler.
+// Fills / SL-TP / manual closes already broadcast elsewhere; this fills the
+// gaps for user-initiated pending-order + position edits that emitted nothing.
+const _pushUser = (userId, channel, payload) => {
+  try { require('../websocket/server').notifyUser(String(userId), channel, payload); }
+  catch (e) { console.warn(`[orderController] ${channel} broadcast failed:`, e.message); }
+};
+
+/**
+ * Apply the 3-month history clip to a Mongo filter for any of the user's
+ * plan-suspended accounts. Returns the augmented filter.
+ *
+ *   - Non-suspended accounts: full history (unchanged).
+ *   - Suspended accounts: only docs where `dateField` is within the last 3
+ *     months are returned.
+ *
+ * Implementation: rewrite the filter as a $or so the two cohorts can be
+ * unioned in a single query. If the caller already passed an accountId
+ * that is suspended, we just stamp the date floor on the existing filter.
+ */
+// How far back a plan-suspended account may still read its own history.
+//
+// Set PER PLAN (Admin → Plans → the plan → "Data access after expiry"):
+//   unset  -> DEFAULT_SUSPENDED_HISTORY_MONTHS (3), i.e. the previous behaviour
+//   N > 0  -> that many months
+//   0      -> unlimited, the account keeps seeing everything
+//
+// Read per call rather than captured at module load: a setting nobody can
+// change without a restart is barely a setting.
+const DEFAULT_SUSPENDED_HISTORY_MONTHS = 3;
+const MONTH_MS = 30 * 24 * 60 * 60 * 1000;
+
+const suspendedHistoryWindowMs = async (userId) => {
+  try {
+    const { Plan, Subscription } = require('../models/Subscription');
+    // The plan the user HOLDS — read off their own subscription rather than
+    // getEffectivePlan(), which falls back to FREE once a plan lapses and
+    // would therefore apply Free's retention to someone who paid for Pro.
+    const sub = await Subscription.findOne({ userId }).select('planId').lean();
+    let months = null;
+    if (sub && sub.planId) {
+      const plan = await Plan.findById(sub.planId).select('suspendedHistoryMonths').lean();
+      if (plan && plan.suspendedHistoryMonths !== null && plan.suspendedHistoryMonths !== undefined) {
+        months = Number(plan.suspendedHistoryMonths);
+      }
+    }
+    if (months === null || !Number.isFinite(months) || months < 0) {
+      return DEFAULT_SUSPENDED_HISTORY_MONTHS * MONTH_MS;
+    }
+    return months === 0 ? null : months * MONTH_MS;   // 0 = no clip at all
+  } catch (_) {
+    // Never let a lookup hiccup silently WIDEN access — fall back to the default.
+    return DEFAULT_SUSPENDED_HISTORY_MONTHS * MONTH_MS;
+  }
+};
+/**
+ * The DB half of the retention clip: which accounts are suspended, and how
+ * far back they may read. Null when there is nothing to clip at all.
+ *
+ * Separated from applying it because a request that filters TWO collections
+ * needs the same answer for both. Resolving inside the apply step meant
+ * tradingaccounts, subscriptions and plans were each queried twice for one
+ * request — identical queries, identical answers.
+ */
+const resolveSuspendedClip = async (userId) => {
+  const suspendedAccounts = await TradingAccount.find({
+    userId,
+    planSuspendedAt: { $ne: null },
+  })
+    .select('_id')
+    .lean();
+  if (!suspendedAccounts.length) return null;
+
+  const windowMs = await suspendedHistoryWindowMs(userId);
+  // 0 months = unlimited: nothing to clip, so every account reads in full.
+  if (windowMs === null) return null;
+
+  return {
+    suspendedIds: suspendedAccounts.map((a) => a._id),
+    cutoff: new Date(Date.now() - windowMs),
+  };
+};
+
+/**
+ * The pure half: narrow one filter by an already-resolved clip. No I/O, so
+ * it is free to call once per collection.
+ */
+const clipFilter = (filter, dateField, clip) => {
+  if (!clip) return filter;
+  const { suspendedIds, cutoff } = clip;
+
+  // Caller filtered to a specific account already.
+  if (filter.accountId) {
+    const isSuspended = suspendedIds.some((id) => String(id) === String(filter.accountId));
+    if (!isSuspended) return filter;
+    const existing = filter[dateField] || {};
+    const existingGte = existing.$gte ? new Date(existing.$gte) : null;
+    const effectiveGte = existingGte && existingGte > cutoff ? existingGte : cutoff;
+    return { ...filter, [dateField]: { ...existing, $gte: effectiveGte } };
+  }
+
+  // No specific account: split into two cohorts via $or so non-suspended
+  // accounts keep full history and suspended ones get clipped.
+  const suspendedClause = {
+    accountId: { $in: suspendedIds },
+    [dateField]: { $gte: cutoff },
+  };
+  const otherClause = { accountId: { $nin: suspendedIds } };
+  return { ...filter, $or: [otherClause, suspendedClause] };
+};
+
+/**
+ * One filter, one lookup — the shape every caller but unifiedHistory wants.
+ */
+const applySuspendedHistoryClip = async (userId, filter, dateField) =>
+  clipFilter(filter, dateField, await resolveSuspendedClip(userId));
+
+/**
+ * Compute the margin that *this* order would lock, accounting for an existing
+ * open position. If the order side is opposite to the position, the overlapping
+ * qty is just closing — no new margin needed for that portion.
+ *
+ * Returns { marginAmount, refPrice, openQty } where:
+ *   marginAmount = (openQty * refPrice) / leverage
+ *   openQty      = qty that opens new exposure (0 if order fully closes existing)
+ */
+const _computeMarginToLock = async ({ instrument, side, type, qty, price, stopPrice, leverage, account, symbol, isClose = false, closingSide = null }) => {
+  // Reference price by type:
+  //   MARKET → last traded price (best estimate of fill price)
+  //   LIMIT  → user's limit price
+  //   STOP   → stopPrice (the trigger), since execution happens around that level.
+  //            STOP-LIMIT is conservative: pick max(stop, limit) for BUY / min for SELL
+  //            so we never under-lock the worst-case fill cost.
+  let refPrice;
+  if (type === ORDER_TYPE.MARKET) {
+    refPrice = instrument.lastPrice || '0';
+  } else if (type === ORDER_TYPE.STOP) {
+    if (stopPrice && price) {
+      refPrice = side === 'BUY'
+        ? (gt(stopPrice, price) ? stopPrice : price)
+        : (lt(stopPrice, price) ? stopPrice : price);
+    } else {
+      refPrice = String(stopPrice || price || instrument.lastPrice || '0');
+    }
+  } else {
+    refPrice = String(price || instrument.lastPrice || '0');
+  }
+  if (!gt(refPrice, '0')) return { marginAmount: '0', refPrice: '0', openQty: '0' };
+
+  // ── Hedge mode: position identity is (accountId, symbol, positionSide) ──
+  // This USED to net an opposite-side order against any open position on the
+  // symbol and, when the existing size was >= the order size, return
+  // marginAmount '0'. placeOrder then skipped lockMargin entirely — and with
+  // it the free-balance check.
+  //
+  // That was netting logic bolted onto a hedging engine. _updatePosition
+  // routes a non-close order to the bucket for ITS OWN side, so a SELL placed
+  // while holding a LONG does not reduce anything: it opens a SEPARATE SHORT
+  // with real margin stamped on the Position. Net effect — an account with
+  // zero or negative free margin could open unlimited opposite-side exposure,
+  // because the order that created it was judged to need no margin at all.
+  // Wallet.locked and the sum of Position.margin then disagreed, which also
+  // skews equity and the stop-out threshold.
+  //
+  // A close/reduce is the ONLY case where existing exposure offsets the
+  // requirement, and then it must be measured against the SAME side the
+  // engine will actually reduce.
+  const targetPositionSide = side === 'BUY' ? 'LONG' : 'SHORT';
+  let openQty = qty;
+
+  if (isClose) {
+    const existing = await Position.findOne({
+      accountId: account._id,
+      symbol,
+      positionSide: closingSide || (side === 'BUY' ? 'SHORT' : 'LONG'),
+      status: { $in: [POSITION_STATUS.OPEN, POSITION_STATUS.CLOSING] },
+    });
+    // Reduces existing exposure — the overlap needs no new margin.
+    if (existing) {
+      openQty = (gt(existing.quantity, qty) || eq(existing.quantity, qty))
+        ? '0'
+        : sub(qty, existing.quantity);
+    }
+  } else {
+    // Opening or adding. Whether a same-side position already exists or not,
+    // the new quantity is new exposure and must be fully margined.
+    openQty = qty;
+  }
+
+  const marginAmount = gt(openQty, '0') ? div(mul(openQty, refPrice), String(leverage || 1)) : '0';
+  return { marginAmount, refPrice, openQty, targetPositionSide };
+};
+
+/**
+ * Compute the current effective bid/ask for an instrument from its
+ * lastPrice + spread config. Mirrors the client-side derivation in
+ * MarketWatch so server and UI agree on the "current market".
+ */
+const _currentBidAsk = (instrument) => {
+  const last = Number(instrument?.lastPrice || 0);
+  if (!last || !Number.isFinite(last)) return { bid: 0, ask: 0 };
+  const spread = Number(instrument.spreadValue || 0);
+  const half = spread / 2;
+  if (instrument.spreadType === 'PERCENTAGE') {
+    return { bid: last * (1 - half), ask: last * (1 + half) };
+  }
+  return { bid: last - half, ask: last + half };
+};
+
+/**
+ * Resolve a unified "LIMIT-tab" order into the underlying engine type.
+ * The frontend's order panel presents only MARKET and LIMIT to the user;
+ * internally a "LIMIT" with a price ABOVE the ask (for BUY) is actually
+ * a breakout STOP order. This helper centralises the disambiguation so
+ * the same rules apply across all entry points (REST, OCO, etc).
+ *
+ *   BUY:
+ *     limit < ask  → 'LIMIT'   (buy on a dip)
+ *     limit > ask  → 'STOP'    (buy on a breakout)
+ *     limit = ask  → 'INVALID' (would fill at market — use MARKET instead)
+ *
+ *   SELL:
+ *     limit > bid  → 'LIMIT'   (sell into strength)
+ *     limit < bid  → 'STOP'    (sell on a breakdown)
+ *     limit = bid  → 'INVALID'
+ */
+function resolveLimitTabOrderType({ side, limitPrice, currentBid, currentAsk }) {
+  const price = Number(limitPrice);
+  if (!Number.isFinite(price) || price <= 0) return 'INVALID';
+  if (side === 'BUY') {
+    if (!Number.isFinite(currentAsk) || currentAsk <= 0) return 'INVALID';
+    if (price < currentAsk) return 'LIMIT';
+    if (price > currentAsk) return 'STOP';
+    return 'INVALID';
+  }
+  if (side === 'SELL') {
+    if (!Number.isFinite(currentBid) || currentBid <= 0) return 'INVALID';
+    if (price > currentBid) return 'LIMIT';
+    if (price < currentBid) return 'STOP';
+    return 'INVALID';
+  }
+  return 'INVALID';
+}
+
+const placeOrder = asyncHandler(async (req, res) => {
+  const {
+    accountId,
+    symbol,
+    side,
+    stopLoss,
+    takeProfit,
+    leverage,
+    idempotencyKey,
+  } = req.body;
+  // `quantity` may be overridden by a fixed/scheduled instrument volume lock.
+  let { quantity } = req.body;
+  // The frontend now sends `orderMode` ('MARKET' | 'LIMIT'); legacy callers
+  // can still send `type` directly. When `orderMode === 'LIMIT'` we
+  // auto-resolve the engine-level type (LIMIT vs STOP) from the price
+  // direction relative to the current market — see resolveLimitTabOrderType.
+  let { orderMode, type, price, stopPrice } = req.body;
+
+  // Idempotency check
+  if (idempotencyKey) {
+    const existing = await Order.findOne({ idempotencyKey });
+    if (existing) return sendSuccess(res, existing);
+  }
+
+  if (!symbol || typeof symbol !== 'string') throw new AppError('symbol required', 400);
+  if (!accountId) throw new AppError('accountId required', 400);
+  if (!Object.values(ORDER_SIDE).includes(side)) throw new AppError('Invalid side', 400);
+  if (quantity === undefined || quantity === null || quantity === '') {
+    throw new AppError('Quantity required', 400);
+  }
+  if (!gt(quantity, '0')) throw new AppError('Quantity must be > 0', 400);
+
+  const account = await TradingAccount.findOne({ _id: accountId, userId: req.userId, isActive: true });
+  if (!account) throw new AppError('Account not found', 404);
+
+  const instrument = await Instrument.findOne({ symbol: symbol.toUpperCase(), isActive: true });
+  if (!instrument) throw new AppError('Instrument not active', 404);
+
+  // ─── Market-session gate ────────────────────────────────────────────
+  // Exchange-bound instruments (NSE/BSE/NFO/...) trade only in-session; forex/
+  // commodity/index CFDs close on weekends (Fri 22:00 → Sun 22:00 UTC); crypto
+  // stays 24/7. Keeps orders off stale prices when the market is shut.
+  {
+    const { isInstrumentTradeable } = require('../services/marketHours');
+    const { tradeable, session } = isInstrumentTradeable(instrument);
+    if (!tradeable) {
+      const label = instrument.exchange || instrument.category || 'Market';
+      const hours = session.opensAt ? ` Hours: ${session.opensAt}–${session.closesAt} ${session.tz || ''}`.trimEnd() + '.' : '';
+      throw new AppError(
+        `${label} is closed (${session.reason}).${hours}`,
+        400,
+        'MARKET_CLOSED'
+      );
+    }
+  }
+
+  // ─── Account-tier guards ────────────────────────────────────────────
+  // 1. Leverage cap — STANDARD = 1:100, all others unlimited. When the
+  //    tier returns null, no cap applies.
+  // 2. Buy-close-only — IC tiers (STANDARD_IC / PRO_IC / FREE_IC) can
+  //    open BUY only. SELL is permitted only as a close (reduceOnly or
+  //    closeOnly) and only when an open LONG exists to reduce.
+  const accountFeeService = require('../services/accountFeeService');
+  const tierMaxLeverage = await accountFeeService.getAccountMaxLeverage(account);
+  if (tierMaxLeverage != null && Number(req.body.leverage) > tierMaxLeverage) {
+    throw new AppError(
+      `Your account tier (${account.accountType}) caps leverage at 1:${tierMaxLeverage}.`,
+      400,
+      'LEVERAGE_OVER_TIER_CAP'
+    );
+  }
+  if ((await accountFeeService.isBuyCloseOnly(account)) && side === 'SELL') {
+    const isClose = req.body.closeOnly === true || req.body.reduceOnly === true;
+    if (!isClose) {
+      throw new AppError(
+        `Your account tier (${account.accountType}) is buy-only. SELL is allowed only to close an existing long position.`,
+        400,
+        'SELL_NOT_ALLOWED_ON_IC_TIER'
+      );
+    }
+    // Sanity check — a "close" SELL needs an actual LONG to reduce.
+    const Position = require('../models/Position');
+    const longOpen = await Position.findOne({
+      accountId: account._id,
+      symbol: instrument.symbol,
+      positionSide: 'LONG',
+      status: { $in: ['OPEN', 'CLOSING'] },
+    }).lean();
+    if (!longOpen) {
+      throw new AppError(
+        'No open long position on this symbol to close.',
+        400,
+        'NO_LONG_TO_CLOSE'
+      );
+    }
+  }
+
+  // ─── orderMode → engine type resolution ────────────────────────────
+  // New unified path: frontend sends orderMode='MARKET' | 'LIMIT' (no STOP
+  // tab in the UI). For LIMIT we look at the user's price relative to the
+  // current ask (BUY) or bid (SELL) and decide whether the engine should
+  // treat this as a LIMIT (better price) or STOP (breakout). Backward-
+  // compat: if `type` is sent directly, we honor it — any internal API
+  // user/admin tool that already uses LIMIT/STOP/MARKET keeps working.
+  if (orderMode === 'LIMIT') {
+    const { bid: curBid, ask: curAsk } = _currentBidAsk(instrument);
+    const resolved = resolveLimitTabOrderType({
+      side,
+      limitPrice: price,
+      currentBid: curBid,
+      currentAsk: curAsk,
+    });
+    if (resolved === 'INVALID') {
+      throw new AppError(
+        'Limit price cannot be equal to current market price. Use Market order instead.',
+        400,
+        'LIMIT_INVALID'
+      );
+    }
+    type = resolved; // 'LIMIT' or 'STOP'
+    if (resolved === 'STOP') {
+      // For STOP-tab equivalent: the user-entered price is the trigger.
+      // Move it into stopPrice and clear price (engine treats this as
+      // STOP-MARKET — fills at market on trigger).
+      stopPrice = String(price);
+      price = undefined;
+    }
+  } else if (orderMode === 'MARKET') {
+    type = 'MARKET';
+    price = undefined;
+    stopPrice = undefined;
+  }
+  // else: caller sent `type` directly — keep it and validate below.
+
+  if (!Object.values(ORDER_TYPE).includes(type)) throw new AppError('Invalid type', 400);
+  if (type !== 'MARKET' && type !== 'STOP' && !price) {
+    throw new AppError('Price required for non-market orders', 400);
+  }
+  if (type === 'STOP' && !stopPrice) {
+    throw new AppError('Stop price required for stop orders', 400);
+  }
+
+  // Direction validation — same rules apply regardless of how we got here
+  // (orderMode resolution OR direct `type` from a legacy caller). Skipped
+  // when the resolution above already produced a STOP, because a "BUY at
+  // a price above ask" is the LEGITIMATE BUY STOP case (breakout).
+  if (type === ORDER_TYPE.LIMIT) {
+    const { bid: curBid, ask: curAsk } = _currentBidAsk(instrument);
+    const limitPx = Number(price);
+    if (!Number.isFinite(limitPx) || limitPx <= 0) {
+      throw new AppError('Invalid limit price', 400);
+    }
+    if (curAsk > 0 && side === 'BUY' && limitPx >= curAsk) {
+      throw new AppError(
+        `Buy limit price must be below current market price (current ask ${curAsk}).`,
+        400, 'LIMIT_INVALID'
+      );
+    }
+    if (curBid > 0 && side === 'SELL' && limitPx <= curBid) {
+      throw new AppError(
+        `Sell limit price must be above current market price (current bid ${curBid}).`,
+        400, 'LIMIT_INVALID'
+      );
+    }
+  }
+
+  // Instrument override service — used for the leverage cap below. Volume is
+  // bounded only by the min/max order size validated next (no fixed volume).
+  const instrumentOverrideService = require('../services/instrumentOverrideService');
+
+  // Validate min/max order size
+  if (instrument.minOrderSize && lt(quantity, instrument.minOrderSize)) {
+    throw new AppError(
+      `Quantity ${quantity} below minimum order size ${instrument.minOrderSize} for ${instrument.symbol}`,
+      400
+    );
+  }
+  if (instrument.maxOrderSize && gt(quantity, instrument.maxOrderSize)) {
+    throw new AppError(
+      `Quantity ${quantity} exceeds max order size ${instrument.maxOrderSize} for ${instrument.symbol}`,
+      400
+    );
+  }
+
+  // Per-account total open-notional cap. Doc §4: admin can constrain how
+  // much exposure a single account carries. Cheap sum over OPEN positions;
+  // we project the new order's notional on top before comparing.
+  if (account.maxPositionSize && gt(account.maxPositionSize, '0')) {
+    const openPositions = await Position.find({
+      accountId: account._id,
+      status: POSITION_STATUS.OPEN,
+    }).select('quantity entryPrice').lean();
+    let openNotional = '0';
+    for (const p of openPositions) {
+      openNotional = add(openNotional, mul(p.quantity || '0', p.entryPrice || '0'));
+    }
+    const projected = mul(
+      String(quantity),
+      String(price || instrument.lastPrice || '0')
+    );
+    const totalAfter = add(openNotional, projected);
+    if (gt(totalAfter, account.maxPositionSize)) {
+      throw new AppError(
+        `Total open notional ${totalAfter} would exceed account cap ${account.maxPositionSize}`,
+        400,
+        'MAX_POSITION_SIZE_EXCEEDED'
+      );
+    }
+  }
+
+  // Resolve leverage with the platform's priority-based rule:
+  //   1. instrument.maxLeverage      — if set (>0), it's the FINAL value
+  //                                    even when higher OR lower than what
+  //                                    the account would allow
+  //   2. account.leverage / plan     — used when the instrument hasn't
+  //                                    set its own
+  //   3. SYSTEM_DEFAULT_LEVERAGE     — final fallback (100)
+  //
+  // Practical effect: a crypto with maxLeverage=500 caps the trade at
+  // 1:500 even if the user's plan is unlimited; an instrument left
+  // un-set inherits the account's effective leverage.
+  const SYSTEM_DEFAULT_LEVERAGE = 100;
+  const instMax = Number(instrument.maxLeverage);
+  const hasInstCap = Number.isFinite(instMax) && instMax > 0;
+
+  // Effective cap from the priority chain.
+  let effectiveCap;
+  if (hasInstCap) {
+    effectiveCap = instMax;
+  } else if (Number.isFinite(Number(account.leverage)) && Number(account.leverage) > 0) {
+    effectiveCap = Number(account.leverage);
+  } else {
+    effectiveCap = SYSTEM_DEFAULT_LEVERAGE;
+  }
+
+  // Scheduled instrument leverage override — during an active window the
+  // override leverage becomes the cap for NEW positions (open positions are
+  // never modified). Falls back to the chain above if there's no override.
+  try {
+    const lev = await instrumentOverrideService.getEffectiveLeverage(instrument);
+    if (lev.isOverride && Number(lev.value) > 0) effectiveCap = Number(lev.value);
+  } catch (_) { /* keep the default cap */ }
+
+  let orderLeverage;
+  if (leverage != null) {
+    orderLeverage = Number(leverage);
+    // Clamp (don't reject) to the resolved cap so the user can't request
+    // more than the instrument allows. A request at the unlimited sentinel
+    // when the instrument is capped just snaps down to the cap.
+    if (orderLeverage > effectiveCap) orderLeverage = effectiveCap;
+  } else {
+    orderLeverage = effectiveCap;
+  }
+  if (!Number.isFinite(orderLeverage) || orderLeverage < 1) orderLeverage = 1;
+
+  // ─── Options guards (Phase 3 — long-only MVP) ───────────────────────
+  // Writing/selling an option to open needs SPAN margin (not modelled yet), so
+  // only BUY (long CE/PE) opens are allowed; SELL is permitted only to close a
+  // long. Premium is paid in full → leverage 1 (margin = premium × qty).
+  if (instrument.segment === 'OPT') {
+    const isClose = req.body.closeOnly === true || req.body.reduceOnly === true;
+    if (side === 'SELL' && !isClose) {
+      throw new AppError(
+        'Option writing (sell-to-open) is not supported yet — needs SPAN margin. Buy calls/puts, or sell only to close a long.',
+        400,
+        'OPTION_WRITE_NOT_SUPPORTED'
+      );
+    }
+    orderLeverage = 1;
+  }
+
+  // ─── Indian cash-equity product type (Delivery vs Intraday) ─────────
+  // DELIVERY = full cash (leverage 1, STT 0.1% both legs). INTRADAY =
+  // leveraged (default 5x, capped by the resolved cap) + STT 0.025% sell-only
+  // + auto square-off at 15:15 IST (backgroundWorker). Only NSE/BSE cash
+  // equity; every other segment/asset class is unaffected (NORMAL).
+  let productType = 'NORMAL';
+  if (instrument.segment === 'EQ' && (instrument.exchange === 'NSE' || instrument.exchange === 'BSE')) {
+    productType = String(req.body.productType || 'DELIVERY').toUpperCase() === 'INTRADAY' ? 'INTRADAY' : 'DELIVERY';
+    if (productType === 'INTRADAY') {
+      const intradayCap = Number(process.env.INTRADAY_EQUITY_LEVERAGE) || 5;
+      orderLeverage = Math.min(orderLeverage, intradayCap);
+    } else {
+      orderLeverage = 1; // delivery is full cash
+    }
+    if (!Number.isFinite(orderLeverage) || orderLeverage < 1) orderLeverage = 1;
+  }
+
+  // ─── F&O lot-size validation ────────────────────────────────────────
+  // Futures/options trade only in whole lots — quantity must be a multiple of
+  // the contract lot size (e.g. NIFTY 75/150, not 50).
+  if (instrument.segment === 'FUT' || instrument.segment === 'OPT') {
+    const lot = Number(instrument.lotSize) || 1;
+    const qn = Number(quantity);
+    if (lot > 1 && (!Number.isFinite(qn) || qn <= 0 || qn % lot !== 0)) {
+      throw new AppError(
+        `Quantity must be a multiple of the lot size (${lot}) for ${instrument.symbol}.`,
+        400,
+        'INVALID_LOT_SIZE'
+      );
+    }
+  }
+
+  // ─── Indian order-safety: tick size, circuit band, freeze qty ────────
+  // Enforced only for exchange-bound Indian instruments and only where the
+  // data exists (null/0 = not enforced). Tick + circuit apply to user-set
+  // LIMIT/STOP prices (market orders fill at the live, in-band price).
+  if (['NSE', 'BSE', 'NFO', 'BFO', 'MCX'].includes(instrument.exchange)) {
+    const tick = Number(instrument.tickSize) || 0;
+    const uc = Number(instrument.upperCircuit) || 0;
+    const lc = Number(instrument.lowerCircuit) || 0;
+    const fz = Number(instrument.freezeQty) || 0;
+    const checkPx = (px, label) => {
+      if (!(px > 0)) return;
+      if (tick > 0) {
+        const n = px / tick;
+        if (Math.abs(n - Math.round(n)) > 1e-6) {
+          throw new AppError(`${label} price must be in multiples of the tick size (${tick}) for ${instrument.symbol}.`, 400, 'INVALID_TICK_SIZE');
+        }
+      }
+      if (uc > 0 && px > uc) throw new AppError(`${label} price ${px} is above today's upper circuit (${uc}) for ${instrument.symbol}.`, 400, 'PRICE_OUT_OF_BAND');
+      if (lc > 0 && px < lc) throw new AppError(`${label} price ${px} is below today's lower circuit (${lc}) for ${instrument.symbol}.`, 400, 'PRICE_OUT_OF_BAND');
+    };
+    if (type === 'LIMIT' && price) checkPx(Number(price), 'Limit');
+    if (stopPrice) checkPx(Number(stopPrice), 'Stop');
+    if (fz > 0 && Number(quantity) > fz) {
+      throw new AppError(`Quantity ${quantity} exceeds the max per-order freeze quantity (${fz}) for ${instrument.symbol}.`, 400, 'QTY_EXCEEDS_FREEZE');
+    }
+  }
+
+  // Margin lock: compute how much new exposure this order opens (closing-leg
+  // is netted out against existing position), and lock that from free balance.
+  // STOP orders also lock at placement so the user can't double-spend the
+  // funds while the stop sits pending — released on cancel.
+  const { marginAmount, openQty } = await _computeMarginToLock({
+    instrument,
+    side,
+    type,
+    qty: String(quantity),
+    price,
+    stopPrice,
+    leverage: orderLeverage,
+    account,
+    symbol: instrument.symbol,
+    // A caller-declared close only offsets margin against the side the engine
+    // will actually reduce. Anything else is new exposure and pays full margin.
+    isClose: req.body.closeOnly === true || req.body.reduceOnly === true,
+  });
+
+  // Routing is decided AFTER the order doc exists (in orderRouter.routeOrder)
+  // because the router needs an Order doc to stamp executionSource onto.
+  // Order is created with default routing/executionSource which the router
+  // overwrites before submitting to the engine/LP.
+  // Hedge mode — opening orders are explicitly tagged with their target
+  // positionSide so the matching engine routes the fill to the correct
+  // (LONG/SHORT) bucket. BUY opens/adds to LONG, SELL opens/adds to SHORT.
+  // Legacy callers that don't send positionSide get this default; explicit
+  // close orders (closePosition controller) override with the source
+  // position's side so SELL-close-of-LONG hits LONG, not SHORT.
+  const orderPositionSide = side === 'BUY' ? 'LONG' : 'SHORT';
+
+  const order = await Order.create({
+    userId: req.userId,
+    accountId,
+    instrumentId: instrument._id,
+    symbol: instrument.symbol,
+    side,
+    positionSide: orderPositionSide,
+    type,
+    quantity: String(quantity),
+    price: price ? String(price) : undefined,
+    stopPrice: stopPrice ? String(stopPrice) : undefined,
+    stopLoss: stopLoss ? String(stopLoss) : undefined,
+    takeProfit: takeProfit ? String(takeProfit) : undefined,
+    leverage: orderLeverage,
+    productType,
+    status: ORDER_STATUS.PENDING,
+    idempotencyKey,
+    // Persisted on order so cancel/reject can release the exact amount
+    // even if position state changes in between.
+    lockedMargin: marginAmount,
+  });
+
+  if (gt(marginAmount, '0')) {
+    try {
+      await walletService.lockMargin({
+        userId: req.userId,
+        accountId,
+        currency: account.baseCurrency || 'USD',
+        amount: marginAmount,
+        orderId: order._id,
+        // Ledger rows are keyed to the ORDER here (the position does not exist
+        // until the router fills), so this quotes the order's own ticket — the
+        // one the pending-orders / order-history tables show.
+        note: `order ${ticketShort(order._id)} · Margin for ${side} ${openQty} ${instrument.symbol}`,
+      });
+    } catch (e) {
+      // Roll back the order we just created so we don't leave a dangling pending
+      order.status = ORDER_STATUS.REJECTED;
+      order.rejectionReason = e.message;
+      await order.save();
+      throw e;
+    }
+  }
+
+  // STOP and LIMIT orders rest as PENDING until the price-monitor worker
+  // triggers them. Pre-fix LIMITs went straight to the engine, which has
+  // a B-book / external fallback that fills at market price regardless of
+  // the limit constraint — that's how a BUY LIMIT placed below market was
+  // ending up filled immediately. Now LIMITs only execute when the worker
+  // sees the market cross the limit price (ask <= BUY limit, bid >= SELL
+  // limit) and submits the order to the engine.
+  if (type === ORDER_TYPE.STOP || type === ORDER_TYPE.LIMIT) {
+    _pushUser(req.userId, 'orders', { event: 'PLACED', accountId: order.accountId ? String(order.accountId) : null, orderId: String(order._id), symbol: order.symbol });
+    return sendSuccess(res, order, 201);
+  }
+
+  // Margin was locked above. If the order never becomes exposure, that lock
+  // MUST come back — otherwise a rejected order silently strands the funds in
+  // `locked` forever: the Wallet page still shows the full balance (raw
+  // `balance`) while the Trade page shows the reduced `free` (balance −
+  // locked), and the user can never spend the difference.
+  //
+  // Releases exactly once — `lockedMargin` is zeroed after a successful
+  // release so a later cancel/reject path can't double-release.
+  const releasePlacementMargin = async (reason) => {
+    if (!gt(order.lockedMargin || '0', '0')) return;
+    const amount = order.lockedMargin;
+    try {
+      await walletService.releaseMargin({
+        userId: req.userId,
+        accountId,
+        currency: account.baseCurrency || 'USD',
+        amount,
+        orderId: order._id,
+        note: `Order rejected: released ${amount} (${reason})`,
+      });
+      order.lockedMargin = '0';
+      await order.save();
+    } catch (relErr) {
+      // Loud: this is stranded customer money, and the reconcile script
+      // (migrations/reconcileWalletLocked.js) is the recovery path.
+      console.error(
+        `[placeOrder] CRITICAL: margin release failed for rejected order ${order._id} ` +
+        `amount=${amount}: ${relErr.message}`
+      );
+    }
+  };
+
+  // Route via the new per-account router. It picks INTERNAL vs LP based
+  // on account.bookType (+ riskEngine for HYBRID), stamps executionSource
+  // on the order, and dispatches to the appropriate execution service.
+  //
+  // Two distinct failure shapes, both of which used to leak the lock:
+  //   1. routeOrder THROWS — feed guard (STALE_FEED / FROZEN_FEED), routing
+  //      rejected by the risk engine, daily/lifetime volume cap, LP provider
+  //      not configured, account blocked/stopped-out.
+  //   2. routeOrder RETURNS an order already stamped REJECTED — the engine's
+  //      B-book path does this for "No reference price for B-book fill".
+  let settledOrder;
+  let executionSource;
+  try {
+    ({ settledOrder, executionSource } = await orderRouter.routeOrder({
+      order,
+      userId: req.userId,
+    }));
+  } catch (routeErr) {
+    await releasePlacementMargin(routeErr.code || routeErr.message || 'routing failed');
+    throw routeErr;
+  }
+  if (settledOrder && settledOrder.status === ORDER_STATUS.REJECTED) {
+    await releasePlacementMargin(settledOrder.rejectionReason || 'rejected by engine');
+  }
+
+  // ── Copy-trading fan-out ────────────────────────────────────────────
+  // If the user has public followers, fire mirror orders on each.
+  // Best-effort: a failure here must NOT block the parent's order
+  // response. Skipped for closeOnly/reduceOnly so we don't mirror
+  // close orders (the close path has its own hook).
+  if (settledOrder && !order.closeOnly && !order.reduceOnly) {
+    setImmediate(async () => {
+      try {
+        // Resolve the resulting OPEN position created by this order.
+        const pos = await Position.findOne({
+          userId: req.userId,
+          accountId: order.accountId,
+          symbol: order.symbol,
+          status: POSITION_STATUS.OPEN,
+        }).sort({ createdAt: -1 }).lean();
+        if (pos) {
+          const copyService = require('../services/copyTradingService');
+          await copyService.onMasterOrderFilled({ order: settledOrder.toObject?.() || settledOrder, position: pos });
+        }
+      } catch (e) {
+        console.error('[copyTrading] fan-out (open) failed:', e.message);
+      }
+    });
+  }
+
+  // Update candles for any trades that just executed
+  // (in MVP we look up trades created after order creation)
+  const recentTrades = await Trade.find({
+    symbol: order.symbol,
+    $or: [{ buyOrderId: order._id }, { sellOrderId: order._id }],
+  }).lean();
+  for (const t of recentTrades) {
+    await updateCandlesForTrade({
+      symbol: t.symbol,
+      price: t.price,
+      quantity: t.quantity,
+      ts: t.executedAt.getTime(),
+    });
+  }
+
+  // executionSource on the response so the UI can show "Filled via LP"
+  // / "Filled internally" if it wants. The order doc itself also carries it.
+  sendSuccess(res, { ...settledOrder.toObject?.() || settledOrder, executionSource }, 201);
+});
+
+const cancelOrder = asyncHandler(async (req, res) => {
+  const order = await Order.findOne({ _id: req.params.id, userId: req.userId });
+  if (!order) throw new AppError('Order not found', 404);
+  if (![ORDER_STATUS.PENDING, ORDER_STATUS.PARTIALLY_FILLED].includes(order.status)) {
+    throw new AppError('Order cannot be cancelled', 400);
+  }
+  order.rejectionReason = 'Cancelled by user';
+  await order.save();
+  // Route the cancel — for A-book orders this also cancels on the LP so
+  // the upstream venue doesn't fill an order the user thinks is dead.
+  await orderRouter.routeCancel({ order });
+
+  // Release the unfilled portion's margin. Filled portion's margin stays
+  // locked because it's now backing the resulting position (released on
+  // position close via settleTradeClose).
+  if (gt(order.lockedMargin || '0', '0')) {
+    // Floor remaining at 0 — under decimal-noise edge cases filledQuantity
+    // can drift slightly above quantity, which would yield a negative
+    // releaseAmt and unwind margin in the wrong direction.
+    const rawRemaining = sub(order.quantity, order.filledQuantity || '0');
+    const remaining = gt(rawRemaining, '0') ? rawRemaining : '0';
+    if (gt(remaining, '0')) {
+      const releaseAmt = div(mul(order.lockedMargin, remaining), order.quantity);
+      const account = await TradingAccount.findById(order.accountId);
+      await walletService.releaseMargin({
+        userId: order.userId,
+        accountId: order.accountId,
+        currency: account?.baseCurrency || 'USD',
+        amount: releaseAmt,
+        orderId: order._id,
+        note: `Cancel: released ${releaseAmt} for unfilled ${remaining}`,
+      });
+    }
+  }
+
+  _pushUser(req.userId, 'orders', { event: 'CANCELLED', orderId: String(order._id), symbol: order.symbol });
+  sendSuccess(res, order);
+});
+
+const listOpen = asyncHandler(async (req, res) => {
+  // Optional per-account scope (?accountId=<id>) — see listPositions. Lets the
+  // Trade page show only the selected account's pending orders on switch.
+  const openFilter = {
+    userId: req.userId,
+    status: { $in: [ORDER_STATUS.PENDING, ORDER_STATUS.PARTIALLY_FILLED] },
+  };
+  if (req.query.accountId) openFilter.accountId = req.query.accountId;
+  const orders = await Order.find(openFilter)
+    .sort({ createdAt: -1 })
+    .lean();
+  if (!orders.length) return sendSuccess(res, []);
+
+  // A pending order carries no fee yet — it's only charged when it fills into a
+  // Position and that position closes. Surface an ESTIMATE (account fee model at
+  // the order price, pnl=0) + the fee category so the UI shows it under the
+  // right column. Display estimate only; no stored value/calculation changes.
+  const accountFeeService = require('../services/accountFeeService');
+  const acctIds = [...new Set(orders.map((o) => String(o.accountId)).filter(Boolean))];
+  const symbols = [...new Set(orders.map((o) => o.symbol).filter(Boolean))];
+  const [accts, insts] = await Promise.all([
+    acctIds.length ? TradingAccount.find({ _id: { $in: acctIds } }).select('accountType').lean() : [],
+    symbols.length ? Instrument.find({ symbol: { $in: symbols } }).select('symbol commissionOverrides commissionType commissionPercent commissionPerTrade').lean() : [],
+  ]);
+  const accMap = new Map(accts.map((a) => [String(a._id), a]));
+  const iMap = new Map(insts.map((i) => [i.symbol, i]));
+
+  for (const o of orders) {
+    const acct = accMap.get(String(o.accountId));
+    const inst = iMap.get(o.symbol);
+    const px = o.price != null ? Number(o.price) : (o.stopPrice != null ? Number(o.stopPrice) : null);
+    let est = 0;
+    try {
+      if (inst && acct && px != null && Number(o.quantity) > 0) {
+        est = Number(await accountFeeService.computeCloseFee({
+          account: { accountType: acct.accountType },
+          instrument: inst,
+          closeQty: Number(o.quantity),
+          closePrice: px,
+          closePnl: 0,
+        })) || 0;
+      }
+    } catch (_) { est = 0; }
+    let cat = 'COMMISSION';
+    try { if (inst) cat = await accountFeeService.resolveFeeCategory({ account: { accountType: acct?.accountType }, instrument: inst }); } catch (_) { cat = 'COMMISSION'; }
+    o.commission = Math.round((est + Number.EPSILON) * 100) / 100;
+    o.feeCategory = cat;
+    o.commissionEstimated = true;
+  }
+  await attachCopyMaster(orders, 'followerOrderId');
+  sendSuccess(res, orders);
+});
+
+const listHistory = asyncHandler(async (req, res) => {
+  // Which terminal states this endpoint serves. A ?status= narrows to one of
+  // them — without it there was no way to ask for "just the rejected ones"
+  // except fetching everything and filtering by eye.
+  const TERMINAL = [ORDER_STATUS.FILLED, ORDER_STATUS.CANCELLED, ORDER_STATUS.REJECTED];
+  const want = String(req.query.status || '').toUpperCase();
+  const baseFilter = {
+    userId: req.userId,
+    status: TERMINAL.includes(want) ? want : { $in: TERMINAL },
+  };
+  // Optional per-account scope (?accountId=<id>) — see listPositions.
+  if (req.query.accountId) baseFilter.accountId = req.query.accountId;
+  if (req.query.symbol) baseFilter.symbol = new RegExp(String(req.query.symbol), 'i');
+  // Suspended accounts see a limited window of history — how long is set per
+  // plan (Admin → Plans → "Data access after expiry").
+  const filter = await applySuspendedHistoryClip(req.userId, baseFilter, 'createdAt');
+
+  // Real pagination. This was `.limit(200)` with no skip and no total, so
+  // anything older than the most recent 200 orders was unreachable through
+  // any screen — not merely hidden, but impossible to page to.
+  const page = Math.max(1, Number(req.query.page) || 1);
+  const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 50));
+  const total = await Order.countDocuments(filter);
+  const orders = await Order.find(filter)
+    .sort({ createdAt: -1 })
+    .skip((page - 1) * limit)
+    .limit(limit)
+    .lean();
+  await attachCopyMaster(orders, 'followerOrderId');
+  sendSuccess(res, {
+    items: orders,
+    pagination: { page, limit, total, pages: Math.max(1, Math.ceil(total / limit)) },
+  });
+});
+
+/**
+ * Trade history: closed positions for the authenticated user.
+ *
+ * Query params (all optional):
+ *   accountId   - filter to a single account
+ *   symbol      - filter to a single instrument symbol
+ *   side        - 'BUY' | 'SELL'
+ *   from / to   - ISO date range on closedAt
+ *   page, limit - pagination (1-based; defaults: 1 / 30)
+ *
+ * Response includes a `summary` block computed across the FILTERED set
+ * (not just the current page) so the footer cards can show TOTAL TRADES,
+ * TOTAL LOT, WINS, LOSSES and NET P/L. The summary is intentionally cheap
+ * — a single Mongo aggregation, no per-doc work.
+ */
+// Tag each position/trade row with its DISPLAY fee category ('COMMISSION' |
+// 'CHARGES'), derived from the account's fee type (+ instrument override). The
+// UI uses this so a trade's single fee shows under exactly one column. This is
+// display metadata only — no stored value or calculation changes.
+async function attachFeeCategory(rows) {
+  if (!rows || !rows.length) return rows;
+  const acctIds = [...new Set(rows.map((r) => String(r.accountId)).filter(Boolean))];
+  const instIds = [...new Set(rows.map((r) => String(r.instrumentId)).filter(Boolean))];
+  const [accts, insts] = await Promise.all([
+    acctIds.length ? TradingAccount.find({ _id: { $in: acctIds } }).select('accountType').lean() : [],
+    instIds.length ? Instrument.find({ _id: { $in: instIds } }).select('commissionOverrides commissionType commissionPercent commissionPerTrade').lean() : [],
+  ]);
+  const accMap = new Map(accts.map((a) => [String(a._id), a]));
+  const instMap = new Map(insts.map((i) => [String(i._id), i]));
+  const accountFeeService = require('../services/accountFeeService');
+  const cache = new Map(); // (accountType|instrumentId) → category
+  for (const r of rows) {
+    const acct = accMap.get(String(r.accountId));
+    const inst = instMap.get(String(r.instrumentId));
+    const key = `${acct?.accountType || ''}|${String(r.instrumentId)}`;
+    let cat = cache.get(key);
+    if (cat === undefined) {
+      try { cat = await accountFeeService.resolveFeeCategory({ account: acct, instrument: inst }); }
+      catch (_) { cat = 'COMMISSION'; }
+      cache.set(key, cat);
+    }
+    r.feeCategory = cat;
+  }
+  return rows;
+}
+
+// Tag rows that originated from copy-trading with the master's display name so
+// the Trade page can show a "COPY" badge. `followerField` is the CopyTrade key
+// that points at the row's _id — 'followerPositionId' for positions,
+// 'followerOrderId' for orders. Display metadata only; no stored values change.
+async function attachCopyMaster(rows, followerField) {
+  if (!rows || !rows.length) return rows;
+  const CopyTrade = require('../models/CopyTrade');
+  const CopyBox   = require('../models/CopyBox');
+  const ids = rows.map((r) => r._id).filter(Boolean);
+  const links = await CopyTrade.find({ [followerField]: { $in: ids } })
+    .select(`${followerField} masterAccountId`).lean();
+  if (!links.length) return rows;
+  const masterByRow = new Map(links.map((l) => [String(l[followerField]), String(l.masterAccountId)]));
+  const acctIds = [...new Set(links.map((l) => String(l.masterAccountId)).filter(Boolean))];
+  const boxes = acctIds.length
+    ? await CopyBox.find({ accountId: { $in: acctIds } }).select('accountId displayName').lean() : [];
+  const nameByAcct = new Map(boxes.map((b) => [String(b.accountId), b.displayName]));
+  for (const r of rows) {
+    const macc = masterByRow.get(String(r._id));
+    if (macc) { r.isCopy = true; r.copyMaster = nameByAcct.get(macc) || 'Copy trade'; }
+  }
+  return rows;
+}
+
+/**
+ * Unified history: closed trades + cancelled + rejected, one paged list.
+ *
+ * ?recordType = all | closed | cancelled | rejected   (default all)
+ *
+ * Uses $unionWith so the two collections are sorted and paged together. The
+ * alternative — fetching each and merging in the client — silently breaks
+ * pagination, because page 2 of each list is not page 2 of the merge.
+ */
+const unifiedHistory = asyncHandler(async (req, res) => {
+  const { accountId, accountIds, symbol, side, closeReason, from, to } = req.query;
+  const recordType = String(req.query.recordType || 'all').toLowerCase();
+  const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+  const limit = Math.min(200, Math.max(1, parseInt(req.query.limit, 10) || 30));
+
+  // Shared scope — identical on both sides so a filter means the same thing
+  // whichever collection a row came from. aggregate() does NOT cast against
+  // the schema the way find() does: the pipeline reaches the server verbatim,
+  // so a string id would compare against an ObjectId and match nothing.
+  const oid = (v) => new mongoose.Types.ObjectId(String(v));
+  const scope = { userId: oid(req.userId) };
+  if (accountId && mongoose.isValidObjectId(accountId)) {
+    scope.accountId = oid(accountId);
+  } else if (accountIds) {
+    const ids = String(accountIds).split(',').map((x) => x.trim()).filter((x) => mongoose.isValidObjectId(x));
+    if (ids.length) scope.accountId = { $in: ids.map(oid) };
+  }
+  if (symbol) scope.symbol = String(symbol).toUpperCase();
+  if (side === 'BUY' || side === 'SELL') scope.side = side;
+
+  // A close reason is a property of a trade that ended. An order that never
+  // opened cannot have one, so asking for a specific reason is implicitly a
+  // request for trades only — leaving orders in would show rows the filter
+  // does not apply to.
+  const VALID_CLOSE_REASONS = ['MANUAL', 'ADMIN', 'TAKE_PROFIT', 'STOP_LOSS', 'TRAILING_STOP', 'MARGIN_STOPOUT', 'NEGATIVE_BALANCE', 'STOP_OUT', 'INSTRUMENT_DISABLED_FORCE_CLOSE'];
+  const reasonFilter = closeReason && VALID_CLOSE_REASONS.includes(String(closeReason).toUpperCase())
+    ? String(closeReason).toUpperCase()
+    : null;
+
+  const wantTrades    = recordType === 'all' || recordType === 'closed';
+  const wantCancelled = (recordType === 'all' || recordType === 'cancelled') && !reasonFilter;
+  const wantRejected  = (recordType === 'all' || recordType === 'rejected')  && !reasonFilter;
+
+  // ── closed positions ──
+  const posMatch = { ...scope, status: POSITION_STATUS.CLOSED };
+  if (reasonFilter) posMatch.closeReason = reasonFilter;
+  applyDateRange(posMatch, 'closedAt', from, to);
+
+  // Resolved ONCE for the whole request. Both collections get the same
+  // retention answer, and asking twice only bought three duplicate queries.
+  const clip = await resolveSuspendedClip(req.userId);
+  const posFilter = clipFilter(posMatch, 'closedAt', clip);
+
+  // ── orders that never opened ──
+  const wantStatuses = [
+    ...(wantCancelled ? [ORDER_STATUS.CANCELLED] : []),
+    ...(wantRejected ? [ORDER_STATUS.REJECTED] : []),
+  ];
+  const ordMatch = { ...scope, status: { $in: wantStatuses } };
+  applyDateRange(ordMatch, 'createdAt', from, to);
+  const ordFilter = clipFilter(ordMatch, 'createdAt', clip);
+
+  // Orders are projected INTO the position shape rather than both sides into
+  // something new, so every column the page already draws keeps working.
+  // Values a cancelled order cannot have are null, never 0 — it did not break
+  // even, it never opened, and a 0 in the P/L column would claim the first.
+  // Numbers stay strings because that is how Position stores them.
+  const posProject = {
+    $project: {
+      kind: { $literal: 'TRADE' },
+      accountId: 1, symbol: 1, side: 1, status: 1,
+      quantity: 1, closedQuantity: 1,
+      entryPrice: 1, closePrice: 1,
+      commission: 1, swap: 1,
+      realizedPnl: 1, closeReason: 1,
+      openedAt: 1, closedAt: 1, createdAt: 1,
+      rejectionReason: { $literal: null },
+      orderType: { $literal: null },
+      at: '$closedAt',
+    },
+  };
+  const ordProject = {
+    $project: {
+      kind: { $literal: 'ORDER' },
+      accountId: 1, symbol: 1, side: 1, status: 1,
+      quantity: 1,
+      closedQuantity: { $literal: null },
+      entryPrice: { $ifNull: ['$price', null] }, // limit price, or null for a market order
+      closePrice: { $literal: null },
+      commission: { $literal: null },
+      swap: { $literal: null },
+      realizedPnl: { $literal: null },
+      closeReason: { $literal: null },
+      // An order never opened a position, so "opened" is when it was PLACED
+      // and "closed" is when it was refused or withdrawn. cancelledAt is
+      // written on cancel; a rejection is stamped at write time, so updatedAt
+      // is the end for those. The Status column says which kind a row is, so
+      // neither date can be misread as a trade that opened.
+      openedAt: '$createdAt',
+      closedAt: { $ifNull: ['$cancelledAt', '$updatedAt'] },
+      createdAt: 1,
+      rejectionReason: { $ifNull: ['$rejectionReason', null] },
+      orderType: '$type',
+      at: { $ifNull: ['$cancelledAt', { $ifNull: ['$updatedAt', '$createdAt'] }] },
+    },
+  };
+
+  // Build the union from whichever sides are wanted. A side nobody asked for
+  // is omitted rather than matched against an empty list — an empty match
+  // still costs a pass.
+  let Model;
+  let pipeline;
+  if (wantTrades && wantStatuses.length) {
+    Model = Position;
+    pipeline = [
+      { $match: posFilter }, posProject,
+      { $unionWith: { coll: Order.collection.name, pipeline: [{ $match: ordFilter }, ordProject] } },
+    ];
+  } else if (wantTrades) {
+    Model = Position;
+    pipeline = [{ $match: posFilter }, posProject];
+  } else {
+    Model = Order;
+    pipeline = [{ $match: ordFilter }, ordProject];
+  }
+
+  // The stat cards above the list are trade figures. They are computed over
+  // the closed positions in scope and nothing else, so a list that also holds
+  // cancelled orders does not inflate them.
+  const summaryAgg = wantTrades
+    ? Position.aggregate([
+      { $match: posFilter },
+      {
+        $group: {
+          _id: null,
+          totalTrades: { $sum: 1 },
+          totalLot: { $sum: { $toDouble: { $ifNull: ['$closedQuantity', '$quantity'] } } },
+          netPnl: { $sum: { $toDouble: '$realizedPnl' } },
+          wins: { $sum: { $cond: [{ $gt: [{ $toDouble: '$realizedPnl' }, 0] }, 1, 0] } },
+          losses: { $sum: { $cond: [{ $lt: [{ $toDouble: '$realizedPnl' }, 0] }, 1, 0] } },
+        },
+      },
+    ])
+    : Promise.resolve([]);
+
+  const [rows, countRes, sumRes] = await Promise.all([
+    Model.aggregate([...pipeline, { $sort: { at: -1 } }, { $skip: (page - 1) * limit }, { $limit: limit }]),
+    Model.aggregate([...pipeline, { $count: 'n' }]),
+    summaryAgg,
+  ]);
+  const total = countRes[0]?.n || 0;
+  const summary = sumRes[0] || { totalTrades: 0, totalLot: 0, netPnl: 0, wins: 0, losses: 0 };
+  delete summary._id;
+
+  sendSuccess(res, {
+    items: rows,
+    summary,
+    pagination: { page, limit, total, pages: Math.max(1, Math.ceil(total / limit)) },
+  });
+});
+
+const positionHistory = asyncHandler(async (req, res) => {
+  const {
+    accountId,
+    accountIds, // optional CSV — used when the FE picks "All" with a TYPE filter
+    symbol,
+    side,
+    closeReason, // optional — filter by how the trade closed (its terminal status)
+    from,
+    to,
+    page: pageRaw = '1',
+    limit: limitRaw = '30',
+  } = req.query;
+
+  const baseFilter = { userId: req.userId, status: POSITION_STATUS.CLOSED };
+  if (accountId) {
+    baseFilter.accountId = accountId;
+  } else if (accountIds) {
+    // CSV list — restricts the rollup to a specific set of accounts
+    // (e.g. all REAL accounts the user owns). The userId guard above
+    // already ensures the caller can't query someone else's accounts.
+    const ids = String(accountIds).split(',').map((s) => s.trim()).filter(Boolean);
+    if (ids.length) baseFilter.accountId = { $in: ids };
+  }
+  if (symbol) baseFilter.symbol = String(symbol).toUpperCase();
+  if (side && (side === 'BUY' || side === 'SELL')) baseFilter.side = side;
+  // Status = how the trade closed (its close reason). Whitelisted so a bad
+  // value can't inject an arbitrary field query.
+  const VALID_CLOSE_REASONS = ['MANUAL', 'ADMIN', 'TAKE_PROFIT', 'STOP_LOSS', 'TRAILING_STOP', 'MARGIN_STOPOUT', 'NEGATIVE_BALANCE', 'STOP_OUT', 'INSTRUMENT_DISABLED_FORCE_CLOSE'];
+  if (closeReason && VALID_CLOSE_REASONS.includes(String(closeReason).toUpperCase())) {
+    baseFilter.closeReason = String(closeReason).toUpperCase();
+  }
+  // Inclusive of the whole `to` day (fixes From==To returning nothing).
+  applyDateRange(baseFilter, 'closedAt', from, to);
+  // Plan-suspended accounts: clip history to last 3 months.
+  const filter = await applySuspendedHistoryClip(req.userId, baseFilter, 'closedAt');
+
+  const page = Math.max(1, parseInt(pageRaw, 10) || 1);
+  const limit = Math.min(200, Math.max(1, parseInt(limitRaw, 10) || 30));
+  const skip = (page - 1) * limit;
+
+  // `summary` and the page count each cost a pass over the ENTIRE filtered
+  // set — a countDocuments and a $group aggregate — on top of the paged
+  // find. A caller that renders only `items` (the dashboard reads nothing
+  // else, twice, on every load) can skip both with ?summary=0.
+  //
+  // Opt-IN, so no existing caller changes: absent means 1 means the exact
+  // response this endpoint has always returned.
+  const wantSummary = String(req.query.summary ?? '1') !== '0';
+
+  const [items, total] = await Promise.all([
+    Position.find(filter).sort({ closedAt: -1 }).skip(skip).limit(limit).lean(),
+    wantSummary ? Position.countDocuments(filter) : Promise.resolve(0),
+  ]);
+  await attachFeeCategory(items);
+  await attachCopyMaster(items, 'followerPositionId');
+
+  // Aggregate summary across the filtered set (not just this page).
+  // We keep numbers as JS Number here — cumulative trade counts and lot sums
+  // don't need the Decimal precision that individual orders do.
+  // Mongoose casts a filter against the schema for find(), but NOT inside
+  // aggregate() — the pipeline is sent to the server verbatim. `accountId` comes
+  // straight off req.query as a STRING, so { $match: { accountId: "66f…" } }
+  // compared a String against an ObjectId and matched nothing: every figure in
+  // this summary rendered as ZERO whenever the page filtered by account, which
+  // both the Trade page and Orders do. The paged `items` above were correct the
+  // whole time, which is what made it look like a display bug rather than a query
+  // one. userId is unaffected — authenticate() sets it from user._id, already an
+  // ObjectId.
+  let summary = null;
+  if (wantSummary) {
+    const _oid = (v) => (mongoose.isValidObjectId(v) ? new mongoose.Types.ObjectId(String(v)) : v);
+    const matchStage = { ...filter };
+    if (matchStage.accountId) {
+      matchStage.accountId = matchStage.accountId.$in
+        ? { $in: matchStage.accountId.$in.map(_oid) }
+        : _oid(matchStage.accountId);
+    }
+
+    const aggResult = await Position.aggregate([
+      { $match: matchStage },
+      {
+        $group: {
+          _id: null,
+          totalTrades: { $sum: 1 },
+          totalLot: { $sum: { $toDouble: '$quantity' } },
+          netPnl: { $sum: { $toDouble: '$realizedPnl' } },
+          wins: { $sum: { $cond: [{ $gt: [{ $toDouble: '$realizedPnl' }, 0] }, 1, 0] } },
+          losses: { $sum: { $cond: [{ $lt: [{ $toDouble: '$realizedPnl' }, 0] }, 1, 0] } },
+        },
+      },
+    ]);
+    summary = aggResult[0] || { totalTrades: 0, totalLot: 0, netPnl: 0, wins: 0, losses: 0 };
+    delete summary._id;
+  }
+
+  // Same shape as always when the summary was asked for. When it was not,
+  // the keys that would be lies (a total nobody counted) are left out
+  // rather than sent as zero.
+  sendSuccess(res, wantSummary
+    ? { items, summary, pagination: { page, limit, total, pages: Math.ceil(total / limit) } }
+    : { items, pagination: { page, limit } });
+});
+
+// POSITIONS
+const listPositions = asyncHandler(async (req, res) => {
+  // Optional per-account scope: the Trade page passes ?accountId=<id> so
+  // switching accounts shows ONLY that account's open positions. Omitting it
+  // keeps the legacy user-wide behaviour. The userId clause still guarantees
+  // a user can never read another user's rows via a foreign accountId.
+  const posFilter = { userId: req.userId, status: POSITION_STATUS.OPEN };
+  if (req.query.accountId) posFilter.accountId = req.query.accountId;
+  const positions = await Position.find(posFilter).lean();
+  if (!positions.length) return sendSuccess(res, []);
+
+  // Batch-fetch all unique instruments at once (avoids N+1 queries)
+  const uniqueInstrumentIds = [...new Set(positions.map((p) => String(p.instrumentId)))];
+  const instruments = await Instrument.find({ _id: { $in: uniqueInstrumentIds } })
+    .select('_id lastPrice')
+    .lean();
+  const instrumentMap = new Map(instruments.map((i) => [String(i._id), i]));
+
+  // attach mark price + unrealized PnL
+  for (const p of positions) {
+    const inst = instrumentMap.get(String(p.instrumentId));
+    p.markPrice = inst?.lastPrice || p.entryPrice;
+    p.unrealizedPnl =
+      p.side === 'BUY'
+        ? mul(sub(p.markPrice, p.entryPrice), p.quantity)
+        : mul(sub(p.entryPrice, p.markPrice), p.quantity);
+  }
+  await attachFeeCategory(positions);
+  await attachCopyMaster(positions, 'followerPositionId');
+  sendSuccess(res, positions);
+});
+
+const closePosition = asyncHandler(async (req, res) => {
+  // Atomic claim: only the request that flips OPEN → CLOSING proceeds.
+  // A second concurrent click (or the worker firing SL/TP at the same
+  // instant) sees position=null and gets a clean "already settling" 409
+  // — much better than racing to create two closing orders that would
+  // each try to settle and double-credit (which the wallet ledger's
+  // dedupeKey would still block, but at the cost of an extra round-trip).
+  const position = await Position.findOneAndUpdate(
+    { _id: req.params.id, userId: req.userId, status: POSITION_STATUS.OPEN, settled: { $ne: true } },
+    { $set: { status: POSITION_STATUS.CLOSING, closeReason: 'MANUAL' } },
+    { new: true }
+  );
+  if (!position) {
+    // Differentiate "doesn't exist" from "currently settling" so the UI
+    // can show the right message instead of a generic 404.
+    const existing = await Position.findOne({ _id: req.params.id, userId: req.userId }).lean();
+    if (!existing) throw new AppError('Position not found', 404);
+    if (existing.status === POSITION_STATUS.CLOSING) {
+      throw new AppError('Position is already settling', 409, 'ALREADY_SETTLING');
+    }
+    if (existing.status === POSITION_STATUS.CLOSED) {
+      throw new AppError('Position is already closed', 409, 'ALREADY_CLOSED');
+    }
+    throw new AppError('Position not found', 404);
+  }
+
+  // Place opposite-side market order. Route via orderRouter so the close
+  // fills through whichever execution path (B/A/LP) the account is
+  // configured for. closeOnly caps qty at remaining position size.
+  //
+  // Hedge mode: positionSide is inherited from the source position so the
+  // engine knows which bucket to reduce. A SELL close-order against a LONG
+  // position is stamped positionSide=LONG so the engine doesn't accidentally
+  // hit the user's SHORT position on the same symbol.
+  const oppositeSide = position.side === 'BUY' ? 'SELL' : 'BUY';
+  const sourcePositionSide = position.positionSide || (position.side === 'BUY' ? 'LONG' : 'SHORT');
+  const order = await Order.create({
+    userId: req.userId,
+    accountId: position.accountId,
+    instrumentId: position.instrumentId,
+    symbol: position.symbol,
+    side: oppositeSide,
+    positionSide: sourcePositionSide,
+    type: ORDER_TYPE.MARKET,
+    quantity: position.quantity,
+    leverage: position.leverage,
+    status: ORDER_STATUS.PENDING,
+    closeOnly: true,
+    reduceOnly: true,
+  });
+
+  // Router throws → roll CLOSING back to OPEN so the user can retry.
+  // Engine settle path is idempotent (dedupeKey) so re-submit is safe.
+  let result;
+  try {
+    const routed = await orderRouter.routeOrder({ order, userId: req.userId });
+    result = routed.settledOrder;
+  } catch (engineErr) {
+    await Position.updateOne(
+      { _id: position._id, status: POSITION_STATUS.CLOSING, settled: { $ne: true } },
+      { $set: { status: POSITION_STATUS.OPEN }, $unset: { closeReason: '' } }
+    );
+    throw engineErr;
+  }
+
+  // Re-fetch the now-closed position + the wallet so the client can update
+  // immediately, without waiting for the WS event → refetch round-trip.
+  // (We still emit the WS event for other open tabs / the dashboard.)
+  const closedPosition = await Position.findById(position._id).lean();
+
+  // Defense against stuck state: if the engine returned without closing
+  // (e.g. order REJECTED for missing reference price), revert CLOSING →
+  // OPEN so the user can retry. Without this the position would sit in
+  // CLOSING forever and every retry would 409.
+  if (closedPosition && closedPosition.status === POSITION_STATUS.CLOSING && !closedPosition.settled) {
+    await Position.updateOne(
+      { _id: position._id, status: POSITION_STATUS.CLOSING, settled: { $ne: true } },
+      { $set: { status: POSITION_STATUS.OPEN }, $unset: { closeReason: '' } }
+    );
+    throw new AppError(
+      result?.rejectionReason || 'Close order did not fill — please retry',
+      400,
+      'CLOSE_FAILED'
+    );
+  }
+  const account = await TradingAccount.findById(position.accountId).lean();
+  // Falls back to the base currency, not INR. This currency is used to look up
+  // the WALLET below, and wallets are USD-denominated — an INR fallback asked for
+  // a wallet that does not exist, so a missing baseCurrency silently found no
+  // wallet at all rather than the account's real one.
+  const currency = account?.baseCurrency || BASE_CURRENCY;
+  const wallet = await require('../models/Wallet').Wallet.findOne({
+    userId: req.userId,
+    accountId: position.accountId,
+    currency,
+  }).lean();
+
+  // Backstop broadcast — every settle path inside MatchingEngine already
+  // notifies, but doing it here too guarantees frontends refresh even if a
+  // future routing path forgets to.
+  try {
+    const broadcaster = require('../websocket/server');
+    broadcaster.notifyUser(String(req.userId), 'wallet', {
+      reason: 'POSITION_SETTLEMENT',
+      positionId: String(position._id),
+      realizedPnl: closedPosition?.realizedPnl,
+      balance: wallet?.balance,
+    });
+    broadcaster.notifyUser(String(req.userId), 'positions', {
+      reason: 'POSITION_CLOSED',
+      accountId: position.accountId ? String(position.accountId) : null,
+      positionId: String(position._id),
+    });
+  } catch (e) {
+    // WS broadcast is best-effort — never fail the close because of it.
+    console.warn('[closePosition] broadcast failed:', e.message);
+  }
+
+  // ── Copy-trading: close every mirrored follower position ──────────
+  setImmediate(async () => {
+    try {
+      const copyService = require('../services/copyTradingService');
+      await copyService.onMasterPositionClosed({
+        position: closedPosition || position,
+        realizedPnl: closedPosition?.realizedPnl,
+      });
+    } catch (err) {
+      console.error('[copyTrading] fan-out (close) failed:', err.message);
+    }
+  });
+
+  sendSuccess(res, {
+    order: result,
+    position: closedPosition,
+    wallet: wallet
+      ? {
+          balance: wallet.balance,
+          locked: wallet.locked,
+          free: gt(wallet.balance, wallet.locked || '0')
+            ? sub(wallet.balance, wallet.locked || '0')
+            : '0',
+          currency: wallet.currency,
+        }
+      : null,
+  });
+});
+
+/**
+ * Modify a pending LIMIT or STOP order. Only price/quantity/stopLoss/takeProfit can be changed.
+ * For LIMIT orders sitting in the book, we cancel + re-add (loses time priority by design).
+ *
+ * Margin: changes to qty or price recompute the required margin against the
+ * order's current state, then top-up or release the delta on the wallet so
+ * the user can't escape the margin check by placing a tiny order and bumping
+ * the size after the fact.
+ */
+const modifyOrder = asyncHandler(async (req, res) => {
+  const { price, quantity, stopPrice, stopLoss, takeProfit } = req.body;
+  const order = await Order.findOne({ _id: req.params.id, userId: req.userId });
+  if (!order) throw new AppError('Order not found', 404);
+  if (order.status !== ORDER_STATUS.PENDING) {
+    throw new AppError('Only PENDING orders can be modified', 400);
+  }
+  if (order.type === 'MARKET') throw new AppError('MARKET orders cannot be modified', 400);
+  if (order.type === 'STOP' && order.triggeredAt) {
+    throw new AppError('Stop has already triggered and cannot be modified', 400);
+  }
+
+  // Purge any stale engine-book copy of this LIMIT so the OLD trigger price can
+  // never execute from a cached book entry after we change it (invalidate stale
+  // cached order state). A pending LIMIT is only ever in the book after a
+  // hydrateFromDB crash-recovery; in normal operation it's a plain PENDING DB
+  // row triggered by the price-monitor worker, so this is a no-op. We do NOT
+  // re-add or re-submit below — re-submitting was the bug (it filled the order
+  // at the current market price the moment it was modified).
+  if (order.type === 'LIMIT') {
+    await matchingEngine.removeFromBook(order.symbol, String(order._id), order.side);
+  }
+
+  // Snapshot the pre-modify values so we can revert if margin top-up fails.
+  const original = {
+    type: order.type,
+    price: order.price,
+    quantity: order.quantity,
+    stopPrice: order.stopPrice,
+    stopLoss: order.stopLoss,
+    takeProfit: order.takeProfit,
+  };
+
+  if (price != null) order.price = String(price);
+  if (quantity != null) {
+    if (!gt(quantity, '0')) throw new AppError('Quantity must be > 0', 400);
+    order.quantity = String(quantity);
+  }
+  if (stopPrice != null) order.stopPrice = String(stopPrice);
+
+  // ─── Re-resolve LIMIT vs STOP against the CURRENT market ───────────
+  // placeOrder decides a pending order's type from which side of the market
+  // the level sits on (below ask = BUY LIMIT, above ask = BUY STOP) and
+  // rejects a limit that is already marketable. modifyOrder used to skip
+  // BOTH steps: it assigned the new price and left `type` alone.
+  //
+  // So moving a pending order across the live price left, say, a SELL LIMIT
+  // with a level BELOW the bid. The worker's trigger test for a SELL LIMIT is
+  // `bid >= limitPx`, which is true the instant it is saved — the order fired
+  // on the very next tick and filled at market, even though price had never
+  // travelled to the level the user dragged it to. Same in mirror image for a
+  // BUY LIMIT moved above the ask. It reproduced from the chart drag and from
+  // the Modify dialog alike, because the gap was here, not in either UI.
+  //
+  // Re-running the placeOrder resolution makes a level that crossed the market
+  // become the STOP it always should have been (trigger on the way back), so
+  // the order keeps resting instead of filling itself.
+  const levelChanged = price != null || stopPrice != null;
+  if (levelChanged && (order.type === ORDER_TYPE.LIMIT || order.type === ORDER_TYPE.STOP)) {
+    const instForSide = await Instrument.findById(order.instrumentId).lean();
+    const { bid: curBid, ask: curAsk } = _currentBidAsk(instForSide || {});
+    // The level the user is asking for, whichever field carried it.
+    const level = order.type === ORDER_TYPE.STOP
+      ? (stopPrice != null ? String(stopPrice) : order.stopPrice)
+      : (price != null ? String(price) : order.price);
+
+    const resolved = resolveLimitTabOrderType({
+      side: order.side,
+      limitPrice: level,
+      currentBid: curBid,
+      currentAsk: curAsk,
+    });
+
+    if (resolved === 'INVALID') {
+      // Either the level sits exactly on the market (it would fill instantly,
+      // so it is a market order, not a pending one) or we have no usable
+      // quote to judge against. Refuse rather than guess — we throw before
+      // order.save(), so the stored order keeps its original level.
+      throw new AppError(
+        'Order price cannot be at the current market price. Move it above or below.',
+        400,
+        'LIMIT_INVALID'
+      );
+    }
+
+    // Park the level in the field the resolved type actually triggers on and
+    // clear the other, so the worker can never read a stale trigger.
+    order.type = resolved;
+    if (resolved === ORDER_TYPE.STOP) {
+      order.stopPrice = level;
+      order.price = undefined;
+    } else {
+      order.price = level;
+      order.stopPrice = undefined;
+    }
+  }
+
+  if (stopLoss !== undefined) order.stopLoss = stopLoss == null ? null : String(stopLoss);
+  if (takeProfit !== undefined) order.takeProfit = takeProfit == null ? null : String(takeProfit);
+
+  // Recompute required margin under the new params and reconcile against
+  // the amount already locked. Lock more / release the delta as needed.
+  const account = await TradingAccount.findById(order.accountId);
+  const instrument = await Instrument.findById(order.instrumentId);
+  if (account && instrument && (price != null || quantity != null || stopPrice != null)) {
+    const { marginAmount: newMargin } = await _computeMarginToLock({
+      instrument,
+      side: order.side,
+      type: order.type,
+      qty: order.quantity,
+      price: order.price,
+      stopPrice: order.stopPrice,
+      leverage: order.leverage,
+      account,
+      symbol: order.symbol,
+      isClose: !!(order.closeOnly || order.reduceOnly),
+      closingSide: order.positionSide || null,
+    });
+    const oldMargin = order.lockedMargin || '0';
+    if (gt(newMargin, oldMargin)) {
+      const topUp = sub(newMargin, oldMargin);
+      try {
+        await walletService.lockMargin({
+          userId: order.userId,
+          accountId: order.accountId,
+          currency: account.baseCurrency || 'USD',
+          amount: topUp,
+          orderId: order._id,
+          note: `Modify: top-up margin by ${topUp}`,
+        });
+      } catch (e) {
+        // Insufficient free balance — revert the in-memory mutations and refuse
+        // cleanly. We throw before order.save(), so the persisted order keeps its
+        // ORIGINAL params and stays PENDING for the worker.
+        order.type = original.type;
+        order.price = original.price;
+        order.quantity = original.quantity;
+        order.stopPrice = original.stopPrice;
+        order.stopLoss = original.stopLoss;
+        order.takeProfit = original.takeProfit;
+        // No book re-add: pending LIMIT/STOP orders live as PENDING DB rows
+        // (worker-triggered), not resting book entries. We throw before
+        // order.save(), so persistence is untouched and the worker keeps
+        // triggering it at the ORIGINAL price.
+        throw new AppError(`Modification rejected: ${e.message}`, 400);
+      }
+    } else if (gt(oldMargin, newMargin)) {
+      const release = sub(oldMargin, newMargin);
+      await walletService.releaseMargin({
+        userId: order.userId,
+        accountId: order.accountId,
+        currency: account.baseCurrency || 'USD',
+        amount: release,
+        orderId: order._id,
+        note: `Modify: released margin ${release}`,
+      });
+    }
+    order.lockedMargin = newMargin;
+  }
+
+  await order.save();
+
+  // ROOT-CAUSE FIX (pending-order-executes-on-modify): NEVER execute a pending
+  // order as a side effect of modifying it. Previously a modified LIMIT was
+  // re-submitted through orderRouter.routeOrder, whose B-book path fills at the
+  // CURRENT market price regardless of the limit constraint — so moving a
+  // pending order's price opened it immediately at the wrong price even though
+  // the market had not reached the trigger. The modified order now stays PENDING
+  // (identical to placeOrder, which also returns without routing LIMIT/STOP) and
+  // is executed EXACTLY ONCE by the price-monitor worker (triggerLimitOrders /
+  // triggerStopOrders) only when the live bid/ask actually crosses the NEW
+  // trigger price. The worker reads the order fresh from the DB each tick, so it
+  // always uses the latest saved trigger price — never a stale snapshot.
+  // Carry the resolved type/level: a modify that crossed the market turns a
+  // LIMIT into a STOP (or back), and the chart decides which field to send on
+  // the NEXT drag from order.type — a stale type there would reopen the gap.
+  _pushUser(req.userId, 'orders', {
+    event: 'MODIFIED',
+    orderId: String(order._id),
+    symbol: order.symbol,
+    type: order.type,
+    price: order.price ?? null,
+    stopPrice: order.stopPrice ?? null,
+  });
+  sendSuccess(res, order);
+});
+
+/**
+ * Modify SL/TP on an open position (no new order created).
+ * The background worker will close the position when price crosses these levels.
+ */
+const modifyPosition = asyncHandler(async (req, res) => {
+  const { stopLoss, takeProfit } = req.body;
+  const position = await Position.findOne({ _id: req.params.id, userId: req.userId, status: 'OPEN' });
+  if (!position) throw new AppError('Position not found', 404);
+
+  // A level on the wrong side of market fires on the worker's next scan.
+  // Read the SAME price the worker triggers against so the two cannot
+  // disagree; without a price we have nothing to judge against and let the
+  // write through rather than blocking on a missing feed.
+  const inst = await Instrument.findById(position.instrumentId).select('lastPrice').lean();
+  const mark = Number(inst?.lastPrice);
+  if (Number.isFinite(mark) && mark > 0) {
+    const isBuy = position.side === 'BUY';
+    const sl = stopLoss == null ? null : Number(stopLoss);
+    const tp = takeProfit == null ? null : Number(takeProfit);
+    // The comparisons mirror backgroundWorker exactly, equality included:
+    // it uses lte/gte, so a level sitting ON the price triggers too.
+    if (stopLoss !== undefined && sl != null && Number.isFinite(sl)) {
+      if (isBuy ? sl >= mark : sl <= mark) {
+        throw new AppError(
+          `Stop loss must be ${isBuy ? 'below' : 'above'} the current price (${mark}). A stop at ${sl} would close this position immediately.`,
+          400,
+          'SL_WOULD_TRIGGER_IMMEDIATELY'
+        );
+      }
+    }
+    if (takeProfit !== undefined && tp != null && Number.isFinite(tp)) {
+      if (isBuy ? tp <= mark : tp >= mark) {
+        throw new AppError(
+          `Take profit must be ${isBuy ? 'above' : 'below'} the current price (${mark}). A target at ${tp} would close this position immediately.`,
+          400,
+          'TP_WOULD_TRIGGER_IMMEDIATELY'
+        );
+      }
+    }
+  }
+
+  if (stopLoss !== undefined) position.stopLoss = stopLoss == null ? null : String(stopLoss);
+  if (takeProfit !== undefined) position.takeProfit = takeProfit == null ? null : String(takeProfit);
+  await position.save();
+  _pushUser(req.userId, 'positions', { event: 'SLTP_MODIFIED', positionId: String(position._id), symbol: position.symbol });
+  sendSuccess(res, position);
+
+  // Copy-trading: propagate SL/TP to mirrored follower positions.
+  setImmediate(async () => {
+    try {
+      const copyService = require('../services/copyTradingService');
+      await copyService.onMasterSlTpChanged({ position });
+    } catch (err) {
+      console.error('[copyTrading] fan-out (sl/tp) failed:', err.message);
+    }
+  });
+});
+
+/**
+ * Partially close a position by submitting an opposite-side market order
+ * for the requested quantity (must be < position.quantity).
+ *
+ * Concurrency: the partialClosing flag is flipped atomically; if a second
+ * partial-close request arrives while this one is in flight we reject with
+ * 409 instead of letting both run and risk over-closing / flipping the
+ * position into the opposite direction. The engine also caps qty at the
+ * current position size as a defense-in-depth measure (closeOnly=true).
+ */
+const partialClose = asyncHandler(async (req, res) => {
+  const { quantity } = req.body;
+  if (!quantity || !gt(quantity, '0')) throw new AppError('Quantity must be > 0', 400);
+
+  const qtyNum = Number(quantity);
+  if (!Number.isFinite(qtyNum) || qtyNum <= 0) {
+    throw new AppError('Quantity must be a positive number', 400);
+  }
+
+  // Atomic claim: ensure (a) status=OPEN, (b) no other partial in flight, and
+  // (c) current quantity strictly greater than the requested partial size.
+  const position = await Position.findOneAndUpdate(
+    {
+      _id: req.params.id,
+      userId: req.userId,
+      status: 'OPEN',
+      partialClosing: { $ne: true },
+      $expr: { $gt: [{ $toDouble: '$quantity' }, qtyNum] },
+    },
+    { $set: { partialClosing: true, partialClosingAt: new Date() } },
+    { new: true }
+  );
+  if (!position) {
+    const existing = await Position.findOne({ _id: req.params.id, userId: req.userId }).lean();
+    if (!existing) throw new AppError('Position not found', 404);
+    if (existing.status !== 'OPEN') throw new AppError('Position not open', 409);
+    if (existing.partialClosing) {
+      throw new AppError('Another partial close is already in flight', 409, 'PARTIAL_IN_FLIGHT');
+    }
+    // The only remaining failure is qty >= position.quantity.
+    throw new AppError('Use full close endpoint for closing the entire position', 400);
+  }
+
+  try {
+    const oppositeSide = position.side === 'BUY' ? 'SELL' : 'BUY';
+    const sourcePositionSide = position.positionSide || (position.side === 'BUY' ? 'LONG' : 'SHORT');
+    const order = await Order.create({
+      userId: req.userId,
+      accountId: position.accountId,
+      instrumentId: position.instrumentId,
+      symbol: position.symbol,
+      side: oppositeSide,
+      positionSide: sourcePositionSide,
+      type: ORDER_TYPE.MARKET,
+      quantity: String(quantity),
+      leverage: position.leverage,
+      status: ORDER_STATUS.PENDING,
+      closeOnly: true,
+      reduceOnly: true,
+    });
+    const { settledOrder, executionSource } = await orderRouter.routeOrder({
+      order,
+      userId: req.userId,
+    });
+    _pushUser(req.userId, 'positions', { event: 'PARTIAL_CLOSE', positionId: String(position._id), symbol: position.symbol });
+    _pushUser(req.userId, 'wallet', { reason: 'PARTIAL_CLOSE', positionId: String(position._id) });
+    return sendSuccess(res, { ...settledOrder.toObject?.() || settledOrder, executionSource });
+  } finally {
+    // Always clear the flag — finally guarantees we don't strand the
+    // position with partialClosing=true on a thrown engine error.
+    await Position.updateOne(
+      { _id: position._id },
+      { $set: { partialClosing: false } }
+    );
+  }
+});
+
+/**
+ * Place an OCO (One-Cancels-Other) pair: typically a take-profit LIMIT and a stop-loss STOP.
+ * Both orders share an ocoGroupId. When one fills or cancels, the worker cancels the other.
+ *
+ * Body: {
+ *   accountId, symbol, side, quantity, leverage,
+ *   limitPrice,  // for the take-profit leg
+ *   stopPrice,   // for the stop-loss leg
+ * }
+ */
+const placeOcoOrder = asyncHandler(async (req, res) => {
+  const { accountId, symbol, side, quantity, limitPrice, stopPrice, leverage } = req.body;
+
+  // Required-field & sanity validation up front.
+  if (!symbol || typeof symbol !== 'string') throw new AppError('symbol required', 400);
+  if (!accountId) throw new AppError('accountId required', 400);
+  if (!Object.values(ORDER_SIDE).includes(side)) throw new AppError('Invalid side', 400);
+  if (!quantity || !gt(quantity, '0')) throw new AppError('Quantity must be > 0', 400);
+  if (!limitPrice || !stopPrice) throw new AppError('limitPrice and stopPrice required for OCO', 400);
+  if (!gt(limitPrice, '0')) throw new AppError('limitPrice must be > 0', 400);
+  if (!gt(stopPrice, '0')) throw new AppError('stopPrice must be > 0', 400);
+
+  const { v4: uuidv4 } = require('uuid');
+  const ocoGroupId = uuidv4();
+
+  const account = await TradingAccount.findOne({ _id: accountId, userId: req.userId, isActive: true });
+  if (!account) throw new AppError('Account not found', 404);
+  const instrument = await Instrument.findOne({ symbol: symbol.toUpperCase(), isActive: true });
+  if (!instrument) throw new AppError('Instrument not active', 404);
+
+  // Validate min/max order size (same as placeOrder).
+  if (instrument.minOrderSize && lt(quantity, instrument.minOrderSize)) {
+    throw new AppError(
+      `Quantity ${quantity} below minimum order size ${instrument.minOrderSize} for ${instrument.symbol}`,
+      400
+    );
+  }
+  if (instrument.maxOrderSize && gt(quantity, instrument.maxOrderSize)) {
+    throw new AppError(
+      `Quantity ${quantity} exceeds max order size ${instrument.maxOrderSize} for ${instrument.symbol}`,
+      400
+    );
+  }
+
+  // Priority-based leverage resolution (matches the single-order path):
+  //   instrument.maxLeverage > account.leverage > SYSTEM_DEFAULT (100).
+  // Instrument always wins when set, even if higher than account.
+  const _SYSTEM_DEFAULT_LEV_OCO = 100;
+  const _instMaxOco = Number(instrument.maxLeverage);
+  const _hasInstCapOco = Number.isFinite(_instMaxOco) && _instMaxOco > 0;
+  let _effectiveCapOco;
+  if (_hasInstCapOco) {
+    _effectiveCapOco = _instMaxOco;
+  } else if (Number.isFinite(Number(account.leverage)) && Number(account.leverage) > 0) {
+    _effectiveCapOco = Number(account.leverage);
+  } else {
+    _effectiveCapOco = _SYSTEM_DEFAULT_LEV_OCO;
+  }
+  let cappedLeverage = leverage != null ? Number(leverage) : _effectiveCapOco;
+  if (cappedLeverage > _effectiveCapOco) cappedLeverage = _effectiveCapOco;
+  if (!Number.isFinite(cappedLeverage) || cappedLeverage < 1) cappedLeverage = 1;
+
+  // Margin: only ONE of the two legs ever fills (the other is cancelled by
+  // the OCO worker), so we lock margin once at the worst-case price across
+  // the two legs to avoid escaping the margin check by going OCO.
+  const worstPrice = side === 'BUY'
+    ? (gt(limitPrice, stopPrice) ? limitPrice : stopPrice)
+    : (lt(limitPrice, stopPrice) ? limitPrice : stopPrice);
+
+  const { marginAmount, openQty } = await _computeMarginToLock({
+    instrument,
+    side,
+    type: ORDER_TYPE.LIMIT, // worst-case treated like LIMIT at worstPrice
+    qty: String(quantity),
+    price: String(worstPrice),
+    leverage: cappedLeverage,
+    account,
+    symbol: instrument.symbol,
+  });
+
+  const limitOrder = await Order.create({
+    userId: req.userId,
+    accountId,
+    instrumentId: instrument._id,
+    symbol: instrument.symbol,
+    side,
+    type: ORDER_TYPE.LIMIT,
+    quantity: String(quantity),
+    price: String(limitPrice),
+    leverage: cappedLeverage,
+    ocoGroupId,
+    status: ORDER_STATUS.PENDING,
+    // Margin is tracked on the LIMIT leg only — when either fills, the
+    // OCO worker cancels the other and (for the cancelled leg) doesn't try
+    // to release margin a second time.
+    lockedMargin: marginAmount,
+  });
+
+  const stopOrder = await Order.create({
+    userId: req.userId,
+    accountId,
+    instrumentId: instrument._id,
+    symbol: instrument.symbol,
+    side,
+    type: ORDER_TYPE.STOP,
+    quantity: String(quantity),
+    stopPrice: String(stopPrice),
+    leverage: cappedLeverage,
+    ocoGroupId,
+    status: ORDER_STATUS.PENDING,
+  });
+
+  if (gt(marginAmount, '0')) {
+    try {
+      await walletService.lockMargin({
+        userId: req.userId,
+        accountId,
+        currency: account.baseCurrency || 'USD',
+        amount: marginAmount,
+        orderId: limitOrder._id,
+        note: `OCO margin: ${side} ${openQty} ${instrument.symbol} (group ${ocoGroupId})`,
+      });
+    } catch (e) {
+      // Roll back both legs on margin failure so we don't leave dangling pending orders.
+      limitOrder.status = ORDER_STATUS.REJECTED;
+      limitOrder.rejectionReason = e.message;
+      await limitOrder.save();
+      stopOrder.status = ORDER_STATUS.REJECTED;
+      stopOrder.rejectionReason = e.message;
+      await stopOrder.save();
+      throw e;
+    }
+  }
+
+  // Submit limit leg via the router — so an A-book OCO actually places the
+  // LIMIT on the LP. STOP leg stays PENDING; worker triggers + routes it.
+  await orderRouter.routeOrder({ order: limitOrder, userId: req.userId });
+
+  _pushUser(req.userId, 'orders', { event: 'PLACED', accountId: limitOrder.accountId ? String(limitOrder.accountId) : null, ocoGroupId, orderId: String(limitOrder._id), symbol: limitOrder.symbol });
+  sendSuccess(res, { ocoGroupId, limitOrder, stopOrder }, 201);
+});
+
+/**
+ * Set or update a trailing stop loss on an open position.
+ * Worker maintains the high-watermark and closes the position
+ * when price retraces by `distance` from the best favorable level.
+ *
+ * Body: { distance: "100"  }   // distance in price units; null/0 to remove
+ */
+const setTrailingStop = asyncHandler(async (req, res) => {
+  const { distance } = req.body;
+  const position = await Position.findOne({ _id: req.params.id, userId: req.userId, status: 'OPEN' });
+  if (!position) throw new AppError('Position not found', 404);
+
+  if (distance == null || distance === '' || Number(distance) <= 0) {
+    position.trailingDistance = null;
+    position.trailingHighWatermark = null;
+  } else {
+    position.trailingDistance = String(distance);
+    // Initialize watermark from current entry price (worker updates as market moves)
+    if (!position.trailingHighWatermark) {
+      const Instrument = require('../models/Instrument');
+      const inst = await Instrument.findById(position.instrumentId).lean();
+      position.trailingHighWatermark = inst?.lastPrice || position.entryPrice;
+    }
+  }
+  await position.save();
+  _pushUser(req.userId, 'positions', { event: 'TRAILING_SET', positionId: String(position._id), symbol: position.symbol });
+  sendSuccess(res, position);
+});
+
+/**
+ * Close every OPEN position for the authenticated user — "panic close"
+ * button on the trader UI. Optional `accountId` body field scopes the
+ * close to a single account.
+ *
+ * Each position is claimed atomically (OPEN → CLOSING) so we don't
+ * race the worker's SL/TP path; on router failure we revert that
+ * position to OPEN and continue with the rest.
+ *
+ * Returns { closed, failed } counts so the UI can show partial outcomes.
+ */
+const closeAllPositions = asyncHandler(async (req, res) => {
+  const { accountId } = req.body || {};
+  const filter = { userId: req.userId, status: POSITION_STATUS.OPEN };
+  if (accountId) filter.accountId = accountId;
+  const positions = await Position.find(filter);
+
+  let closed = 0;
+  const failed = [];
+  for (const pos of positions) {
+    const claimed = await Position.findOneAndUpdate(
+      { _id: pos._id, status: POSITION_STATUS.OPEN, settled: { $ne: true } },
+      { $set: { status: POSITION_STATUS.CLOSING, closeReason: 'MANUAL' } },
+      { new: true }
+    );
+    if (!claimed) continue; // already being closed
+    const oppositeSide = pos.side === 'BUY' ? 'SELL' : 'BUY';
+    const sourcePositionSide = pos.positionSide || (pos.side === 'BUY' ? 'LONG' : 'SHORT');
+    const closingOrder = await Order.create({
+      userId: req.userId,
+      accountId: pos.accountId,
+      instrumentId: pos.instrumentId,
+      symbol: pos.symbol,
+      side: oppositeSide,
+      positionSide: sourcePositionSide,
+      type: ORDER_TYPE.MARKET,
+      quantity: pos.quantity,
+      leverage: pos.leverage,
+      status: ORDER_STATUS.PENDING,
+      closeOnly: true,
+      reduceOnly: true,
+    });
+    try {
+      await orderRouter.routeOrder({ order: closingOrder, userId: req.userId });
+      closed++;
+      // Copy-trading fan-out — same as the single-close path (this was missing,
+      // so bulk "Close All" never closed followers' mirrors nor wrote the CLOSE
+      // event to the live feed). Deferred + best-effort so it never blocks/fails
+      // the close.
+      const closedId = pos._id;
+      setImmediate(async () => {
+        try {
+          const settled = await Position.findById(closedId).lean();
+          await require('../services/copyTradingService').onMasterPositionClosed({
+            position: settled || pos,
+            realizedPnl: settled?.realizedPnl,
+          });
+        } catch (err) {
+          console.error('[copyTrading] fan-out (close-all) failed:', err.message);
+        }
+      });
+    } catch (err) {
+      await Position.updateOne(
+        { _id: pos._id, status: POSITION_STATUS.CLOSING, settled: { $ne: true } },
+        { $set: { status: POSITION_STATUS.OPEN }, $unset: { closeReason: '' } }
+      );
+      failed.push({ positionId: String(pos._id), symbol: pos.symbol, reason: err.message });
+    }
+  }
+  sendSuccess(res, { closed, failed, total: positions.length });
+});
+
+module.exports = {
+  unifiedHistory,
+  placeOrder,
+  cancelOrder,
+  listOpen,
+  listHistory,
+  listPositions,
+  positionHistory,
+  closePosition,
+  closeAllPositions,
+  modifyOrder,
+  modifyPosition,
+  partialClose,
+  placeOcoOrder,
+  setTrailingStop,
+};

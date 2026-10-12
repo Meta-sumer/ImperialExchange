@@ -1,0 +1,406 @@
+/* Groww-inspired theme — clean light fintech surface, #1D4ED8 primary.
+   A single light palette only — the dark variant from the previous Exness
+   look has been retired per the redesign brief. */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ───────────────────────── Theme tokens ─────────────────────────
+   Light is the default Groww palette. Dark uses dark surfaces while keeping
+   the green primary — intended for the trading terminal experience. */
+:root,
+[data-theme='light'] {
+  --color-bg-dark: 255 255 255;        /* page background — pure white */
+  --color-bg-card: 248 249 251;        /* card surface, #F8F9FB */
+  --color-bg-panel: 248 249 251;       /* panel matches card */
+  --color-bg-hover: 243 244 246;       /* gentle hover wash */
+  --color-bg-sidebar: 255 255 255;     /* legacy token */
+  --color-border-dark: 209 213 219;    /* #D1D5DB — slightly stronger hairline */
+  --color-border-subtle: 229 231 235;
+  --color-text-primary: 15 23 42;      /* #0F172A — slate-900, nearly black */
+  --color-text-secondary: 31 41 55;    /* #1F2937 — gray-800 */
+  --color-text-muted: 75 85 99;        /* #4B5563 — gray-600, was muted-400 */
+  --color-scrollbar-track: 248 249 251;
+  --color-scrollbar-thumb: 156 163 175;
+}
+
+[data-theme='dark'] {
+  --color-bg-dark: 13 17 23;           /* #0D1117 — terminal page background */
+  --color-bg-card: 22 27 34;           /* #161B22 — card surface */
+  --color-bg-panel: 30 36 44;          /* #1E242C */
+  --color-bg-hover: 42 49 58;          /* hover wash */
+  --color-bg-sidebar: 17 21 27;
+  --color-border-dark: 48 54 61;       /* #30363D */
+  --color-border-subtle: 33 38 45;
+  --color-text-primary: 240 246 252;
+  --color-text-secondary: 173 181 191;
+  --color-text-muted: 125 133 144;
+  --color-scrollbar-track: 13 17 23;
+  --color-scrollbar-thumb: 48 54 61;
+}
+
+@layer base {
+  html, body {
+    background-color: #FFFFFF;
+    /* Stop accidental sideways scrolling on mobile (a stray wide element must
+       never let the whole page scroll horizontally). `clip` is sticky-safe —
+       unlike `hidden` it does not create a scroll container, so the sticky
+       header keeps working. overflow-y stays visible (normal vertical scroll). */
+    overflow-x: clip;
+    max-width: 100%;
+    width: 100%;
+  }
+  /* The React mount can become the horizontal scroll container if a wide child
+     (e.g. an overflow-x-auto nav whose own width isn't constrained) escapes the
+     body clip. Clip here too so the page never scrolls sideways. */
+  #root {
+    overflow-x: clip;
+    max-width: 100%;
+  }
+  /* Dark theme: the <html> backdrop must be dark too, so any edge sliver never
+     flashes white behind the app. */
+  html[data-theme='dark'], html[data-theme='dark'] body {
+    background-color: #0D1117;
+  }
+  body {
+    @apply bg-bg-dark text-text-primary antialiased;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-weight: 450;          /* default a touch heavier than 400 for readability */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    color-scheme: light;
+  }
+  * {
+    box-sizing: border-box;
+  }
+  .num, code, .font-mono {
+    font-family: 'JetBrains Mono', 'Menlo', monospace;
+    font-feature-settings: 'tnum';
+  }
+}
+
+/* ─── Light-mode compatibility overrides ─────────────────────────────
+   Existing pages were authored against the original dark theme — they
+   hardcode `text-white`, `text-gray-300`, etc. in many spots. These rules
+   keep those classes readable on the white surface in LIGHT mode only —
+   in dark mode they're left alone so light-on-dark works as authored. */
+[data-theme='light'] .text-white,
+[data-theme='light'] .hover\:text-white:hover {
+  color: rgb(15 23 42) !important;        /* slate-900 — nearly black on white */
+}
+[data-theme='light'] .text-gray-200 { color: rgb(15 23 42) !important; }
+[data-theme='light'] .text-gray-300 { color: rgb(17 24 39) !important; }
+[data-theme='light'] .text-gray-400 { color: rgb(31 41 55) !important; }
+[data-theme='light'] .text-gray-500 { color: rgb(55 65 81) !important; }
+[data-theme='light'] .text-gray-600 { color: rgb(55 65 81) !important; }
+[data-theme='light'] .text-gray-700 { color: rgb(31 41 55) !important; }
+[data-theme='light'] .placeholder-gray-500::placeholder { color: rgb(107 114 128); }
+
+/* Tinted-surface exceptions: when text-white sits on a colored gradient
+   (BUY/SELL/CTA), the light-mode override above would make it dark on
+   green/red — unreadable. Force white back for those specific surfaces.
+   These apply in both themes since the surface itself is colored. */
+.bg-bull.text-white,
+.bg-bear.text-white,
+.bg-primary-500.text-white,
+.bg-primary-600.text-white,
+/* BUY / SELL position + order badges use emerald/rose fills — keep their
+   label + arrow white on the colored pill (not black) in light mode too. */
+.bg-emerald-500.text-white,
+.bg-emerald-600.text-white,
+.bg-rose-500.text-white,
+.bg-rose-600.text-white,
+.btn-bull,
+.btn-bear,
+.btn-primary { color: #FFFFFF !important; }
+.btn-primary { color: #FFFFFF !important; }
+
+/* Glassmorphism utility — frosted card surface for terminal panels.
+   Slightly more opaque so the text inside reads cleanly against any
+   background instead of blurring with it. */
+.glass {
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+}
+[data-theme='dark'] .glass {
+  background: rgba(22, 27, 34, 0.85);
+}
+
+/* Many components use `bg-black` overlays for modals — they still work on
+   white because they're translucent, so we leave those alone. */
+
+/* ─── Dark-mode `bg-white` remap ──────────────────────────────────────
+   Many components hard-code `bg-white` (carryover from the light-theme
+   redesign). In dark mode that punches bright white panels through the
+   otherwise-dark UI. Map any `bg-white` surface to the dark card
+   colour so the page reads as fully dark. The `:not(.keep-white)`
+   carve-out lets us opt specific elements (e.g. toggle slider thumbs)
+   out — they need to stay white in both themes for contrast against
+   their colored track. */
+[data-theme='dark'] .bg-white:not(.keep-white) {
+  background-color: rgb(var(--color-bg-card)) !important;
+}
+[data-theme='dark'] .bg-white\/85:not(.keep-white),
+[data-theme='dark'] .bg-white\/90:not(.keep-white),
+[data-theme='dark'] .bg-white\/95:not(.keep-white) {
+  background-color: rgb(var(--color-bg-card) / 0.9) !important;
+}
+
+@layer components {
+  /* Cards — Groww uses a soft off-white card on a white page with a hairline
+     border and a barely-there shadow. No glow. */
+  .card {
+    @apply bg-bg-card border border-border-dark rounded-xl shadow-card;
+  }
+  .panel {
+    @apply bg-bg-panel border border-border-dark rounded-xl;
+  }
+
+  /* Buttons */
+  .btn {
+    @apply inline-flex items-center justify-center px-4 py-2 rounded-lg font-semibold text-sm transition-all duration-150;
+  }
+  .btn-primary {
+    @apply btn;
+    background: #1D4ED8;
+    color: #FFFFFF;
+  }
+  .btn-primary:hover {
+    background: #1E40AF;
+    box-shadow: 0 4px 12px rgba(29, 78, 216, 0.25);
+  }
+  .btn-primary:active { transform: translateY(0); }
+  .btn-secondary {
+    @apply btn bg-bg-card hover:bg-bg-hover text-text-primary border border-border-dark;
+  }
+  .btn-bull {
+    @apply btn text-white;
+    background: #00C853;
+  }
+  .btn-bull:hover { background: #00A847; }
+  .btn-bear {
+    @apply btn text-white;
+    background: #FF3B57;
+  }
+  .btn-bear:hover { background: #E62E48; }
+  .btn-ghost {
+    @apply btn bg-transparent border border-border-dark hover:border-primary-500 hover:bg-bg-hover text-text-secondary hover:text-text-primary;
+  }
+
+  /* Inputs — white surface, soft border, primary-green focus ring */
+  .input {
+    @apply w-full px-3 py-2.5 bg-white border border-border-dark rounded-lg text-sm text-text-primary placeholder-text-muted focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-all;
+  }
+  .label {
+    @apply block text-xs text-text-secondary mb-1.5 uppercase tracking-wider font-medium;
+  }
+
+  /* Tables — soft row hover, subtle dividers */
+  .table-row {
+    @apply border-b border-border-subtle hover:bg-bg-hover transition-colors;
+  }
+
+  /* ─── Top-navigation primitives (Groww-style) ─────────────────────
+     The Layout no longer has a sidebar. Main nav links sit in a horizontal
+     pill row beneath the brand bar; active state is an underline + tint,
+     not a filled pill, to match Groww's restrained header. */
+  .topnav-link {
+    @apply relative inline-flex items-center gap-2 px-3 py-3 text-sm font-semibold text-text-secondary hover:text-text-primary transition-colors;
+  }
+  .topnav-link-active {
+    color: #1E40AF !important;
+    font-weight: 700;
+  }
+  .topnav-link-active::after {
+    content: '';
+    position: absolute;
+    left: 12px;
+    right: 12px;
+    bottom: 0;
+    height: 3px;
+    background: #1D4ED8;
+    border-radius: 3px 3px 0 0;
+  }
+  .topnav-sublink {
+    @apply inline-flex items-center px-3 py-1.5 text-xs font-medium text-text-secondary hover:text-text-primary rounded-md hover:bg-bg-hover transition-colors;
+  }
+  .topnav-sublink-active {
+    color: #1D4ED8 !important;
+    background: rgba(29, 78, 216, 0.08);
+    font-weight: 600;
+  }
+
+  /* Legacy sidebar-link classes — repointed to no-op styles so any stray
+     references render harmlessly as plain links (e.g. mobile menu reuse). */
+  .nav-item,
+  .sidebar-link {
+    @apply flex items-center gap-3 px-3 py-2.5 text-sm rounded-lg text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-colors;
+  }
+  .nav-item-active,
+  .sidebar-link-active {
+    background: rgba(29, 78, 216, 0.10);
+    color: #1E40AF !important;
+    font-weight: 600;
+  }
+  .sidebar-link-icon { @apply text-text-muted; }
+  .sidebar-elevated { background: #FFFFFF; box-shadow: none; }
+
+  /* Price ticker */
+  .price-up { @apply text-bull font-mono; }
+  .price-down { @apply text-bear font-mono; }
+
+  /* Badges */
+  .badge-primary {
+    @apply inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold;
+    background: rgba(29, 78, 216, 0.10);
+    color: #1E40AF;
+    border: 1px solid rgba(29, 78, 216, 0.25);
+  }
+  .badge-bull {
+    @apply inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold bg-bull/10 text-bull border border-bull/30;
+  }
+  .badge-bear {
+    @apply inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold bg-bear/10 text-bear border border-bear/30;
+  }
+
+  .stat-card {
+    @apply card p-5 hover:border-primary-500/40 transition-colors;
+  }
+}
+
+/* ─── Targeted overrides for hardcoded yellow gradients ──────────────
+   A handful of pages were authored with inline `background: linear-gradient(...
+   yellow ...)` for logo chips, symbol pills, etc. Catch those generically
+   so they render as the new green primary without per-file edits. */
+[style*='linear-gradient'][style*='FCD535'],
+[style*='linear-gradient'][style*='FFE74D'],
+[style*='linear-gradient'][style*='FFDE26'] {
+  /* legacy yellow brand chips → recolour to blue per redesign request */
+  background: #3B82F6 !important;
+  color: #FFFFFF !important;
+}
+
+/* Inline radial-gradient yellow tints used as decorative card glows — turn
+   them off so cards read as clean surfaces, not neon dashboards. */
+[style*='radial-gradient'][style*='252, 213, 53'],
+[style*='radial-gradient'][style*='FCD535'] {
+  background: transparent !important;
+}
+
+/* Hide scrollbar utility — used by horizontal ticker rails */
+.no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+
+/* Custom scrollbar */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: rgb(var(--color-scrollbar-track)); }
+::-webkit-scrollbar-thumb { background: rgb(var(--color-scrollbar-thumb)); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #1D4ED8; }
+
+/* Modal / bottom-sheet entrance — used by the watchlist modals. */
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Slide-in panel from the right — mobile trade drawer (StockDetail). */
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(28px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+.slide-in-right { animation: slideInRight 0.22s ease-out both; }
+
+/* Expanded child trade-rows — smooth reveal under a parent position row. */
+@keyframes fadeInRow {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.fade-in-row { animation: fadeInRow 0.18s ease-out both; }
+
+/* Live pulse */
+@keyframes pulse-slow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+.pulse-live { animation: pulse-slow 2s ease-in-out infinite; }
+
+/* Subtle green glow */
+@keyframes green-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(29, 78, 216, 0); }
+  50% { box-shadow: 0 0 0 4px rgba(29, 78, 216, 0.20); }
+}
+.glow-primary { animation: green-glow 2s ease-in-out infinite; }
+
+@keyframes flash-up {
+  0% { background-color: rgba(0, 200, 83, 0.20); }
+  100% { background-color: transparent; }
+}
+@keyframes flash-down {
+  0% { background-color: rgba(255, 59, 87, 0.20); }
+  100% { background-color: transparent; }
+}
+.flash-up { animation: flash-up 0.5s ease-out; }
+.flash-down { animation: flash-down 0.5s ease-out; }
+
+/* ── Read-only "View As User" impersonation banner offset ─────────────
+   The banner is position:fixed at the very top. When active we push the
+   whole page (and any sticky chrome) down by exactly the banner height
+   (published as --imp-offset by ImpersonationBanner) so nothing is hidden. */
+body.impersonating { padding-top: var(--imp-offset, 56px); }
+body.impersonating header { top: var(--imp-offset, 56px) !important; }
+body.impersonating .imp-subnav { top: calc(4rem + var(--imp-offset, 56px)) !important; }
+
+/* ── CMS prose content (admin-authored HTML rendered on public pages) ──── */
+.cms-content { color: rgb(var(--color-text-secondary)); font-size: 0.975rem; line-height: 1.75; }
+.cms-content h1 { font-size: 1.75rem; font-weight: 700; color: rgb(var(--color-text-primary)); margin: 1.5rem 0 0.75rem; }
+.cms-content h2 { font-size: 1.4rem; font-weight: 700; color: rgb(var(--color-text-primary)); margin: 1.5rem 0 0.6rem; }
+.cms-content h3 { font-size: 1.15rem; font-weight: 600; color: rgb(var(--color-text-primary)); margin: 1.25rem 0 0.5rem; }
+.cms-content p { margin: 0 0 1rem; }
+.cms-content a { color: rgb(var(--color-primary-500, 29 78 216)); text-decoration: underline; }
+.cms-content ul, .cms-content ol { margin: 0 0 1rem 1.5rem; }
+.cms-content ul { list-style: disc; }
+.cms-content ol { list-style: decimal; }
+.cms-content li { margin: 0.25rem 0; }
+.cms-content blockquote { border-left: 3px solid rgb(var(--color-border-dark)); padding-left: 1rem; margin: 1rem 0; color: rgb(var(--color-text-muted)); font-style: italic; }
+.cms-content img { max-width: 100%; border-radius: 0.5rem; margin: 1rem 0; }
+.cms-content strong { color: rgb(var(--color-text-primary)); font-weight: 700; }
+.cms-content table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
+.cms-content th, .cms-content td { border: 1px solid rgb(var(--color-border-dark)); padding: 0.5rem 0.75rem; text-align: left; }
+.cms-content hr { border: 0; border-top: 1px solid rgb(var(--color-border-dark)); margin: 1.5rem 0; }
+
+/* ── Colour-picker swatches (Chart Settings, admin colour fields, …) ──────
+   A native <input type="color"> paints its colour via a pseudo-element that the
+   element's own border-radius can't reach, so the visible box stays square. Round
+   the swatch itself here so the picker boxes read as soft rounded chips. */
+input[type='color'] { border-radius: 6px; padding: 0; }
+input[type='color']::-webkit-color-swatch-wrapper { padding: 0; border-radius: 6px; }
+input[type='color']::-webkit-color-swatch { border: none; border-radius: 6px; }
+input[type='color']::-moz-color-swatch { border: none; border-radius: 6px; }
+
+/* Frexever logo — transparent art. Dark-text on light surfaces; the
+   white-text variant under dark theme so the wordmark stays readable.
+
+   WebP first, PNG second: the art is 600px wide (3x the 64px-tall largest
+   render) instead of the original 2500px, which weighed 651 KB and 515 KB —
+   between them more than the whole JS bundle. A browser without WebP still
+   gets the PNG, and the plain url() below covers anything that does not
+   understand image-set() at all. Keep the two formats in step: if the art
+   is ever replaced, replace BOTH or the fallback silently serves stale art. */
+.brand-logo {
+  background: url('/frexever-logo.png') center / contain no-repeat;
+  background-image: -webkit-image-set(url('/frexever-logo.webp') type('image/webp'), url('/frexever-logo.png') type('image/png'));
+  background-image: image-set(url('/frexever-logo.webp') type('image/webp'), url('/frexever-logo.png') type('image/png'));
+}
+[data-theme='dark'] .brand-logo {
+  background-image: url('/frexever-logo-dark.png');
+  background-image: -webkit-image-set(url('/frexever-logo-dark.webp') type('image/webp'), url('/frexever-logo-dark.png') type('image/png'));
+  background-image: image-set(url('/frexever-logo-dark.webp') type('image/webp'), url('/frexever-logo-dark.png') type('image/png'));
+}
+
+/* The icon alone (circular arrows + chart mark), for places that show the
+   brand without the wordmark. Same art on both themes — it carries no text,
+   so it needs no light/dark variant. */
+.brand-mark { background: url('/frexever-icon.svg') center / contain no-repeat; }

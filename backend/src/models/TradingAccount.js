@@ -1,0 +1,112 @@
+const mongoose = require('mongoose');
+const { ACCOUNT_TYPES, TRADING_MODE, BOOK_TYPE, LP_PROVIDER } = require('../config/constants');
+
+const tradingAccountSchema = new mongoose.Schema(
+  {
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    accountNumber: { type: String, unique: true, required: true },
+    accountType: {
+      type: String,
+      enum: [...Object.values(ACCOUNT_TYPES), 'CUSTOM'],
+      // Default new accounts to STANDARD — the lowest-friction tier that
+      // still has the classic Buy/Sell + capped leverage. Tier metadata
+      // (fees, leverage cap, buy-close-only) lives in config/accountTypes.js
+      // and is derived from this field at runtime.
+      default: ACCOUNT_TYPES.STANDARD,
+    },
+    customTypeName: String, // when accountType === 'CUSTOM'
+    // Tier a DEMO/VIRTUAL account was created from (STANDARD/PRO/FREE/…). Live
+    // accounts keep the tier in `accountType`; demo accounts store 'DEMO' there
+    // (so demo detection still works) and keep the chosen tier here so the UI
+    // shows the real tier instead of defaulting to Standard.
+    tierCode: { type: String, default: null },
+    baseCurrency: { type: String, default: 'USD' },
+    leverage: { type: Number, default: 100 }, // 1:100
+    // @deprecated — left in place for backward compatibility with older
+    // reports/dashboards. New code MUST NOT branch on `mode`; routing is
+    // driven by `bookType` + `lpProvider` below.
+    mode: { type: String, enum: Object.values(TRADING_MODE), default: TRADING_MODE.HYBRID },
+    isActive: { type: Boolean, default: true },
+    nickname: String,
+
+    // ─── Execution routing (per-account, NOT per-instrument) ─────────
+    // bookType decides where this account's flow is sent:
+    //   A_BOOK  - forward every order to the LP adapter (`lpProvider`)
+    //   B_BOOK  - internalise: broker acts as counterparty (default)
+    //   HYBRID  - risk engine decides per order (volume / exposure /
+    //             trader profile). See riskEngine.service.js.
+    // Two users trading the SAME instrument can sit on different books.
+    bookType: {
+      type: String,
+      enum: Object.values(BOOK_TYPE),
+      default: BOOK_TYPE.B_BOOK,
+      index: true,
+    },
+    // LP routing target. Required when bookType !== B_BOOK; if NONE is
+    // set on an A_BOOK account, order placement is rejected with a clear
+    // "LP provider is required for A-book execution." error.
+    lpProvider: {
+      type: String,
+      enum: Object.values(LP_PROVIDER),
+      default: LP_PROVIDER.NONE,
+    },
+    // Hard kill-switch: when false, every order is rejected at the
+    // router with TRADING_DISABLED. Lets ops freeze a single account
+    // (e.g. for fraud review) without disabling the user globally.
+    isTradingEnabled: { type: Boolean, default: true },
+
+    // ─── Admin account status (per-account, independent of other accounts) ──
+    //   ACTIVE      — normal.
+    //   BLOCKED     — admin block (fraud/compliance): no NEW orders; closes still
+    //                 allowed so the user can liquidate. Does NOT affect the
+    //                 user's other accounts.
+    //   SUSPENDED   — soft hold (same trading effect as BLOCKED; yellow badge).
+    //   STOPPED_OUT — risk-engine zero-equity liquidation (stopOutService). Set
+    //                 ATOMICALLY the instant real-time equity ≤ 0, BEFORE the
+    //                 positions are liquidated — this is the race guard that
+    //                 rejects any concurrent order (ACCOUNT_STOPPED_OUT) so it
+    //                 can't add exposure mid-liquidation. Auto-cleared back to
+    //                 ACTIVE when the account is re-funded (deposit → balance>0).
+    status: {
+      type: String,
+      enum: ['ACTIVE', 'BLOCKED', 'SUSPENDED', 'STOPPED_OUT'],
+      default: 'ACTIVE',
+      index: true,
+    },
+    // When the risk engine stopped this account out (zero-equity liquidation).
+    // Cleared on re-funding. Purely informational alongside status.
+    stoppedOutAt: { type: Date, default: null },
+    // Admin-assigned grouping tag (e.g. "default", "VIP", "Scalpers"). Used
+    // for filtering + bulk group-change in the Accounts management UI.
+    group: { type: String, default: 'default', index: true },
+    // Admin-only notes timeline for this account (not visible to the user).
+    internalNotes: [{
+      note:   { type: String, required: true },
+      by:     { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+      byName: String,
+      at:     { type: Date, default: Date.now },
+    }],
+
+    // Risk safety (doc §7.10): when balance + unrealized PnL <= 0, auto-close all positions
+    // and floor balance at 0. Required for retail accounts in most jurisdictions.
+    negativeBalanceProtection: { type: Boolean, default: true },
+    // Cap on total open notional exposure across all positions on this account.
+    // null = no limit. Stored as string-decimal in base currency.
+    maxPositionSize: { type: String, default: null },
+
+    // Plan-driven suspension (separate from isTradingEnabled which is the
+    // ops/fraud freeze). When set, the account is over the user's current
+    // plan's maxAccounts cap — e.g. they downgraded from VIP (10 accounts)
+    // to FREE (2). Suspended accounts:
+    //   - cannot open new positions (close-only still allowed so positions
+    //     can be liquidated to free up withdrawable funds)
+    //   - can still receive withdrawals
+    //   - history is clipped to the last 3 months in reports
+    // Auto-lifted by planEnforcementService when the user upgrades back.
+    planSuspendedAt: { type: Date, default: null, index: true },
+    planSuspendedReason: { type: String, default: null },
+  },
+  { timestamps: true }
+);
+
+module.exports = mongoose.model('TradingAccount', tradingAccountSchema);

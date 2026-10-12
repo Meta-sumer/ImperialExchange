@@ -1,0 +1,281 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* CSS variables drive all surface + text colors. Single root block here
+   defines the dark palette (the admin's only theme for now). Mirrors the
+   client app so styles stay consistent across surfaces. */
+:root {
+  --color-bg-dark: 15 15 18;
+  --color-bg-card: 26 26 31;
+  --color-bg-panel: 31 31 37;
+  --color-bg-hover: 42 42 48;
+  --color-bg-sidebar: 10 10 13;
+  --color-border-dark: 45 45 52;
+  --color-border-subtle: 31 31 37;
+  --color-text-primary: 255 255 255;
+  --color-text-secondary: 176 176 184;
+  --color-text-muted: 110 110 120;
+}
+
+/* Light theme — activated by data-theme="light" on <html>. Every surface/text
+   color is variable-driven, so flipping these swaps the whole admin. */
+:root[data-theme='light'] {
+  --color-bg-dark: 244 246 249;
+  --color-bg-card: 255 255 255;
+  --color-bg-panel: 248 250 252;
+  --color-bg-hover: 238 242 247;
+  --color-bg-sidebar: 255 255 255;
+  /* slate-300. At 224 229 236 a border scored 1.27:1 on white — technically
+     present, practically invisible, and worst on inputs where it is the only
+     thing showing you where the field is. */
+  --color-border-dark: 203 213 225;
+  --color-border-subtle: 226 232 240;
+  --color-text-primary: 17 24 39;
+  --color-text-secondary: 71 85 105;
+  /* Was 148 163 184 (slate-400): 2.28–2.56:1 against these surfaces, well
+     under the 4.5:1 AA needs — and this variable paints ~519 labels across
+     the admin, most of them 10–11px. 97 111 135 is the darkest value that
+     clears 4.5:1 everywhere (4.52 on bg-hover, 5.08 on bg-card) while
+     staying lighter than text-secondary, so muted still reads as muted. */
+  --color-text-muted: 97 111 135;
+}
+
+/* The admin was built dark-first, so ~280 places hard-code `text-white` (fine on
+   dark, invisible on light cards). In light mode remap it to the primary text
+   colour so nothing disappears. Escape hatch: add `keep-white` to any element
+   that genuinely must stay white (e.g. text on a solid coloured chip). */
+:root[data-theme='light'] .text-white:not(.keep-white) { color: rgb(var(--color-text-primary)); }
+/* Same for the pure-white surface/border utilities used as dark-mode accents. */
+:root[data-theme='light'] .border-white\/10 { border-color: rgb(var(--color-border-dark)); }
+/* Solid coloured buttons keep white text (the remap above would darken it). */
+:root[data-theme='light'] .btn-bull,
+:root[data-theme='light'] .btn-bear { color: #FFFFFF !important; }
+
+/* The card shadow is tuned for dark, where it has to fight a dark surface:
+   30% black under every card reads as a smudge on white. A light UI wants a
+   tighter, far weaker two-layer shadow. */
+:root[data-theme='light'] .card {
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06), 0 1px 3px rgba(16, 24, 40, 0.10);
+}
+
+/* Dark-mode accent utilities the .text-white remap above does not reach —
+   a 5%-white fill and 30/50% white borders are simply not there on white. */
+:root[data-theme='light'] .bg-white\/5 { background-color: rgb(var(--color-bg-hover)); }
+:root[data-theme='light'] .border-white\/30,
+:root[data-theme='light'] .border-white\/50 { border-color: rgb(var(--color-border-dark)); }
+
+/* ── Light-theme colour remap (generated from measurement) ───────────────
+
+   The admin is dark-first: ~713 usages paint text with a literal Tailwind
+   or brand colour chosen against a near-black background. Measured on the
+   light surfaces, 34 of those families fell below the 4.5:1 AA floor —
+   several under 1.5:1, i.e. invisible. The theme VARIABLES could not help,
+   because these classes bypass them entirely.
+
+   Greys map semantically, not by darkening: on dark a lighter grey is the
+   MORE prominent one, and on light that inverts. Mechanical darkening
+   collapsed gray-100/200/300, slate-200 and zinc-200 to nearly one shade
+   and destroyed the emphasis they encode, so the bright greys become
+   primary text, the mid ones secondary and the dim ones muted.
+
+   Hued colours keep their hue and are darkened only until they pass: a
+   profit must still read green and a loss red. Backgrounds and buttons are
+   deliberately untouched — a yellow fill with dark text works on both
+   themes, and remapping fills would strip the brand out of the UI.
+
+   Regenerate rather than hand-edit if new colours appear. */
+
+:root[data-theme='light'] .text-gray-100,
+:root[data-theme='light'] .text-gray-200,
+:root[data-theme='light'] .text-gray-300,
+:root[data-theme='light'] .text-slate-200,
+:root[data-theme='light'] .text-zinc-200 { color: rgb(var(--color-text-primary)); }
+:root[data-theme='light'] .text-gray-400,
+:root[data-theme='light'] .text-slate-400 { color: rgb(var(--color-text-secondary)); }
+:root[data-theme='light'] .text-gray-500 { color: rgb(var(--color-text-muted)); }
+
+:root[data-theme='light'] .text-amber-300 { color: #826C28; } /* #FCD34D — 1.28:1 on light */
+:root[data-theme='light'] .text-amber-400 { color: #8B6914; } /* #FBBF24 — 1.48:1 on light */
+:root[data-theme='light'] .text-amber-500 { color: #996307; } /* #F59E0B — 1.91:1 on light */
+:root[data-theme='light'] .text-amber-600 { color: #A75B05; } /* #D97706 — 2.83:1 on light */
+:root[data-theme='light'] .text-bear { color: #CB315A; } /* #FF3D71 — 3.03:1 on light */
+:root[data-theme='light'] .text-blue-300 { color: #547191; } /* #93C5FD — 1.60:1 on light */
+:root[data-theme='light'] .text-blue-400 { color: #4170AA; } /* #60A5FA — 2.26:1 on light */
+:root[data-theme='light'] .text-bull { color: #008035; } /* #00C853 — 1.99:1 on light */
+:root[data-theme='light'] .text-emerald-300 { color: #3A7A61; } /* #6EE7B7 — 1.36:1 on light */
+:root[data-theme='light'] .text-emerald-400 { color: #1F7D5B; } /* #34D399 — 1.71:1 on light */
+:root[data-theme='light'] .text-emerald-500 { color: #0B7E58; } /* #10B981 — 2.26:1 on light */
+:root[data-theme='light'] .text-emerald-600 { color: #047E59; } /* #059669 — 3.35:1 on light */
+:root[data-theme='light'] .text-green-400 { color: #2A7D48; } /* #4ADE80 — 1.55:1 on light */
+:root[data-theme='light'] .text-indigo-400 { color: #5F67B7; } /* #818CF8 — 2.65:1 on light */
+:root[data-theme='light'] .text-info { color: #1972B9; } /* #2196F3 — 2.78:1 on light */
+:root[data-theme='light'] .text-orange-400 { color: #A15E27; } /* #FB923C — 2.01:1 on light */
+:root[data-theme='light'] .text-primary-300 { color: #7B6F25; } /* #FFE74D — 1.11:1 on light */
+:root[data-theme='light'] .text-primary-400 { color: #7F6E13; } /* #FFDE26 — 1.19:1 on light */
+:root[data-theme='light'] .text-primary-500 { color: #816D1B; } /* #FCD535 — 1.27:1 on light */
+:root[data-theme='light'] .text-primary-600 { color: #836C12; } /* #E6BF1F — 1.58:1 on light */
+:root[data-theme='light'] .text-purple-300 { color: #7B6690; } /* #D8B4FE — 1.57:1 on light */
+:root[data-theme='light'] .text-red-300 { color: #946161; } /* #FCA5A5 — 1.69:1 on light */
+:root[data-theme='light'] .text-red-400 { color: #B15050; } /* #F87171 — 2.46:1 on light */
+:root[data-theme='light'] .text-rose-300 { color: #956067; } /* #FDA4AF — 1.68:1 on light */
+:root[data-theme='light'] .text-rose-400 { color: #B04F5D; } /* #FB7185 — 2.39:1 on light */
+:root[data-theme='light'] .text-rose-500 { color: #CB344E; } /* #F43F5E — 3.27:1 on light */
+:root[data-theme='light'] .text-rose-600 { color: #D71C45; } /* #E11D48 — 4.18:1 on light */
+:root[data-theme='light'] .text-sky-400 { color: #23769B; } /* #38BDF8 — 1.91:1 on light */
+:root[data-theme='light'] .text-teal-400 { color: #1A7B6F; } /* #2DD4BF — 1.66:1 on light */
+:root[data-theme='light'] .text-violet-300 { color: #716992; } /* #C4B5FD — 1.64:1 on light */
+:root[data-theme='light'] .text-violet-400 { color: #7662B0; } /* #A78BFA — 2.42:1 on light */
+:root[data-theme='light'] .text-warn { color: #9B6100; } /* #FFA000 — 1.82:1 on light */
+:root[data-theme='light'] .text-yellow-200 { color: #766F40; } /* #FEF08A — 1.04:1 on light */
+:root[data-theme='light'] .text-yellow-300 { color: #7D6E23; } /* #FDE047 — 1.17:1 on light */
+:root[data-theme='light'] .text-yellow-400 { color: #856C0B; } /* #FACC15 — 1.36:1 on light */
+
+/* Yellow borders and focus rings need 3:1 as UI, not 4.5:1 as text. */
+:root[data-theme='light'] .border-primary-500 { border-color: #A38A22; }
+:root[data-theme='light'] .ring-primary-500 { --tw-ring-color: #A38A22; }
+/* Borders: a gray-200/300 edge is a bright accent on dark and nothing at all
+   on white. */
+:root[data-theme='light'] .border-gray-200,
+:root[data-theme='light'] .border-gray-300,
+:root[data-theme='light'] .border-slate-400 { border-color: rgb(var(--color-border-dark)); }
+
+@layer base {
+  body {
+    @apply bg-bg-dark text-text-primary antialiased;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  * { box-sizing: border-box; }
+  .font-mono, code { font-family: 'JetBrains Mono', monospace; font-feature-settings: 'tnum'; }
+}
+
+@layer components {
+  .card {
+    @apply bg-bg-card border border-border-dark rounded-lg;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  }
+  .panel { @apply bg-bg-panel border border-border-dark rounded-xl; }
+
+  .btn { @apply inline-flex items-center justify-center px-4 py-2 rounded-md font-semibold text-sm transition-all duration-150; }
+  .btn-primary {
+    @apply btn;
+    color: #111827;
+    background: linear-gradient(180deg, #FFE74D 0%, #FCD535 100%);
+  }
+  .btn-primary:hover {
+    background: linear-gradient(180deg, #FFDE26 0%, #E6BF1F 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(252, 213, 53, 0.25);
+  }
+  .btn-secondary { @apply btn bg-bg-hover hover:bg-bg-panel text-text-primary border border-border-dark; }
+  .btn-bull { @apply btn text-white; background: linear-gradient(180deg, #00E676 0%, #00C853 100%); }
+  .btn-bear { @apply btn text-white; background: linear-gradient(180deg, #FF5C8A 0%, #FF3D71 100%); }
+  .btn-ghost { @apply btn bg-transparent border border-border-dark hover:border-primary-500 hover:bg-bg-hover text-text-secondary hover:text-text-primary; }
+
+  .input {
+    @apply w-full px-3 py-2.5 bg-bg-dark border border-border-dark rounded-md text-sm text-text-primary placeholder-text-muted focus:outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500/30 transition-all;
+  }
+  .label { @apply block text-xs text-text-secondary mb-1.5 uppercase tracking-wider font-medium; }
+
+  .table-row { @apply border-b border-border-dark hover:bg-bg-hover transition-colors; }
+
+  /* Sidebar nav — matching the client's premium look:
+     sectioned, pill-shaped active state, glowing left tab. */
+  .sidebar-elevated {
+    background: linear-gradient(180deg, rgb(var(--color-bg-sidebar)) 0%, rgb(var(--color-bg-dark)) 100%);
+    box-shadow: inset 0 1px 0 rgba(252, 213, 53, 0.25);
+  }
+  .sidebar-link {
+    @apply relative flex items-center gap-3 px-3 py-2.5 text-sm rounded-lg text-text-secondary transition-colors duration-150;
+  }
+  .sidebar-link:hover { @apply text-text-primary bg-bg-hover; }
+  .sidebar-link-icon { @apply text-text-muted transition-colors duration-150; }
+  .sidebar-link:hover .sidebar-link-icon { color: #FCD535; }
+
+  .sidebar-link-active {
+    color: #111827 !important;
+    background: linear-gradient(135deg, #FFE74D 0%, #FCD535 100%);
+    box-shadow:
+      0 0 0 1px rgba(252, 213, 53, 0.3),
+      0 4px 14px rgba(252, 213, 53, 0.25);
+    font-weight: 600;
+  }
+  .sidebar-link-active .sidebar-link-icon { color: #111827 !important; }
+  .sidebar-link-active:hover {
+    background: linear-gradient(135deg, #FFDE26 0%, #E6BF1F 100%);
+  }
+  .sidebar-link-active::before {
+    content: '';
+    position: absolute;
+    left: -12px;
+    top: 25%;
+    bottom: 25%;
+    width: 3px;
+    background: #FCD535;
+    border-radius: 0 3px 3px 0;
+    box-shadow: 0 0 8px rgba(252, 213, 53, 0.7);
+  }
+
+  /* Chips */
+  .chip {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] uppercase font-bold border tracking-wider;
+  }
+  .chip-bull { @apply chip bg-bull/15 text-bull border-bull/30; }
+  .chip-bear { @apply chip bg-bear/15 text-bear border-bear/30; }
+  .chip-warn { @apply chip bg-warn/15 text-warn border-warn/30; }
+  .chip-info { @apply chip bg-info/15 text-info border-info/30; }
+  .chip-primary { @apply chip bg-primary-500/15 text-primary-500 border-primary-500/30; }
+  .chip-muted { @apply chip bg-bg-hover text-text-muted border-border-dark; }
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: rgb(var(--color-bg-dark)); }
+::-webkit-scrollbar-thumb { background: rgb(var(--color-border-dark)); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #FCD535; }
+
+@keyframes pulse-slow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+.pulse-live { animation: pulse-slow 2s ease-in-out infinite; }
+
+/* Native date/time pickers — the browser's calendar icon is dark by default
+   and disappears on this dark admin theme. Lighten it so it's clearly visible
+   and obviously clickable. */
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="datetime-local"]::-webkit-calendar-picker-indicator,
+input[type="time"]::-webkit-calendar-picker-indicator,
+input[type="month"]::-webkit-calendar-picker-indicator {
+  filter: invert(0.9) brightness(1.2);
+  opacity: 0.8;
+  cursor: pointer;
+}
+input[type="date"]::-webkit-calendar-picker-indicator:hover,
+input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover,
+input[type="time"]::-webkit-calendar-picker-indicator:hover,
+input[type="month"]::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+}
+
+/* ── CMS rich-text editor + preview prose ─────────────────────────────── */
+.cms-editor:empty:before { content: attr(data-placeholder); color: rgb(var(--color-text-muted)); pointer-events: none; }
+.cms-editor h2, .cms-content h2 { font-size: 1.3rem; font-weight: 700; color: rgb(var(--color-text-primary)); margin: 1rem 0 .5rem; }
+.cms-editor h3, .cms-content h3 { font-size: 1.1rem; font-weight: 600; color: rgb(var(--color-text-primary)); margin: .85rem 0 .4rem; }
+.cms-editor p, .cms-content p { margin: 0 0 .75rem; }
+.cms-editor ul, .cms-content ul { list-style: disc; margin: 0 0 .75rem 1.4rem; }
+.cms-editor ol, .cms-content ol { list-style: decimal; margin: 0 0 .75rem 1.4rem; }
+.cms-editor a, .cms-content a { color: #FCD535; text-decoration: underline; }
+.cms-editor blockquote, .cms-content blockquote { border-left: 3px solid rgb(var(--color-border-dark)); padding-left: .75rem; margin: .75rem 0; color: rgb(var(--color-text-muted)); font-style: italic; }
+.cms-content { color: rgb(var(--color-text-secondary)); line-height: 1.7; }
+.cms-content h1 { font-size: 1.6rem; font-weight: 700; color: rgb(var(--color-text-primary)); margin: 1rem 0 .5rem; }
+.cms-content img, .cms-editor img { max-width: 100%; border-radius: .5rem; margin: .5rem 0; }
+
+/* Frexever logo — transparent PNG. Dark-text art on light surfaces; the
+   white-text variant under dark theme (admin default) so the wordmark stays
+   readable on the dark sidebar/login. */
+.brand-logo { background: url('/frexever-logo.png') center / contain no-repeat; }
+[data-theme='dark'] .brand-logo { background-image: url('/frexever-logo-dark.png'); }
