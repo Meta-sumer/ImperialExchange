@@ -359,11 +359,16 @@ const priceAt = asyncHandler(async (req, res) => {
   const sym = String(req.params.symbol || '').toUpperCase();
   const at = new Date(req.query.at);
   if (Number.isNaN(at.getTime())) throw new AppError('at must be an ISO date-time', 400);
+  // Backfilled candles carry raw float noise (1196.5999755…); round to the
+  // instrument's tick precision so the value drops straight into a price box.
+  const instRow = await Instrument.findOne({ symbol: sym }).select('pricePrecision').lean();
+  const prec = instRow && Number.isFinite(Number(instRow.pricePrecision)) ? Number(instRow.pricePrecision) : 2;
+  const r = (v) => (v == null || !Number.isFinite(Number(v)) ? null : Number(v).toFixed(prec));
   for (const tf of Object.keys(PRICE_AT_TF_MS)) {
     try { await require('../services/yahooBackfill').ensureHistory(sym, tf); } catch (_) { /* best effort */ }
     const c = await Candle.findOne({ symbol: sym, timeframe: tf, openTime: { $lte: at } }).sort({ openTime: -1 }).lean();
     if (c && at.getTime() - new Date(c.openTime).getTime() <= PRICE_AT_TF_MS[tf] * 3) {
-      return sendSuccess(res, { symbol: sym, at, timeframe: tf, candleTime: c.openTime, price: c.close, open: c.open, high: c.high, low: c.low });
+      return sendSuccess(res, { symbol: sym, at, timeframe: tf, candleTime: c.openTime, price: r(c.close), open: r(c.open), high: r(c.high), low: r(c.low) });
     }
   }
   sendSuccess(res, { symbol: sym, at, timeframe: null, price: null });
