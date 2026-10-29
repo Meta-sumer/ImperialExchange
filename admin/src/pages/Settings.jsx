@@ -191,6 +191,9 @@ export default function Settings() {
         )}
       </div>
 
+      {/* Market scope — Indian-market-only switch (Super Admin). */}
+      <MarketScopeCard settings={settings} save={save} saving={saving} />
+
       {/* Peer-to-peer wallet transfers — admin toggle + limits + fee. */}
       <UserTransfersSettingsCard settings={settings} save={save} saving={saving} />
 
@@ -495,6 +498,36 @@ function PartnerSettingsCard({ settings, save, saving }) {
           {saving ? 'Saving…' : 'Save'}
         </button>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Market scope. Mirrors the `market.indiaOnly` SystemSetting: when ON, the
+ * public instrument list, search, watchlist and order placement are clipped
+ * to NSE/BSE rows (backend services/marketScope.js). Super Admin only — the
+ * backend rejects the change for anyone else.
+ */
+function MarketScopeCard({ settings, save, saving }) {
+  const on = settings['market.indiaOnly'] !== false;
+  return (
+    <div className="card p-5 flex items-center justify-between gap-4 flex-wrap">
+      <div>
+        <h2 className="text-base font-semibold text-white">Market Scope</h2>
+        <p className="text-xs text-text-muted mt-0.5 max-w-md">
+          {on
+            ? 'Indian market only — traders see and trade NSE/BSE stocks and indices. Global rows stay hidden even if active.'
+            : 'All markets — every active instrument is visible and tradeable.'}
+        </p>
+      </div>
+      <button
+        type="button"
+        disabled={saving}
+        onClick={() => save({ marketIndiaOnly: !on })}
+        className={`shrink-0 px-3 py-1.5 rounded text-xs font-semibold transition-colors ${on ? 'bg-emerald-500/20 text-emerald-400' : 'bg-bear/20 text-bear'}`}
+      >
+        {on ? 'INDIA ONLY' : 'ALL MARKETS'}
+      </button>
     </div>
   );
 }

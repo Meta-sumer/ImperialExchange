@@ -94,6 +94,11 @@ export const ROUTE_ACCESS = Object.freeze({
 
   // Admin Access Control — Super Admin only (decides each admin's modules).
   '/admin-access': [ROLES.SUPER_ADMIN],
+
+  // Credit Ledger — Super/Admin (admin gated by the DEPOSITS module below).
+  '/credit':        [ROLES.SUPER_ADMIN, ROLES.ADMIN],
+  // Deposit bank-account pool — Super Admin only (assigns accounts to users).
+  '/bank-accounts': [ROLES.SUPER_ADMIN],
 });
 
 // Admin Access Control: which per-admin permission KEY gates each admin route.
@@ -108,6 +113,7 @@ export const ADMIN_ROUTE_PERMISSION = Object.freeze({
   '/market-exposure': 'MARKET_EXPOSURE',
   '/deposits': 'DEPOSITS',
   '/withdrawals': 'WITHDRAWALS',
+  '/credit': 'DEPOSITS',
   '/finance': 'FINANCE',
   '/plans': 'PLANS',
   '/account-plans': 'ACCOUNT_PLANS',

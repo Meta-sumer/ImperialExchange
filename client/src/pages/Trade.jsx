@@ -2468,11 +2468,8 @@ export default function Trade() {
                 }
                 const MOVER_CATS = [
                   { key: 'ALL', label: 'All' },
-                  { key: 'FOREX', label: 'Forex' },
-                  { key: 'CRYPTO', label: 'Crypto' },
-                  { key: 'COMMODITY', label: 'Commodities' },
-                  { key: 'INDEX', label: 'Indices' },
                   { key: 'STOCK', label: 'Stocks' },
+                  { key: 'INDEX', label: 'Indices' },
                 ];
                 const ranked = withChg
                   .filter((r) => moverCat === 'ALL' || String(r.category || '').toUpperCase() === moverCat)
@@ -2567,13 +2564,13 @@ export default function Trade() {
               : cat === 'FOREX'
               ? 'Currency pair traded on the spot FX market. Liquidity peaks during overlapping London + New York sessions.'
               : cat === 'STOCK'
-              ? 'Listed equity — price reflects company shares traded on its primary exchange during market hours.'
+              ? 'Listed equity — NSE/BSE shares priced live through the exchange session (09:15–15:30 IST).'
               : cat === 'COMMODITY'
               ? 'Physical-asset derivative — gold, silver, oil and similar contracts settled against spot reference prices.'
               : cat === 'INDEX'
-              ? 'Stock-index CFD — exposure to a basket of listed equities tracked by the underlying benchmark.'
+              ? 'Index — exposure to a basket of NSE/BSE listed equities tracked by the benchmark (NIFTY 50, BANK NIFTY, SENSEX).'
               : 'Tradable instrument quoted in real time.';
-            const hours = cat === 'CRYPTO' ? '24 / 7' : cat === 'FOREX' ? 'Mon 00:00 → Fri 22:00 UTC' : 'Exchange hours';
+            const hours = cat === 'CRYPTO' ? '24 / 7' : cat === 'FOREX' ? 'Mon 00:00 → Fri 22:00 UTC' : 'Mon–Fri 09:15 → 15:30 IST';
             return (
               <div className="flex-1 overflow-y-auto p-3 space-y-3 text-xs">
                 <div className="flex items-center gap-2.5 pb-3 border-b border-border-subtle">

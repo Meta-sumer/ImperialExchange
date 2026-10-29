@@ -9,6 +9,7 @@ const orderRouter = require('../services/orderRouter.service');
 const walletService = require('../services/walletService');
 const Trade = require('../models/Trade');
 const { sendSuccess, asyncHandler, AppError } = require('../utils/errors');
+const { assertInMarketScope } = require('../services/marketScope');
 const { ORDER_TYPE, ORDER_SIDE, ORDER_STATUS, POSITION_STATUS, BASE_CURRENCY } = require('../config/constants');
 const { gt, lt, mul, div, sub, eq, add } = require('../utils/decimal');
 const { applyDateRange } = require('../utils/dateRange');
@@ -298,6 +299,7 @@ const placeOrder = asyncHandler(async (req, res) => {
 
   const instrument = await Instrument.findOne({ symbol: symbol.toUpperCase(), isActive: true });
   if (!instrument) throw new AppError('Instrument not active', 404);
+  assertInMarketScope(instrument);
 
   // ─── Market-session gate ────────────────────────────────────────────
   // Exchange-bound instruments (NSE/BSE/NFO/...) trade only in-session; forex/
@@ -1780,6 +1782,7 @@ const placeOcoOrder = asyncHandler(async (req, res) => {
   if (!account) throw new AppError('Account not found', 404);
   const instrument = await Instrument.findOne({ symbol: symbol.toUpperCase(), isActive: true });
   if (!instrument) throw new AppError('Instrument not active', 404);
+  assertInMarketScope(instrument);
 
   // Validate min/max order size (same as placeOrder).
   if (instrument.minOrderSize && lt(quantity, instrument.minOrderSize)) {

@@ -20,13 +20,11 @@ import WatchlistButton from './WatchlistButton';
 // is what a trader actually scans.
 const catKeyOf = (r) => (r.category || '').toUpperCase();
 
+// Indian market only: NSE/BSE stocks and indices (backend market scope).
 const CATEGORIES = [
-  { key: 'ALL',       label: 'All' },
-  { key: 'FOREX',     label: 'Forex' },
-  { key: 'CRYPTO',    label: 'Crypto' },
-  { key: 'COMMODITY', label: 'Commodities' },
-  { key: 'INDEX',     label: 'Indices' },
-  { key: 'STOCK',     label: 'Stocks' },
+  { key: 'ALL',   label: 'All' },
+  { key: 'STOCK', label: 'Stocks' },
+  { key: 'INDEX', label: 'Indices' },
 ];
 
 const SearchIcon = (props) => (

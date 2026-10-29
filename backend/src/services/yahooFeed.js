@@ -133,7 +133,7 @@ async function _publishTick(inst, ltp) {
 async function _pollOnce() {
   const insts = await Instrument.find({
     exchange: { $in: ['NSE', 'BSE', 'NFO', 'BFO'] }, isActive: true, marketDataEnabled: { $ne: false },
-  }).select('_id symbol exchange segment pricePrecision tickSize').lean();
+  }).select('_id symbol exchange segment underlying pricePrecision tickSize').lean();
   if (!insts.length) return;
 
   // Map each instrument → its underlying spot symbol; collect the unique set.

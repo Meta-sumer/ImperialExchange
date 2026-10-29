@@ -69,6 +69,8 @@ const NAV_SECTIONS = [
       { to: '/finance', icon: I.deposit, label: 'Finance Dept' },
       { to: '/deposits', icon: I.deposit, label: 'Deposits' },
       { to: '/withdrawals', icon: I.withdrawal, label: 'Withdrawals' },
+      { to: '/credit', icon: I.deposit, label: 'Credit Ledger' },
+      { to: '/bank-accounts', icon: I.settings, label: 'Bank Accounts' },
       { to: '/plans', icon: I.plans, label: 'Plans' },
       { to: '/account-plans', icon: I.plans, label: 'Account Plans' },
       { to: '/subscription-wallets', icon: I.plans, label: 'Main Wallet' },

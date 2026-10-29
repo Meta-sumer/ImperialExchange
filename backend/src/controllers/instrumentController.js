@@ -2,6 +2,7 @@ const Instrument = require('../models/Instrument');
 const cacheService = require('../services/cacheService');
 const Candle = require('../models/Candle');
 const { sendSuccess, asyncHandler, AppError } = require('../utils/errors');
+const { applyMarketScope } = require('../services/marketScope');
 const { getCandles } = require('../services/candleService');
 const matchingEngine = require('../matching-engine/MatchingEngine');
 const externalFeed = require('../services/externalFeedService');
@@ -56,6 +57,7 @@ const list = asyncHandler(async (req, res) => {
   // active-only everywhere else.
   // Admin (includeInactive) sees everything; clients see active + user-visible only.
   const filter = req.query.includeInactive === 'true' ? {} : { isActive: true, userVisible: { $ne: false } };
+  if (req.query.includeInactive !== 'true') applyMarketScope(filter); // traders: Indian rows only (when scoped)
   if (req.query.category) filter.category = req.query.category;
   _excludeDerivatives(req, filter);
   const isAdminView = req.query.includeInactive === 'true';
@@ -149,6 +151,7 @@ const volumeUsage = asyncHandler(async (req, res) => {
  */
 const watchlist = asyncHandler(async (req, res) => {
   const filter = { isActive: true, userVisible: { $ne: false } };
+  applyMarketScope(filter);
   if (req.query.category) filter.category = req.query.category;
   _excludeDerivatives(req, filter);
   // Same projection list() uses — this endpoint is public too, and it was still
@@ -313,7 +316,7 @@ const search = asyncHandler(async (req, res) => {
   const rx = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
   const sel = 'symbol name category exchange segment lastPrice quoteCurrency lotSize logoUrl';
 
-  const base = await Instrument.find({ isActive: true, userVisible: { $ne: false }, $or: [{ symbol: rx }, { name: rx }] })
+  const base = await Instrument.find(applyMarketScope({ isActive: true, userVisible: { $ne: false }, $or: [{ symbol: rx }, { name: rx }] }))
     .select(sel).limit(limit).lean();
 
   sendSuccess(res, base);

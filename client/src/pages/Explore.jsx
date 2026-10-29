@@ -95,7 +95,11 @@ const isIndex     = (r) => cat(r) === 'INDEX';
 const isStock     = (r) => cat(r) === 'STOCK';
 const MAJOR_CCY   = new Set(['EUR','GBP','USD','JPY','CHF','AUD','NZD','CAD']);
 
+// Indian market first (stocks, indices). The global sectors stay defined but an
+// empty sector is hidden, so they only appear if the market scope is widened.
 const SECTOR_DEFS = [
+  { key: 'stocks',  label: 'Stocks',         icon: I.bank,    tint: '#8B5CF6', match: isStock },
+  { key: 'indices', label: 'Indices',        icon: I.stars,   tint: '#3B82F6', match: isIndex },
   { key: 'crypto',  label: 'Crypto',         icon: I.diamond, tint: '#F7931A', match: isCrypto },
   { key: 'forex',   label: 'Forex',          icon: I.doller,  tint: '#10B981', match: isForex },
   { key: 'majors',  label: 'Forex Majors',   icon: I.doller,  tint: '#0EA5E9',
@@ -106,8 +110,6 @@ const SECTOR_DEFS = [
   { key: 'gold',    label: 'Precious Metals', icon: I.ingot,  tint: '#D4A017',
     match: (r) => isCommodity(r)
       && ['XAU','XAG'].includes((r.baseCurrency || '').toUpperCase()) },
-  { key: 'indices', label: 'Indices',        icon: I.stars,   tint: '#3B82F6', match: isIndex },
-  { key: 'stocks',  label: 'Stocks',         icon: I.bank,    tint: '#8B5CF6', match: isStock },
 ];
 
 // Products link to existing routes so each tile actually goes somewhere.
@@ -808,11 +810,8 @@ export default function Explore() {
                     {moverCategories.length === 0 && I.check}
                   </button>
                   {[
-                    { key: 'FOREX', label: 'Forex' },
-                    { key: 'CRYPTO', label: 'Crypto' },
-                    { key: 'COMMODITY', label: 'Commodities' },
-                    { key: 'INDEX', label: 'Indices' },
                     { key: 'STOCK', label: 'Stocks' },
+                    { key: 'INDEX', label: 'Indices' },
                   ].map((c) => {
                     const on = moverCategories.includes(c.key);
                     return (
@@ -1053,7 +1052,7 @@ export default function Explore() {
                   <div className="p-6 flex flex-col items-center text-center">
                     <InvestmentsIllustration />
                     <p className="mt-4 text-sm text-text-secondary">No open trades yet</p>
-                    <p className="mt-1 text-xs text-text-muted">Fund your account and place your first FX or crypto trade.</p>
+                    <p className="mt-1 text-xs text-text-muted">Fund your account and place your first stock or index trade.</p>
                     <div className="mt-4 flex items-center gap-2">
                       <Link
                         to="/wallet"

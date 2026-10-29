@@ -1768,11 +1768,15 @@ const updateSystemSettings = asyncHandler(async (req, res) => {
     routingMode, defaultLpProvider,
     userTransfer, // { enabled, min, max, feePercent }
     chatUpload,   // { enabled, maxFileMB, maxTotalMB, maxFiles, allowedExtensions, roles }
+    marketIndiaOnly, // boolean — Indian-market-only scope (Super Admin only)
   } = req.body;
 
   // Chat file-upload limits are SUPER-ADMIN only.
   if (chatUpload !== undefined && req.user.role !== 'SUPER_ADMIN') {
     throw new AppError('Only a Super Admin can change chat file-upload settings', 403, 'FORBIDDEN');
+  }
+  if (marketIndiaOnly !== undefined && req.user.role !== 'SUPER_ADMIN') {
+    throw new AppError('Only a Super Admin can change the market scope', 403, 'FORBIDDEN');
   }
 
   // Validate intent before any writes — keeps the system in a consistent
@@ -1885,6 +1889,7 @@ const updateSystemSettings = asyncHandler(async (req, res) => {
 
   if (routingMode !== undefined) await systemSettings.setSetting('routingMode', routingMode, req.userId);
   if (defaultLpProvider !== undefined) await systemSettings.setSetting('defaultLpProvider', defaultLpProvider, req.userId);
+  if (marketIndiaOnly !== undefined) await systemSettings.setSetting('market.indiaOnly', !!marketIndiaOnly, req.userId);
   if (partner && typeof partner === 'object') {
     if (partner.enabled     !== undefined) await systemSettings.setSetting('partner.enabled',     !!partner.enabled, req.userId);
     if (partner.bonusAmount !== undefined) await systemSettings.setSetting('partner.bonusAmount', String(partner.bonusAmount), req.userId);

@@ -41,6 +41,8 @@ const SubscriptionWallets = lazy(() => import('./pages/SubscriptionWallets'));
 const BonusWallets = lazy(() => import('./pages/BonusWallets'));
 const UserTransfers = lazy(() => import('./pages/UserTransfers'));
 const Partners = lazy(() => import('./pages/Partners'));
+const CreditLedger = lazy(() => import('./pages/CreditLedger'));
+const BankAccounts = lazy(() => import('./pages/BankAccounts'));
 const Admins = lazy(() => import('./pages/Admins'));
 const Managers = lazy(() => import('./pages/Managers'));
 const ManagerPermissions = lazy(() => import('./pages/ManagerPermissions'));
@@ -146,6 +148,8 @@ export default function App() {
       <Route path="/bonus-wallets" element={wrap(<BonusWallets />)} />
       <Route path="/user-transfers" element={wrap(<UserTransfers />)} />
       <Route path="/partners" element={wrap(<Partners />)} />
+      <Route path="/credit" element={wrap(<CreditLedger />)} />
+      <Route path="/bank-accounts" element={wrap(<BankAccounts />)} />
 
       {/* Hierarchy / manager scope — role-gated by ROUTE_ACCESS. */}
       <Route path="/admins" element={wrap(<Admins />)} />

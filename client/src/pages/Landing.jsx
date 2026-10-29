@@ -20,16 +20,16 @@ import { fmtNum } from '../utils/format';
  */
 
 const TICKER = [
-  { s: 'BTC/USD', p: '67,420.50', c: +1.84 },
-  { s: 'ETH/USD', p: '3,512.20', c: +2.31 },
-  { s: 'EUR/USD', p: '1.16060', c: -0.12 },
-  { s: 'XAU/USD', p: '2,348.10', c: +0.64 },
-  { s: 'AAPL', p: '227.85', c: +0.92 },
-  { s: 'TSLA', p: '248.40', c: -1.27 },
-  { s: 'GBP/USD', p: '1.27310', c: +0.08 },
-  { s: 'NAS100', p: '20,114.0', c: +1.05 },
-  { s: 'USOIL', p: '78.92', c: -0.45 },
-  { s: 'SOL/USD', p: '174.30', c: +4.12 },
+  { s: 'NIFTY 50', p: '24,118.50', c: +0.64 },
+  { s: 'BANK NIFTY', p: '51,420.30', c: +0.82 },
+  { s: 'SENSEX', p: '79,476.20', c: +0.58 },
+  { s: 'RELIANCE', p: '2,948.40', c: +1.12 },
+  { s: 'TCS', p: '4,125.60', c: -0.35 },
+  { s: 'HDFCBANK', p: '1,672.80', c: +0.44 },
+  { s: 'INFY', p: '1,842.10', c: +0.91 },
+  { s: 'ICICIBANK', p: '1,214.30', c: +0.27 },
+  { s: 'SBIN', p: '812.45', c: -0.52 },
+  { s: 'TATAMOTORS', p: '1,036.70', c: +1.48 },
 ];
 
 const FEATURES = [
@@ -68,9 +68,9 @@ const FEAT_SH = {
 };
 
 const BADGES = [
-  { icon: 'shield', color: '#3B82F6', title: 'Bank-level Security', body: 'Your funds and data are always protected with top-tier security.', tag: 'Across all markets' },
-  { icon: 'bolt', color: '#22C55E', title: '24/7 Market Access', body: 'Trade anytime, anywhere with round-the-clock market access.', tag: 'Global presence' },
-  { icon: 'percent', color: '#F59E0B', title: 'Low Trading Fees', body: 'Enjoy ultra-low fees and keep more of what you earn.', tag: 'Always open' },
+  { icon: 'shield', color: '#3B82F6', title: 'Bank-level Security', body: 'Your funds and data are always protected with top-tier security.', tag: 'Across NSE & BSE' },
+  { icon: 'bolt', color: '#22C55E', title: 'NSE & BSE Access', body: 'Trade Indian stocks and indices live through every market session.', tag: 'Indian markets' },
+  { icon: 'percent', color: '#F59E0B', title: 'Low Trading Fees', body: 'Enjoy ultra-low fees and keep more of what you earn.', tag: 'Market hours' },
   { icon: 'support', color: '#8B5CF6', title: '24/7 Live Support', body: 'Our support team is always here to help you succeed.', tag: 'Reliable & secure' },
 ];
 
@@ -84,7 +84,7 @@ const AVATARS = [
 ];
 
 const WHY = [
-  { icon: 'globe', title: 'Global Market Access', body: 'Trade thousands of assets across crypto, forex, stocks, commodities and indices — all from one account.' },
+  { icon: 'globe', title: 'Indian Market Access', body: 'Trade NSE and BSE stocks plus NIFTY 50, BANK NIFTY and SENSEX — all from one account.' },
   { icon: 'bolt', title: 'Lightning-Fast Execution', body: 'Orders filled in milliseconds by a low-latency engine, even during peak volume.' },
   { icon: 'coins', title: 'Zero Hidden Fees', body: 'Transparent pricing with no surprise charges. What you see is what you pay.' },
   { icon: 'lock', title: '256-bit Encryption', body: 'Bank-grade encryption and 2FA keep your account and funds fully protected.' },
@@ -102,22 +102,22 @@ const BUILT = [
 ];
 
 const MARKETS = [
-  { name: 'Crypto', desc: '500+ Assets', c: +0.42, icon: 'crypto' },
-  { name: 'Forex', desc: 'Major Pairs', c: -0.32, icon: 'fx' },
-  { name: 'Stocks', desc: 'Global Stocks', c: +0.62, icon: 'stock' },
-  { name: 'Commodities', desc: 'Gold, Oil & more', c: +0.42, icon: 'oil' },
-  { name: 'Indices', desc: 'Global Indices', c: +0.42, icon: 'index' },
+  { name: 'Stocks', desc: 'NSE & BSE Equities', c: +0.62, icon: 'stock' },
+  { name: 'Indices', desc: 'NIFTY · BANKNIFTY · SENSEX', c: +0.42, icon: 'index' },
+  { name: 'Large Caps', desc: 'NIFTY 50 leaders', c: +0.48, icon: 'stock' },
+  { name: 'Banking', desc: 'BANK NIFTY names', c: +0.35, icon: 'stock' },
+  { name: 'IT & Tech', desc: 'NIFTY IT names', c: +0.71, icon: 'stock' },
 ];
 
 // Landing card name → Instrument.category enum. Drives the LIVE per-category
 // average % change pulled from the public watchlist feed (the `c` above is only
 // a static fallback used while loading / if the feed is unreachable).
 const MARKET_CATEGORY = {
-  Crypto: 'CRYPTO',
-  Forex: 'FOREX',
   Stocks: 'STOCK',
-  Commodities: 'COMMODITY',
   Indices: 'INDEX',
+  'Large Caps': 'STOCK',
+  Banking: 'STOCK',
+  'IT & Tech': 'STOCK',
 };
 
 const STATS = [
@@ -136,7 +136,7 @@ const STEPS = [
 
 const TESTIMONIALS = [
   { name: 'Rahul Sharma', role: 'Professional Trader', init: 'RS', img: 'https://i.pravatar.cc/96?img=13', quote: 'Imperial Exchange is by far the best platform I have used. The execution speed and low fees are unmatched — I have moved all my trading here.' },
-  { name: 'Sarah Williams', role: 'Crypto Investor', init: 'SW', img: 'https://i.pravatar.cc/96?img=47', quote: 'I have been trading crypto for years and this is the fastest, most reliable terminal I have come across. Highly recommended.' },
+  { name: 'Sarah Williams', role: 'Equity Investor', init: 'SW', img: 'https://i.pravatar.cc/96?img=47', quote: 'I have been trading Indian equities for years and this is the fastest, most reliable terminal I have come across. Highly recommended.' },
   { name: 'Michael Chen', role: 'Day Trader', init: 'MC', img: 'https://i.pravatar.cc/96?img=33', quote: 'The platform is super fast and reliable. I can trade anywhere, anytime, on any device, without any interruptions.' },
 ];
 
@@ -176,17 +176,17 @@ function Hero() {
       </div>
       <div className="relative max-w-[1200px] mx-auto px-4 sm:px-6 pt-8 pb-6 lg:pt-10 lg:pb-6 grid lg:grid-cols-2 gap-12 items-center">
         <div>
-          <span className="badge-primary mb-5">● Secure &amp; safe · Always open market · Low fees on trades</span>
+          <span className="badge-primary mb-5">● Secure &amp; safe · NSE &amp; BSE markets · Low fees on trades</span>
           <h1 className="text-[40px] leading-[1.08] sm:text-[56px] font-extrabold tracking-tight">
-            Trade <span style={grad}>Free</span> Forever
+            Trade. <span style={grad}>Invest.</span> Grow.
           </h1>
           <div className="mt-2 flex items-center gap-2.5 text-2xl sm:text-4xl font-extrabold tracking-tight">
-            <span style={grad}>Always Open</span>
+            <span style={grad}>Indian Markets</span>
             <span className="keep-white inline-flex w-8 h-8 sm:w-10 sm:h-10 rounded-xl items-center justify-center shrink-0" style={{ background: '#1D4ED8', color: '#FFFFFF' }}><FeatureIcon name="shield" /></span>
-            <span style={{ background: 'linear-gradient(90deg,#10B981,#14B8A6)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Always Free</span>
+            <span style={{ background: 'linear-gradient(90deg,#10B981,#14B8A6)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Always Secure</span>
           </div>
           <p className="mt-5 text-lg text-text-secondary max-w-xl">
-            Your gateway to unlimited, ultra-low-commission trading. With 24/7 market access and round-the-clock support, you can learn, practice and trade without limits — simple, secure and built for traders of all levels.
+            Your gateway to NSE and BSE stocks and indices at ultra-low commissions. Trade live through market hours, practice on a demo account and manage everything from one secure platform built for traders of all levels.
           </p>
           <div className="mt-8 flex flex-wrap items-center gap-3">
             <Link to="/register" className="keep-white inline-flex items-center gap-2 text-base font-bold px-7 py-3.5 rounded-lg shadow-elevated hover:shadow-xl transition-shadow" style={{ background: 'linear-gradient(90deg,#2563EB 0%,#10B981 100%)', color: '#FFFFFF' }}>Start trading free →</Link>
@@ -228,15 +228,15 @@ function HeroVisual() {
       <div className="card p-5 shadow-elevated relative z-10">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
-            <span className="w-8 h-8 rounded-md bg-primary-500/10 text-primary-600 flex items-center justify-center font-bold text-xs">₿</span>
+            <span className="w-8 h-8 rounded-md bg-primary-500/10 text-primary-600 flex items-center justify-center font-bold text-xs">₹</span>
             <div>
-              <div className="text-sm font-bold leading-tight">BTC / USD</div>
-              <div className="text-[11px] text-text-muted leading-tight">Bitcoin</div>
+              <div className="text-sm font-bold leading-tight">NIFTY 50</div>
+              <div className="text-[11px] text-text-muted leading-tight">NSE benchmark index</div>
             </div>
           </div>
           <div className="text-right">
-            <div className="text-base font-bold font-mono">67,420.50</div>
-            <div className="text-[11px] font-bold text-bull">+1.84%</div>
+            <div className="text-base font-bold font-mono">24,118.50</div>
+            <div className="text-[11px] font-bold text-bull">+0.64%</div>
           </div>
         </div>
         <ChartSVG />
@@ -247,14 +247,14 @@ function HeroVisual() {
       </div>
       <div className="hidden sm:block absolute -left-6 bottom-10 z-20 card px-4 py-3 shadow-elevated float-a">
         <div className="text-[10px] text-text-muted font-semibold uppercase tracking-wider">Today's P&amp;L</div>
-        <div className="text-lg font-extrabold text-bull">+$2,847.20</div>
+        <div className="text-lg font-extrabold text-bull">+₹12,840.00</div>
       </div>
       <div className="hidden sm:block absolute -right-4 top-6 z-20 card px-4 py-3 shadow-elevated float-b">
         <div className="flex items-center gap-2">
           <span className="w-7 h-7 rounded-full bg-bull/15 text-bull flex items-center justify-center"><Check /></span>
           <div>
             <div className="text-xs font-bold">Order filled</div>
-            <div className="text-[10px] text-text-muted">0.5 BTC · market</div>
+            <div className="text-[10px] text-text-muted">10 × RELIANCE · market</div>
           </div>
         </div>
       </div>
@@ -520,34 +520,36 @@ const IndexChart = () => (
 );
 
 function MarketCluster({ name }) {
+  const Tag = ({ children, size = 9 }) => <span className="font-extrabold text-white" style={{ fontSize: size }}>{children}</span>;
   switch (name) {
-    case 'Crypto':
-      return (
-        <div className="flex -space-x-3 justify-center">
-          <Coin from="#FDB931" to="#F7931A">₿</Coin>
-          <Coin from="#8A92B2" to="#627EEA">Ξ</Coin>
-        </div>
-      );
-    case 'Forex':
-      return (
-        <div className="flex -space-x-3 justify-center">
-          <Coin from="#34D399" to="#059669">$</Coin>
-          <Coin from="#60A5FA" to="#2563EB">€</Coin>
-        </div>
-      );
     case 'Stocks':
       return (
         <div className="flex -space-x-2.5 justify-center">
-          <LogoDisc tint="#111827"><AppleGlyph /></LogoDisc>
-          <LogoDisc tint="#E82127"><TeslaGlyph /></LogoDisc>
-          <LogoDisc><AmazonGlyph /></LogoDisc>
+          <LogoDisc tint="#1D4ED8"><Tag>RIL</Tag></LogoDisc>
+          <LogoDisc tint="#111827"><Tag>TCS</Tag></LogoDisc>
+          <LogoDisc tint="#0EA5E9"><Tag size={8}>HDFC</Tag></LogoDisc>
         </div>
       );
-    case 'Commodities':
+    case 'Large Caps':
       return (
-        <div className="flex items-end justify-center gap-1.5">
-          <GoldBars />
-          <OilBarrel />
+        <div className="flex -space-x-3 justify-center">
+          <Coin from="#34D399" to="#059669">₹</Coin>
+          <Coin from="#60A5FA" to="#2563EB">50</Coin>
+        </div>
+      );
+    case 'Banking':
+      return (
+        <div className="flex -space-x-2.5 justify-center">
+          <LogoDisc tint="#004C8F"><Tag size={8}>HDFC</Tag></LogoDisc>
+          <LogoDisc tint="#F58220"><Tag size={8}>ICICI</Tag></LogoDisc>
+          <LogoDisc tint="#22409A"><Tag>SBI</Tag></LogoDisc>
+        </div>
+      );
+    case 'IT & Tech':
+      return (
+        <div className="flex -space-x-2.5 justify-center">
+          <LogoDisc tint="#111827"><Tag>TCS</Tag></LogoDisc>
+          <LogoDisc tint="#007CC3"><Tag size={8}>INFY</Tag></LogoDisc>
         </div>
       );
     case 'Indices':
@@ -618,7 +620,7 @@ function Markets() {
 
   return (
     <section id="markets" className="max-w-[1200px] mx-auto px-4 sm:px-6 pt-16 pb-4">
-      <h2 className="text-3xl sm:text-[34px] font-extrabold tracking-tight text-center">Trade <span style={grad}>Every Market</span></h2>
+      <h2 className="text-3xl sm:text-[34px] font-extrabold tracking-tight text-center">Trade the <span style={grad}>Indian Market</span></h2>
       <div className="relative mt-8">
         {/* Prev */}
         <button
@@ -692,12 +694,12 @@ function Platform() {
             <div className="rounded-lg border p-2" style={{ background: '#0E1626', borderColor: 'rgba(255,255,255,0.08)' }}>
               <div className="flex items-center justify-between mb-1">
                 <div className="flex items-baseline gap-1.5">
-                  <span className="text-[11px] font-bold text-white">BTC/USD</span>
-                  <span className="text-[11px] font-bold" style={{ color: '#22C55E' }}>67,245.30</span>
-                  <span className="text-[9px] font-bold" style={{ color: '#22C55E' }}>+1.84%</span>
+                  <span className="text-[11px] font-bold text-white">NIFTY 50</span>
+                  <span className="text-[11px] font-bold" style={{ color: '#22C55E' }}>24,118.50</span>
+                  <span className="text-[9px] font-bold" style={{ color: '#22C55E' }}>+0.64%</span>
                 </div>
                 <div className="hidden sm:flex gap-1.5 text-[7px]" style={{ color: '#64748B' }}>
-                  <span>O 65,130</span><span>H 67,540</span><span>L 64,880</span>
+                  <span>O 23,980</span><span>H 24,160</span><span>L 23,905</span>
                 </div>
               </div>
               <ChartSVG />
@@ -738,8 +740,8 @@ function Platform() {
         {/* phone in front */}
         <div className="keep-white absolute -bottom-2 right-0 sm:right-2 w-24 rounded-[1.3rem] border-4 shadow-elevated overflow-hidden" style={{ borderColor: '#1E293B', background: '#0B1220' }}>
           <div className="px-2 pt-2 pb-1 flex items-center justify-between">
-            <span className="text-[8px] font-bold text-white">BTC/USD</span>
-            <span className="text-[7px] font-bold" style={{ color: '#22C55E' }}>+1.84%</span>
+            <span className="text-[8px] font-bold text-white">NIFTY 50</span>
+            <span className="text-[7px] font-bold" style={{ color: '#22C55E' }}>+0.64%</span>
           </div>
           <div className="px-1"><ChartSVG /></div>
           <div className="p-1.5 grid grid-cols-2 gap-1">

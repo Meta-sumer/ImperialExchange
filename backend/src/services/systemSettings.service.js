@@ -137,6 +137,11 @@ const DEFAULTS = {
   // Admin can flip this off from the Instruments page. false = skip the auto sync.
   'dhan.autoSync': true,
 
+  // Market scope. true = Indian market only: public instrument lists, search,
+  // watchlist and order placement are clipped to NSE/BSE rows
+  // (services/marketScope.js). Super Admin toggle in Settings → Market Scope.
+  'market.indiaOnly': true,
+
   // Subscription billing. Plans bill from the MAIN WALLET only by default.
   // The Bonus Wallet is NEVER a billing source (enforced in code). When this
   // is true, the Trading Wallet is used as a SECONDARY source if the Main

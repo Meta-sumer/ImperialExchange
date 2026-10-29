@@ -50,7 +50,11 @@ const isIndex     = (r) => cat(r) === 'INDEX';
 const isStock     = (r) => cat(r) === 'STOCK';
 const MAJOR_CCY   = new Set(['EUR','GBP','USD','JPY','CHF','AUD','NZD','CAD']);
 
+// Indian market first; empty sectors are hidden so the global ones only show
+// when the market scope is widened.
 const SECTOR_DEFS = [
+  { key: 'stocks',  label: 'Stocks',          tint: '#8B5CF6', match: isStock },
+  { key: 'indices', label: 'Indices',         tint: '#3B82F6', match: isIndex },
   { key: 'crypto',  label: 'Crypto',          tint: '#F7931A', match: isCrypto },
   { key: 'forex',   label: 'Forex',           tint: '#10B981', match: isForex },
   { key: 'majors',  label: 'Forex Majors',    tint: '#0EA5E9',
@@ -60,15 +64,13 @@ const SECTOR_DEFS = [
   { key: 'comm',    label: 'Commodities',     tint: '#A16207', match: isCommodity },
   { key: 'gold',    label: 'Precious Metals', tint: '#D4A017',
     match: (r) => isCommodity(r) && ['XAU','XAG'].includes((r.baseCurrency || '').toUpperCase()) },
-  { key: 'indices', label: 'Indices',         tint: '#3B82F6', match: isIndex },
-  { key: 'stocks',  label: 'Stocks',          tint: '#8B5CF6', match: isStock },
 ];
 
 // ─── View configs — title + sort fn per ?view= value ──────────────────────
 const VIEWS = {
   'most-traded': {
     title: 'Most traded markets',
-    caption: 'Highest liquidity across crypto, forex, indices and commodities.',
+    caption: 'Highest liquidity across NSE and BSE stocks and indices.',
     sort: (a, b) => {
       const va = Number(a.volume24h) || 0;
       const vb = Number(b.volume24h) || 0;
@@ -620,15 +622,14 @@ function TopMoversCard({ lived }) {
 
 /** Bottom card — 4 quick-link tiles to the major asset classes. */
 function ExploreLinksCard() {
+  const svg = (d) => (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{d}</svg>
+  );
   const tiles = [
-    { label: 'Crypto',       tint: '#F7931A', to: '/markets?view=most-traded', icon:
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 3h12l4 6-10 12L2 9z" /><path d="M2 9h20" /><path d="M12 3l4 6-4 12-4-12z" /></svg> },
-    { label: 'Forex',        tint: '#10B981', to: '/markets?view=most-traded', icon:
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1v22" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /></svg> },
-    { label: 'Commodities',  tint: '#D4A017', to: '/markets?view=most-traded', icon:
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 8h16l-2 12H6z" /><path d="M6 4h12l2 4H4z" /></svg> },
-    { label: 'Indices',      tint: '#3B82F6', to: '/markets?view=most-traded', icon:
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3v18h18" /><path d="M7 14l4-4 4 4 5-7" /></svg> },
+    { label: 'Stocks',      tint: '#8B5CF6', to: '/markets?view=most-traded', icon: svg(<><path d="M3 3v18h18" /><rect x="7" y="11" width="3" height="6" /><rect x="13" y="7" width="3" height="10" /></>) },
+    { label: 'Indices',     tint: '#3B82F6', to: '/markets?view=most-traded', icon: svg(<><path d="M3 12h4l3-8 4 16 3-8h4" /></>) },
+    { label: 'Top Gainers', tint: '#10B981', to: '/markets?view=gainers',     icon: svg(<><path d="M4 17l5-5 4 4 7-8" /><path d="M3 7h4v4" /></>) },
+    { label: 'Top Losers',  tint: '#EF4444', to: '/markets?view=losers',      icon: svg(<><path d="M4 7l5 5 4-4 7 8" /><path d="M3 17h4v-4" /></>) },
   ];
   return (
     <div className="bg-white border border-border-dark rounded-2xl p-5">

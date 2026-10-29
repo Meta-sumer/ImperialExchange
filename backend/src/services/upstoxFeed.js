@@ -179,7 +179,7 @@ async function _pollOnce() {
   if (!insts || Date.now() - _instCacheAt >= INST_TTL_MS) {
     insts = await Instrument.find({
       exchange: { $in: ['NSE', 'BSE', 'NFO', 'BFO', 'MCX'] }, isActive: true, marketDataEnabled: { $ne: false },
-    }).select('_id symbol exchange segment isin upstoxKey pricePrecision tickSize lastPrice').lean();
+    }).select('_id symbol exchange segment underlying isin upstoxKey pricePrecision tickSize lastPrice').lean();
     _instCache = insts;
     _instCacheAt = Date.now();
   }

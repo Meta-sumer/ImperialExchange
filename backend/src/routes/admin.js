@@ -27,6 +27,11 @@ router.use((req, res, next) => {
   return next(new AppError('This module is disabled for your account by the Super Admin.', 403, 'MODULE_FORBIDDEN'));
 });
 
+// ── Credit transactions (deposits/withdrawals on credit) and the deposit
+//    bank-account pool. Each lives in its own router file. ──
+router.use('/credit', require('./credit'));
+router.use('/bank-accounts', requireRole(ROLES.SUPER_ADMIN), require('./bankAccounts'));
+
 // ── Admin Access Control (Super Admin only) ──
 router.get('/admin-access/meta', aac.meta);
 router.get('/admin-access', aac.matrix);

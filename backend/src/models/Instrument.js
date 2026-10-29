@@ -29,6 +29,9 @@ const instrumentSchema = new mongoose.Schema(
     // Upstox instrument_key for F&O contracts (NSE_FO|<token>) — lets the live
     // feed pull the REAL futures/option price instead of a spot-proxy/intrinsic.
     upstoxKey: { type: String, default: null },
+    // Index rows (NIFTY, BANKNIFTY, SENSEX…): the benchmark key the live feeds
+    // price them by (yahooFeed INDEX_YH / upstoxFeed INDEX_UP). Null otherwise.
+    underlying: { type: String, default: null },
 
     // Trading config
     isActive: { type: Boolean, default: true },
