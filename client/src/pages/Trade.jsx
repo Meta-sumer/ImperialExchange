@@ -280,6 +280,8 @@ export default function Trade() {
   const [openOrders, setOpenOrders] = useState([]);
   const [positions, setPositions] = useState([]);
   const [closedTrades, setClosedTrades] = useState([]);
+  // Closed trades on the CHART symbol only — feeds the entry/exit markers.
+  const [symbolClosedTrades, setSymbolClosedTrades] = useState([]);
   // Orders the platform refused. They never reach Pending or Closed, so
   // without their own list they were invisible to the person who placed them.
   const [rejectedOrders, setRejectedOrders] = useState([]);
@@ -793,6 +795,20 @@ export default function Trade() {
   // of painting the previous account's Open/Pending/Closed rows.
   const accountIdRef = useRef(null);
   useEffect(() => { accountIdRef.current = account?._id || null; }, [account?._id]);
+
+  // Closed trades for the chart symbol. The Closed tab list below is capped at
+  // the latest 50 across every symbol, which misses older (or admin-backdated)
+  // trades on the symbol being charted, so the markers get their own fetch —
+  // re-run when the symbol/account changes or a new close lands.
+  const latestClosedId = closedTrades[0]?._id || null;
+  useEffect(() => {
+    let on = true;
+    const accId = account?._id || null;
+    api.get('/trading/positions/history', { params: { ...(accId ? { accountId: accId } : {}), symbol, limit: 200, summary: 0 } })
+      .then((r) => { if (on) setSymbolClosedTrades(r.data?.data?.items || []); })
+      .catch(() => { /* markers are decorative — never surface this */ });
+    return () => { on = false; };
+  }, [symbol, account?._id, latestClosedId]);
 
   const refresh = async () => {
     const accId = account?._id || null;
@@ -1777,6 +1793,19 @@ export default function Trade() {
               icon={
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M3 3v18h18" /><rect x="6" y="13" width="3" height="5" /><rect x="11" y="9" width="3" height="9" /><rect x="16" y="6" width="3" height="12" />
+                </svg>
+              }
+            />
+            <HeaderToggle
+              active={showOnChart.trades}
+              onClick={() => setTradeSetting('showOnChart.trades', !showOnChart.trades)}
+              label="Trades"
+              title="Show entry / exit markers for your trades on the chart"
+              accent="sky"
+              icon={
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M7 20V9" /><path d="M4 12l3-3 3 3" />
+                  <path d="M17 4v11" /><path d="M14 12l3 3 3-3" />
                 </svg>
               }
             />
@@ -2987,6 +3016,11 @@ export default function Trade() {
                   showPositions={tradeSettings.showOnChart.positions}
                   showTpSl={tradeSettings.showOnChart.tpsl}
                   showStopLimit={tradeSettings.showOnChart.stopLimit}
+                  /* Entry / exit markers: raw open positions (all symbols, the
+                     chart filters) + closed trades fetched for this symbol. */
+                  openTrades={tradeSettings.showOnChart.trades ? positionsWithLivePnl : []}
+                  closedTrades={tradeSettings.showOnChart.trades ? symbolClosedTrades : []}
+                  showTradeMarkers={tradeSettings.showOnChart.trades}
                   positionsCount={positionsWithLivePnl.filter((p) => p.symbol === symbol).length}
                   ordersCount={openOrders.filter((o) => o.symbol === symbol).length}
                   openPositionsCount={positions.length}
@@ -4044,6 +4078,10 @@ function HeaderToggle({ active, onClick, label, title, icon, accent = 'emerald' 
     amber: {
       on:  'bg-amber-500 text-white border-amber-600 shadow-[0_1px_3px_rgba(245,158,11,0.5)]',
       dot: 'bg-amber-400 ring-amber-200',
+    },
+    sky: {
+      on:  'bg-sky-500 text-white border-sky-600 shadow-[0_1px_3px_rgba(14,165,233,0.5)]',
+      dot: 'bg-sky-400 ring-sky-200',
     },
   };
   const cfg = accentMap[accent] || accentMap.emerald;

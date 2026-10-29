@@ -5,6 +5,7 @@ import { fmtNum, fmtMoney, fmtDate } from '../utils/format';
 import { useAuthStore } from '../store/auth';
 import { useConfirm } from '../components/ConfirmProvider';
 import PageHero from '../components/PageHero';
+import { ManualTradeModal, EditTradeModal } from '../components/TradeModals';
 
 /**
  * Orders Management — institutional dealing-desk console.
@@ -102,6 +103,8 @@ export default function Orders() {
   const [commentModal, setCommentModal] = useState(null);
   const [pendingModal, setPendingModal] = useState(null); // order row
   const [cancelReasonModal, setCancelReasonModal] = useState(null); // order row
+  const [manualModal, setManualModal] = useState(false);        // book a backdated trade for a user
+  const [editModal, setEditModal] = useState(null);             // position row (open or closed) to edit
 
   const busyRef = useRef(false);
 
@@ -244,6 +247,11 @@ export default function Orders() {
           : 'Monitor your users’ trading activity. You can adjust SL/TP; force-close and book transfers are restricted.'}
         actions={(
           <div className="flex items-center gap-2">
+            {canManage && (
+              <button onClick={() => setManualModal(true)} className="btn-primary text-xs" title="Book a trade into a user's account at a past date/time">
+                + Manual Trade
+              </button>
+            )}
             <button onClick={() => setLive((v) => !v)}
               className={`text-xs font-bold px-3 py-2 rounded-lg border transition-colors ${live ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-400' : 'border-border-dark text-text-secondary hover:text-white'}`}>
               <span className={`inline-block w-2 h-2 rounded-full mr-1.5 align-middle ${live ? 'bg-emerald-400 animate-pulse' : 'bg-text-muted'}`} />
@@ -327,7 +335,7 @@ export default function Orders() {
                     onView={() => setDrawer({ kind: r.kind, id: r._id })}
                     onSltp={() => setSltpModal(r)} onComment={() => setCommentModal(r)} onClose={() => doForceClose(r)}
                     onMove={(b) => doMoveBook(r, b)} onCancelWithReason={() => setCancelReasonModal(r)} onExecute={() => doForceExecute(r)}
-                    onModifyPending={() => setPendingModal(r)} />
+                    onModifyPending={() => setPendingModal(r)} onEdit={() => setEditModal(r)} />
                 ))}
               </tbody>
             </table>
@@ -349,6 +357,8 @@ export default function Orders() {
       {commentModal && <CommentModal row={commentModal} onClose={() => setCommentModal(null)} onSaved={() => { setCommentModal(null); }} />}
       {pendingModal && <PendingModal row={pendingModal} onClose={() => setPendingModal(null)} onSaved={() => { setPendingModal(null); refreshAll(); }} />}
       {cancelReasonModal && <CancelReasonModal row={cancelReasonModal} onClose={() => setCancelReasonModal(null)} onDone={() => { setCancelReasonModal(null); refreshAll(); }} />}
+      {manualModal && <ManualTradeModal onClose={() => setManualModal(false)} onSaved={() => { setManualModal(false); refreshAll(); }} />}
+      {editModal && <EditTradeModal row={editModal} onClose={() => setEditModal(null)} onSaved={() => { setEditModal(null); refreshAll(); }} />}
     </div>
   );
 }
@@ -507,7 +517,7 @@ const COLUMNS = {
   ],
 };
 
-function Row({ tab, r, canManage, selected, onSel, onView, onSltp, onComment, onClose, onMove, onCancelWithReason, onExecute, onModifyPending }) {
+function Row({ tab, r, canManage, selected, onSel, onView, onSltp, onComment, onClose, onMove, onCancelWithReason, onExecute, onModifyPending, onEdit }) {
   const price = (v) => (v == null ? '—' : fmtNum(v, 5));
   const charge = (v) => (Number(v) ? <span className="text-text-secondary">{signed(-Math.abs(Number(v)))}</span> : '—');
   // A trade's single fee belongs to ONE group (by type): commission-type →
@@ -582,6 +592,7 @@ function Row({ tab, r, canManage, selected, onSel, onView, onSltp, onComment, on
           {tab === 'open' && <>
             <button onClick={onSltp} className="btn-ghost text-[11px] px-2 py-1" title="Modify SL/TP">SL/TP</button>
             {canManage && <>
+              <button onClick={onEdit} className="btn-ghost text-[11px] px-2 py-1" title="Edit trade (entry price, open time, size, side, leverage…)">Edit</button>
               <button onClick={onClose} className="text-[11px] px-2 py-1 rounded text-bear hover:bg-bear/10" title="Force close">Close</button>
               <BookMenu onMove={onMove} current={r.book} />
               <button onClick={onComment} className="btn-ghost text-[11px] px-2 py-1" title="Internal comment">💬</button>
@@ -595,6 +606,9 @@ function Row({ tab, r, canManage, selected, onSel, onView, onSltp, onComment, on
           {tab === 'cancelled' && canManage && <>
             <button onClick={onView} className="btn-ghost text-[11px] px-2 py-1" title="View details">View</button>
           </>}
+          {tab === 'closed' && canManage && (
+            <button onClick={onEdit} className="btn-ghost text-[11px] px-2 py-1" title="Edit trade (prices, times, size, side…)">Edit</button>
+          )}
         </div>
       </td>
     </tr>
