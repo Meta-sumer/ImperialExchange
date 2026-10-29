@@ -50,6 +50,10 @@ router.get('/closed', c.closedOrders);
 router.get('/risk', c.risk);
 router.get('/detail/:kind/:id', c.detail);
 
+/* ── Manual / backdated trades (manage only) ── */
+router.post('/manual-trade', c.manualTrade);          // book a trade for a user at a past date/time
+router.post('/positions/:id/edit', c.editTrade);      // edit price / time / size / side … of any trade
+
 /* ── Position actions ── */
 router.post('/positions/:id/modify', c.modifySLTP);   // SL/TP — managers allowed
 router.post('/positions/:id/close', c.forceClose);    // manage only

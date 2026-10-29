@@ -25,7 +25,9 @@ const walletService = require('../services/walletService');
 const { sendSuccess, asyncHandler, AppError } = require('../utils/errors');
 const { applyDateRange } = require('../utils/dateRange');
 const { ORDER_TYPE, ORDER_STATUS, POSITION_STATUS, ROLES, ACCOUNT_TYPES } = require('../config/constants');
-const { gt, mul, div, sub } = require('../utils/decimal');
+const { gt, mul, div, sub, D } = require('../utils/decimal');
+const { ticketShort } = require('../utils/ticket');
+const { marginFor, realizedPnlFor, netOf, checkTradeTimes } = require('../utils/manualTradeMath');
 
 /* ────────────────────────── helpers ────────────────────────── */
 
@@ -1047,9 +1049,301 @@ async function modifySLTPOne(req, id, stopLoss, takeProfit) {
   await audit(req, 'ADMIN_MODIFY_SLTP', p._id, { symbol: p.symbol, bulk: true });
 }
 
+/* ────────────────────────── MANUAL / BACKDATED TRADES ────────────────────────── */
+//
+// An admin can book a trade straight into a user's account — on any script, at
+// any past date/time — and edit the facts of any existing trade (entry price,
+// open time, size, side, leverage, SL/TP, commission, and for closed trades the
+// close price/time). The documents written mirror what the matching engine
+// writes for a real fill (Order FILLED → Trade → Position), so the trade shows
+// up everywhere a real one does: the user's chart, Trade History, the admin
+// Orders tabs, volume reports and the audit trail. Wallet effects go through
+// the same services a real fill uses (margin lock for OPEN, settlement for
+// CLOSED, balance adjustment for edits), so the ledger stays consistent. The
+// ledger rows carry "now" as their timestamp (it is immutable); the Position
+// carries the backdated open / close times.
+
+const parseDec = (v, name, { positive = true, optional = false } = {}) => {
+  if (v == null || v === '') {
+    if (optional) return null;
+    throw new AppError(`${name} is required`, 400);
+  }
+  let d;
+  try { d = D(v); } catch (_) { throw new AppError(`${name} must be a number`, 400); }
+  if (!d.isFinite()) throw new AppError(`${name} must be a number`, 400);
+  if (positive ? d.lte(0) : d.lt(0)) {
+    throw new AppError(`${name} must be ${positive ? 'greater than' : 'at least'} 0`, 400);
+  }
+  return d.toString();
+};
+
+const parseWhen = (v, name) => {
+  if (v == null || v === '') return null;
+  const d = new Date(v);
+  if (Number.isNaN(d.getTime())) throw new AppError(`${name} is not a valid date/time`, 400);
+  return d;
+};
+
+const parseLeverage = (v, fallback) => {
+  const lev = v == null || v === '' ? Number(fallback) || 1 : Number(v);
+  if (!Number.isFinite(lev) || lev < 1) throw new AppError('leverage must be 1 or more', 400);
+  return lev;
+};
+
+const tradeSnapshot = (p) => ({
+  status: p.status, side: p.side, quantity: p.quantity, closedQuantity: p.closedQuantity,
+  entryPrice: p.entryPrice, leverage: p.leverage, margin: p.margin,
+  stopLoss: p.stopLoss ?? null, takeProfit: p.takeProfit ?? null, commission: p.commission,
+  openedAt: p.openedAt, closePrice: p.closePrice ?? null, closedAt: p.closedAt ?? null,
+  realizedPnl: p.realizedPnl, settlementAmount: p.settlementAmount ?? null,
+});
+
+const isInsufficient = (err) => !!err && (
+  err.code === 'INSUFFICIENT_FUNDS' || err.errorCode === 'INSUFFICIENT_FUNDS' || /insufficient/i.test(err.message || '')
+);
+
+// Nudge the user's open terminal so the positions list / chart / wallet refetch.
+const notifyTradeChange = (userId, accountId, positionId) => {
+  try {
+    const b = require('../websocket/server');
+    b.notifyUser(String(userId), 'positions', { reason: 'ADMIN_TRADE_CHANGE', accountId: accountId ? String(accountId) : null, positionId: String(positionId) });
+    b.notifyUser(String(userId), 'wallet', { reason: 'ADMIN_TRADE_CHANGE', positionId: String(positionId) });
+  } catch (_) { /* best-effort */ }
+};
+
+// POST /order-management/manual-trade — book a trade for a user at a past time.
+const manualTrade = asyncHandler(async (req, res) => {
+  requireManage(req);
+  const b = req.body || {};
+  const userId = String(b.userId || '');
+  const accountId = String(b.accountId || '');
+  if (!mongoose.isValidObjectId(userId) || !mongoose.isValidObjectId(accountId)) {
+    throw new AppError('userId and accountId are required', 400);
+  }
+  const user = await User.findById(userId).select('_id').lean();
+  if (!user) throw new AppError('User not found', 404);
+  await assertInScope(req, user._id);
+  const account = await TradingAccount.findOne({ _id: accountId, userId: user._id }).lean();
+  if (!account) throw new AppError('Account does not belong to this user', 400);
+
+  const symbol = String(b.symbol || '').trim().toUpperCase();
+  if (!symbol) throw new AppError('symbol is required', 400);
+  const instrument = await Instrument.findOne({ symbol }).select('_id symbol').lean();
+  if (!instrument) throw new AppError(`Instrument ${symbol} not found`, 404);
+
+  const side = String(b.side || '').toUpperCase();
+  if (!['BUY', 'SELL'].includes(side)) throw new AppError('side must be BUY or SELL', 400);
+  const status = String(b.status || 'CLOSED').toUpperCase();
+  if (!['OPEN', 'CLOSED'].includes(status)) throw new AppError('status must be OPEN or CLOSED', 400);
+
+  const quantity = parseDec(b.quantity, 'quantity');
+  const entryPrice = parseDec(b.entryPrice, 'entryPrice');
+  const leverage = parseLeverage(b.leverage, account.leverage);
+  const commission = parseDec(b.commission, 'commission', { positive: false, optional: true }) || '0';
+  const stopLoss = parseDec(b.stopLoss, 'stopLoss', { optional: true });
+  const takeProfit = parseDec(b.takeProfit, 'takeProfit', { optional: true });
+  const productType = ['DELIVERY', 'INTRADAY', 'NORMAL'].includes(b.productType) ? b.productType : 'NORMAL';
+  const note = String(b.note || '').trim().slice(0, 500);
+
+  const openedAt = parseWhen(b.openedAt, 'openedAt');
+  if (!openedAt) throw new AppError('openedAt is required', 400);
+  const closedAt = status === 'CLOSED' ? parseWhen(b.closedAt, 'closedAt') : null;
+  if (status === 'CLOSED' && !closedAt) throw new AppError('closedAt is required for a closed trade', 400);
+  const timeErr = checkTradeTimes({ openedAt, closedAt, now: new Date() });
+  if (timeErr) throw new AppError(timeErr, 400);
+  const closePrice = status === 'CLOSED' ? parseDec(b.closePrice, 'closePrice') : null;
+
+  const currency = account.baseCurrency || 'USD';
+  const positionSide = side === 'BUY' ? 'LONG' : 'SHORT';
+  const margin = marginFor(quantity, entryPrice, leverage);
+
+  // The same trio a real fill writes: Order (FILLED) → Trade (the fill) → Position.
+  const order = await Order.create({
+    userId: user._id, accountId: account._id, instrumentId: instrument._id, symbol, side, positionSide,
+    type: ORDER_TYPE.MARKET, quantity, filledQuantity: quantity, avgFillPrice: entryPrice,
+    leverage, productType, status: ORDER_STATUS.FILLED, routing: 'B_BOOK',
+    filledAt: openedAt, lockedMargin: status === 'OPEN' ? margin : '0',
+    ...(stopLoss ? { stopLoss } : {}), ...(takeProfit ? { takeProfit } : {}),
+  });
+  const trade = await Trade.create({
+    instrumentId: instrument._id, symbol,
+    buyOrderId: order._id, sellOrderId: order._id,
+    buyUserId: user._id, sellUserId: user._id,
+    buyAccountId: account._id, sellAccountId: account._id,
+    price: entryPrice, quantity, routing: 'B_BOOK', executedAt: openedAt,
+  });
+
+  let position;
+  try {
+    const base = {
+      userId: user._id, accountId: account._id, instrumentId: instrument._id, symbol, side, positionSide,
+      book: 'B_BOOK', entryPrice, leverage, productType, commission, openedAt,
+      ...(stopLoss ? { stopLoss } : {}), ...(takeProfit ? { takeProfit } : {}),
+    };
+    if (status === 'OPEN') {
+      // Reserve margin first — a user without enough free balance cannot carry
+      // the position, and the error says exactly how much is missing.
+      await walletService.lockMargin({
+        userId: user._id, accountId: account._id, currency, amount: margin, orderId: order._id,
+        note: `Margin locked: ${margin} · manual trade ${ticketShort(order._id)} by admin`,
+      });
+      try {
+        position = await Position.create({ ...base, quantity, closedQuantity: '0', margin, status: POSITION_STATUS.OPEN });
+      } catch (err) {
+        await walletService.releaseMargin({
+          userId: user._id, accountId: account._id, currency, amount: margin, orderId: order._id, note: 'Manual trade rolled back',
+        }).catch(() => {});
+        throw err;
+      }
+      try { require('../services/stopOutService').noteOpenSymbol(symbol); } catch (_) { /* the 5s sweep covers it */ }
+    } else {
+      const realizedPnl = realizedPnlFor(side, entryPrice, closePrice, quantity);
+      const settlementAmount = netOf(realizedPnl, commission);
+      position = await Position.create({
+        ...base, quantity: '0', closedQuantity: quantity, margin: '0',
+        closePrice, closedAt, closeReason: 'ADMIN', realizedPnl, settlementAmount,
+        status: POSITION_STATUS.CLOSED, settled: true, settledAt: closedAt,
+      });
+      // The balance moves by PnL − commission. No margin was ever locked (the
+      // trade is booked already closed), so there is nothing to release.
+      await walletService.settleTradeClose({
+        userId: user._id, accountId: account._id, currency, marginToRelease: '0',
+        pnl: realizedPnl, fee: commission, positionId: position._id, tradeId: trade._id,
+        dedupeKey: `MANUAL_TRADE:${position._id}`, symbol,
+        noteExtra: `manual trade by admin, backdated to ${openedAt.toISOString()}`,
+      });
+    }
+  } catch (err) {
+    await Promise.all([Order.deleteOne({ _id: order._id }), Trade.deleteOne({ _id: trade._id })]).catch(() => {});
+    throw err;
+  }
+
+  await audit(req, 'ADMIN_MANUAL_TRADE', position._id, {
+    userId: String(user._id), accountId: String(account._id), symbol, side, status, quantity, entryPrice,
+    openedAt, closePrice, closedAt, leverage, commission, stopLoss, takeProfit, margin: position.margin,
+    realizedPnl: position.realizedPnl, orderId: String(order._id), tradeId: String(trade._id), note,
+  });
+  notifyTradeChange(user._id, account._id, position._id);
+  sendSuccess(res, { position: position.toObject(), orderId: order._id, tradeId: trade._id }, 201);
+});
+
+// POST /order-management/positions/:id/edit — change the facts of any trade.
+const editTrade = asyncHandler(async (req, res) => {
+  requireManage(req);
+  const position = await Position.findById(req.params.id);
+  if (!position) throw new AppError('Position not found', 404);
+  await assertInScope(req, position.userId);
+  if (position.status === POSITION_STATUS.CLOSING) {
+    throw new AppError('Position is settling — try again in a moment', 409, 'ALREADY_SETTLING');
+  }
+  const isClosed = position.status === POSITION_STATUS.CLOSED;
+  const b = req.body || {};
+  const has = (k) => b[k] !== undefined;
+  const before = tradeSnapshot(position);
+
+  const side = has('side') ? String(b.side).toUpperCase() : position.side;
+  if (!['BUY', 'SELL'].includes(side)) throw new AppError('side must be BUY or SELL', 400);
+  const entryPrice = has('entryPrice') ? parseDec(b.entryPrice, 'entryPrice') : position.entryPrice;
+  const leverage = has('leverage') ? parseLeverage(b.leverage, position.leverage) : (position.leverage || 1);
+  const commission = has('commission')
+    ? (parseDec(b.commission, 'commission', { positive: false, optional: true }) || '0')
+    : (position.commission || '0');
+  const stopLoss = has('stopLoss') ? parseDec(b.stopLoss, 'stopLoss', { optional: true }) : (position.stopLoss ?? null);
+  const takeProfit = has('takeProfit') ? parseDec(b.takeProfit, 'takeProfit', { optional: true }) : (position.takeProfit ?? null);
+  const openedAt = has('openedAt') ? parseWhen(b.openedAt, 'openedAt') : position.openedAt;
+  if (!openedAt) throw new AppError('openedAt is required', 400);
+
+  let closedAt = position.closedAt || null;
+  let closePrice = position.closePrice || null;
+  if (isClosed) {
+    if (has('closedAt')) closedAt = parseWhen(b.closedAt, 'closedAt');
+    if (has('closePrice')) closePrice = parseDec(b.closePrice, 'closePrice');
+    if (!closedAt || !closePrice) throw new AppError('closePrice and closedAt are required on a closed trade', 400);
+  } else if (has('closedAt') || has('closePrice')) {
+    throw new AppError('closePrice / closedAt only apply to closed trades', 400);
+  }
+  const timeErr = checkTradeTimes({ openedAt, closedAt: isClosed ? closedAt : null, now: new Date() });
+  if (timeErr) throw new AppError(timeErr, 400);
+
+  // OPEN → the remaining size; CLOSED → the size that was closed.
+  const oldQty = isClosed
+    ? (gt(position.closedQuantity || '0', '0') ? position.closedQuantity : position.quantity)
+    : position.quantity;
+  const quantity = has('quantity') ? parseDec(b.quantity, 'quantity') : oldQty;
+
+  const account = await TradingAccount.findById(position.accountId).select('baseCurrency').lean();
+  const currency = account?.baseCurrency || 'USD';
+  const ticket = ticketShort(position._id);
+  const positionSide = side === 'BUY' ? 'LONG' : 'SHORT';
+  let wallet = { effect: 'NONE', amount: '0' };
+
+  if (!isClosed) {
+    // Margin follows size × price ÷ leverage; move the difference in or out of
+    // the wallet's locked amount so the free balance stays truthful.
+    const newMargin = marginFor(quantity, entryPrice, leverage);
+    const delta = D(newMargin).minus(D(position.margin || '0'));
+    if (delta.gt(0)) {
+      await walletService.lockMargin({
+        userId: position.userId, accountId: position.accountId, currency, amount: delta.toString(),
+        orderId: position._id, note: `Margin +${delta.toString()} · admin trade edit ${ticket}`,
+      });
+      wallet = { effect: 'MARGIN_LOCKED', amount: delta.toString() };
+    } else if (delta.lt(0)) {
+      await walletService.releaseMargin({
+        userId: position.userId, accountId: position.accountId, currency, amount: delta.abs().toString(),
+        positionId: position._id, note: `Margin -${delta.abs().toString()} · admin trade edit ${ticket}`,
+      });
+      wallet = { effect: 'MARGIN_RELEASED', amount: delta.abs().toString() };
+    }
+    position.set({ side, positionSide, quantity, entryPrice, leverage, margin: newMargin, commission, stopLoss, takeProfit, openedAt });
+  } else {
+    // A different net result moves the balance by the difference, as an
+    // ADJUSTMENT row that names the trade, so the ledger explains the jump.
+    const realizedPnl = realizedPnlFor(side, entryPrice, closePrice, quantity);
+    const oldNet = D(position.realizedPnl || '0').minus(D(position.commission || '0'));
+    const newNet = D(realizedPnl).minus(D(commission));
+    const delta = newNet.minus(oldNet);
+    const money = {
+      userId: position.userId, accountId: position.accountId, currency, type: 'ADJUSTMENT',
+      referenceType: 'position', referenceId: position._id,
+      note: `admin trade edit ${ticket} · net PnL ${oldNet.toString()} → ${newNet.toString()}`,
+    };
+    if (delta.gt(0)) {
+      await walletService.credit({ ...money, amount: delta.toString() });
+      wallet = { effect: 'CREDITED', amount: delta.toString() };
+    } else if (delta.lt(0)) {
+      try {
+        await walletService.debit({ ...money, amount: delta.abs().toString() });
+      } catch (err) {
+        if (isInsufficient(err)) {
+          throw new AppError(
+            `Wallet balance cannot absorb the ${delta.abs().toString()} ${currency} reduction this edit implies`,
+            400, 'INSUFFICIENT_FUNDS'
+          );
+        }
+        throw err;
+      }
+      wallet = { effect: 'DEBITED', amount: delta.abs().toString() };
+    }
+    position.set({
+      side, positionSide, quantity: '0', closedQuantity: quantity, entryPrice, leverage, commission,
+      stopLoss, takeProfit, openedAt, closePrice, closedAt, realizedPnl,
+      settlementAmount: newNet.toString(), settledAt: closedAt,
+    });
+  }
+  await position.save();
+
+  await audit(req, 'ADMIN_EDIT_TRADE', position._id, {
+    symbol: position.symbol, before, after: tradeSnapshot(position), wallet,
+  });
+  notifyTradeChange(position.userId, position.accountId, position._id);
+  sendSuccess(res, { position: position.toObject(), wallet });
+});
+
 module.exports = {
   accountTypes,
   summary, openOrders, pendingOrders, cancelledOrders, rejectedOrders, closedOrders, risk, detail,
   modifySLTP, forceClose, transferBook, addComment,
   cancelPending, forceExecute, modifyPending, bulk,
+  manualTrade, editTrade,
 };

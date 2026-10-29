@@ -12,6 +12,7 @@ const DEFAULTS = {
     hmr:            false,
     alerts:         true,   // price alerts are most-used → default on
     positions:      true,
+    trades:         true,   // entry / exit markers for open + closed trades (incl. admin-booked)
     tpsl:           true,   // TP / SL lines on open positions
     stopLimit:      true,   // pending STOP / LIMIT order lines
     calendar:       false,

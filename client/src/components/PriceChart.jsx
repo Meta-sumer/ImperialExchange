@@ -943,6 +943,12 @@ export default function PriceChart({
   livePrice,
   openOrders = [],
   positions = [],
+  // Entry / exit markers (time-anchored, unlike the price lines above):
+  //   openTrades   — raw open positions, any symbol (filtered here)
+  //   closedTrades — closed positions already scoped to this symbol
+  openTrades = [],
+  closedTrades = [],
+  showTradeMarkers = true,
   pendingPreview = null,
   orderPreview = null,   // { side, mode, entry, tp, sl } — live order-form preview
   pricePrecision = 2,
@@ -1438,6 +1444,66 @@ export default function PriceChart({
     return out;
   }, [candles, showSignals, showHmr, showCalendar, instrument, calendarFilters.high, calendarFilters.medium, calendarFilters.low, calendarFilters.lowest, _calNonce]);
 
+  // ── Trade markers — entry / exit arrows anchored to the bar nearest each
+  //    trade's open / close time, for open positions and closed history on this
+  //    symbol (admin-booked backdated trades included). Snapped to the loaded
+  //    candles; a trade older than the loaded range is dropped rather than
+  //    piled onto the first bar. Capped so a heavy account can't stall the chart.
+  const tradeMarkers = useMemo(() => {
+    if (!showTradeMarkers || !candles.length) return [];
+    const times = candles.map((c) => Number(c.time));
+    const first = times[0];
+    const last = times[times.length - 1];
+    const snap = (iso) => {
+      const t = Math.floor(new Date(iso).getTime() / 1000);
+      if (!Number.isFinite(t) || t < first) return null;
+      if (t >= last) return last;
+      let lo = 0, hi = times.length - 1;
+      while (lo < hi) { const mid = (lo + hi) >> 1; if (times[mid] < t) lo = mid + 1; else hi = mid; }
+      return times[lo];
+    };
+    const fmt = (v) => (v == null || v === '' ? '' : Number(v).toFixed(pricePrecision));
+    const qtyOf = (p) => (Number(p.closedQuantity) > 0 ? Number(p.closedQuantity) : Number(p.quantity)) || 0;
+    const entry = (p, id) => {
+      const time = snap(p.openedAt || p.createdAt);
+      if (time == null) return null;
+      const buy = p.side === 'BUY';
+      return {
+        id, time, position: buy ? 'belowBar' : 'aboveBar',
+        color: buy ? '#10B981' : '#EF4444', shape: buy ? 'arrowUp' : 'arrowDown',
+        text: `${buy ? 'B' : 'S'} ${qtyOf(p)} @ ${fmt(p.entryPrice)}`,
+      };
+    };
+    const out = [];
+    for (const p of (openTrades || [])) {
+      if (p.symbol !== symbol) continue;
+      const m = entry(p, `trade-open-${p._id}`); if (m) out.push(m);
+    }
+    for (const p of (closedTrades || [])) {
+      if (p.symbol !== symbol) continue;
+      const m = entry(p, `trade-in-${p._id}`); if (m) out.push(m);
+      const tOut = snap(p.closedAt);
+      if (tOut != null) {
+        const pnl = Number(p.realizedPnl) || 0;
+        out.push({
+          id: `trade-out-${p._id}`, time: tOut,
+          position: p.side === 'BUY' ? 'aboveBar' : 'belowBar',
+          color: pnl >= 0 ? '#10B981' : '#EF4444', shape: 'square',
+          text: `X @ ${fmt(p.closePrice)} (${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)})`,
+        });
+      }
+    }
+    out.sort((a, b) => a.time - b.time);
+    return out.length > 500 ? out.slice(out.length - 500) : out;
+  }, [showTradeMarkers, candles, openTrades, closedTrades, symbol, pricePrecision]);
+
+  // Overlay markers + trade markers share the one series-marker slot; the
+  // drawings hook sorts the merged list by time (lightweight-charts requires it).
+  const chartMarkers = useMemo(
+    () => (tradeMarkers.length ? [...externalMarkers, ...tradeMarkers] : externalMarkers),
+    [externalMarkers, tradeMarkers]
+  );
+
   // ── Next economic event (for the on-chart "next event" chip) ──────────
   // Independent of the loaded candle range so it shows even on low timeframes
   // where no marker falls in view. A 30s clock (only while the calendar is on)
@@ -1471,7 +1537,7 @@ export default function PriceChart({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showCalendar, instrument, calendarFilters.high, calendarFilters.medium, calendarFilters.low, calendarFilters.lowest, _calNonce, _calClock]);
 
-  const drawingControls = useChartDrawings({ chartRef, candleSeriesRef, containerRef, symbol, externalMarkers, candles, pricePrecision });
+  const drawingControls = useChartDrawings({ chartRef, candleSeriesRef, containerRef, symbol, externalMarkers: chartMarkers, candles, pricePrecision });
   // Mirror into a ref so the once-bound container handlers (contextmenu /
   // dblclick) always read the latest drawing controls without re-binding.
   const dcRef = useRef(drawingControls);

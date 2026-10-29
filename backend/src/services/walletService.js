@@ -344,6 +344,7 @@ const releaseMargin = async ({ userId, accountId, currency, amount, orderId, pos
  */
 const settleTradeClose = async ({
   userId, accountId, currency, marginToRelease, pnl, fee, positionId, tradeId, dedupeKey, symbol,
+  noteExtra, // optional trailing note fragment (e.g. "manual trade by admin, backdated to …")
 }) => {
   if (!dedupeKey) {
     dedupeKey = `POSITION_SETTLE:${positionId}`;
@@ -406,7 +407,7 @@ const settleTradeClose = async ({
       // id on it at all — the FEE row beneath it had one, so a close could not
       // be matched back to its position by eye. It leads rather than trails
       // because the rest of the line wraps to several rows in the table.
-      note: `order ${ticketShort(positionId)} · PnL ${pnlD.toString()} · margin released ${marginD.toString()} · fee ${feeD.toString()} · settled ${settlementAmount}${willFloor ? ` · NBP: broker absorbed ${absorbed} (balance floored to 0)` : ''}`,
+      note: `order ${ticketShort(positionId)} · PnL ${pnlD.toString()} · margin released ${marginD.toString()} · fee ${feeD.toString()} · settled ${settlementAmount}${willFloor ? ` · NBP: broker absorbed ${absorbed} (balance floored to 0)` : ''}${noteExtra ? ` · ${noteExtra}` : ''}`,
     });
   } catch (err) {
     if (_isDuplicateKeyError(err)) {
