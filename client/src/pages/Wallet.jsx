@@ -50,6 +50,9 @@ export default function Wallet() {
   const [withdrawals, setWithdrawals] = useState([]);
   const [ledger, setLedger] = useState([]);
   const [subscriptions, setSubscriptions] = useState([]);
+  // Credit transactions (deposits/withdrawals an admin processed on credit).
+  const [creditTx, setCreditTx] = useState([]);
+  const [creditSummary, setCreditSummary] = useState(null);
   const [openPositions, setOpenPositions] = useState([]);
   // Map of symbol → live last price, used to mark-to-market open positions
   // and surface the unrealized P&L right inside the Wallet view (so users
@@ -127,7 +130,7 @@ export default function Wallet() {
     // Settled-with-fallback so a single slow/failing endpoint doesn't blank
     // the entire page. Each tab degrades to "no data" rather than the whole
     // wallet being unusable.
-    const [b, a, d, w, l, p, s, bn] = await Promise.allSettled([
+    const [b, a, d, w, l, p, s, bn, cr] = await Promise.allSettled([
       api.get('/wallet/balances'),
       api.get('/user/accounts'),
       api.get('/wallet/deposits'),
@@ -139,6 +142,8 @@ export default function Wallet() {
       // but bonus movements were never loaded here at all, so they could not show
       // up in Transaction History no matter how it was filtered.
       api.get('/bonus-wallet/history', { params: { limit: 100 } }),
+      // Credit transactions + the user's outstanding credit figures.
+      api.get('/wallet/credit'),
     ]);
     if (b.status === 'fulfilled') setBalances(b.value.data.data);
     if (a.status === 'fulfilled') setAccounts(a.value.data.data);
@@ -147,6 +152,11 @@ export default function Wallet() {
     if (l.status === 'fulfilled') setLedger(l.value.data.data);
     if (s.status === 'fulfilled') setSubscriptions(s.value.data.data || []);
     if (bn.status === 'fulfilled') setBonusTx(bn.value.data.data || []);
+    if (cr.status === 'fulfilled') {
+      const v = cr.value.data.data || {};
+      setCreditTx(v.items || []);
+      setCreditSummary(v.summary || null);
+    }
     if (p.status === 'fulfilled') {
       const positions = p.value.data.data || [];
       setOpenPositions(positions);
@@ -462,6 +472,7 @@ export default function Wallet() {
 
       {/* ── CENTER — wizard / view content ──────────────────────────── */}
       <main className="col-span-12 lg:col-span-10 xl:col-span-10 space-y-5 min-w-0">
+        <CreditOutstandingCard summary={creditSummary} usd={usd} usdSub={usdSub} />
         {view === 'grow' ? (
           <InlineDepositFlow
             accounts={accounts}
@@ -477,7 +488,7 @@ export default function Wallet() {
         ) : view === 'transfer' ? (
           <TransferView accounts={accounts} balances={balances} onDone={load} />
         ) : view === 'history' ? (
-          <TransactionHistory deposits={deposits} withdrawals={withdrawals} ledger={ledger} subscriptions={subscriptions} bonusTx={bonusTx} accounts={accounts} loading={loading} />
+          <TransactionHistory deposits={deposits} withdrawals={withdrawals} ledger={ledger} subscriptions={subscriptions} bonusTx={bonusTx} creditTx={creditTx} accounts={accounts} loading={loading} />
         ) : view === 'details' ? (
           <AccountDetailsView user={user} accounts={accounts} balances={balances} fxRate={fxRate} onRefresh={load} setView={setView} />
         ) : (
@@ -764,6 +775,25 @@ function Stat({ label, value, secondary, hint, color, emphasis }) {
     </div>
   );
 }
+
+/**
+ * Outstanding credit — shown only while the user has unsettled credit
+ * transactions (an admin processed a deposit or withdrawal "on credit").
+ * Receivable = the user still owes the platform; payable = due to the user.
+ */
+function CreditOutstandingCard({ summary, usd, usdSub }) {
+  if (!summary) return null;
+  const owe = Number(summary.outstandingReceivable || 0);
+  const due = Number(summary.outstandingPayable || 0);
+  if (owe <= 0 && due <= 0) return null;
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      {owe > 0 && <MetricCard tint="#D97706" icon={CreditGlyph} label="Credit to settle" value={usd(owe)} secondary={usdSub(owe)} sub="You owe — deposit received on credit" valueColor="#B45309" />}
+      {due > 0 && <MetricCard tint="#16A34A" icon={CreditGlyph} label="Credit due to you" value={usd(due)} secondary={usdSub(due)} sub="Withdrawal on credit, payout pending" valueColor="#15803D" />}
+    </div>
+  );
+}
+const CreditGlyph = () => <S><rect x="2" y="5" width="20" height="14" rx="2" /><path d="M2 10h20" /><path d="M7 15h4" /><path d="M16 13v4M14 15h4" /></S>;
 
 function MetricCard({ tint, icon: Icon, label, value, secondary, sub, valueColor }) {
   return (

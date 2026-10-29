@@ -18,7 +18,7 @@ const ADMIN_PERMISSIONS = [
   { key: 'ACCOUNTS',         label: 'Accounts',          route: '/accounts',             apiPrefix: ['/accounts'] },
   { key: 'INSTRUMENTS',      label: 'Instruments',       route: '/instruments',          apiPrefix: ['/instruments', '/leverage-overrides', '/volume-overrides', '/recommended-markets'] },
   { key: 'MARKET_EXPOSURE',  label: 'Market Exposure',   route: '/market-exposure',      apiPrefix: ['/exposure'] },
-  { key: 'DEPOSITS',         label: 'Deposits',          route: '/deposits',             apiPrefix: ['/deposits'] },
+  { key: 'DEPOSITS',         label: 'Deposits',          route: '/deposits',             apiPrefix: ['/deposits', '/credit'] },
   { key: 'WITHDRAWALS',      label: 'Withdrawals',       route: '/withdrawals',          apiPrefix: ['/withdrawals'] },
   { key: 'FINANCE',          label: 'Finance Dept',      route: '/finance',              apiPrefix: [] },
   { key: 'PLANS',            label: 'Plans',             route: '/plans',                apiPrefix: [] },
