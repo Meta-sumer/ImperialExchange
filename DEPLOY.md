@@ -1,4 +1,4 @@
-# Manual EC2 Deployment — trading.metawebdevelopment.cloud
+# Manual EC2 Deployment — imperialexchange.in
 
 ## Architecture
 
@@ -8,8 +8,8 @@ Internet  →  EC2 :80/:443  →  Host nginx (TLS)  →  Docker containers
                                                     ├─ tp-client   127.0.0.1:8081
                                                     └─ tp-admin    127.0.0.1:8082
 
-Single domain (Cloudflare/registrar A record → 35.154.225.175):
-  trading.metawebdevelopment.cloud
+Single domain (Cloudflare/registrar A record → 179.197.249.237):
+  imperialexchange.in
     /api/*    → backend  (Node API)
     /ws       → backend  (WebSocket)
     /admin/*  → admin SPA
@@ -23,7 +23,7 @@ Single domain (Cloudflare/registrar A record → 35.154.225.175):
 SSH into your Ubuntu EC2:
 
 ```bash
-ssh -i ~/your-key.pem ubuntu@35.154.225.175
+ssh -i ~/your-key.pem ubuntu@179.197.249.237
 
 # Update
 sudo apt update && sudo apt upgrade -y
@@ -45,13 +45,28 @@ Security group on EC2 → inbound: **22 (SSH)**, **80 (HTTP)**, **443 (HTTPS)**.
 
 ```bash
 cd ~
-git clone https://github.com/<you>/trading-platform.git
-cd "trading-platform  last and"   # or whatever your folder name is
+git clone https://github.com/Meta-sumer/ImperialExchange.git
+cd ImperialExchange
 ```
 
 ---
 
-## 3. Backend env file
+## 3. Env files
+
+### Root `.env` (read by docker-compose.yml, gitignored)
+
+```bash
+cat > .env <<EOF
+APP_DOMAIN=imperialexchange.in
+MONGO_INITDB_ROOT_USERNAME=tpadmin
+MONGO_INITDB_ROOT_PASSWORD=$(openssl rand -hex 24)
+EOF
+cat .env   # confirm the password got expanded
+```
+
+`APP_DOMAIN` is baked into the client and admin bundles as the API/WebSocket origin at build time, so it must be the exact public host. The Mongo creds initialise the `mongo` container on first boot.
+
+### Backend `.env`
 
 ```bash
 cp backend/.env.example backend/.env
@@ -63,15 +78,16 @@ Set at minimum:
 NODE_ENV=production
 PORT=5000
 
-# Atlas connection string
-MONGODB_URI=mongodb+srv://USER:PASS@cluster.mongodb.net/trading_platform?retryWrites=true&w=majority
+# Mongo runs as the `mongo` container (docker-compose.yml). USER/PASS must match
+# MONGO_INITDB_ROOT_USERNAME / MONGO_INITDB_ROOT_PASSWORD from the root .env.
+MONGODB_URI=mongodb://USER:PASS@mongo:27017/trading_platform?authSource=admin
 
 # Generate fresh: openssl rand -hex 64
 JWT_ACCESS_SECRET=...
 JWT_REFRESH_SECRET=...
 
 # CORS — same-origin under path-based routing, so just the one host
-CORS_ORIGINS=https://trading.metawebdevelopment.cloud
+CORS_ORIGINS=https://imperialexchange.in
 
 # HTTPS posture (host nginx terminates TLS, but containers see http internally — set true ONLY after certbot is done)
 HTTPS_ENABLED=true
@@ -93,9 +109,9 @@ Save + exit.
 ## 4. Build + start containers
 
 ```bash
-cd ~/trading-platform\ \ last\ and/   # adjust path
+cd ~/ImperialExchange
 docker compose up -d --build
-docker compose ps     # all three should say "Up"
+docker compose ps     # mongo, backend, client, admin should all say "Up"
 docker compose logs -f backend
 ```
 
@@ -107,11 +123,11 @@ Backend logs should show `MongoDB connected` + `Server listening { port: 5000 }`
 
 ```bash
 # Copy the single vhost into nginx's sites-available
-sudo cp nginx/trading.metawebdevelopment.cloud.conf \
-        /etc/nginx/sites-available/trading.metawebdevelopment.cloud
+sudo cp nginx/imperialexchange.in.conf \
+        /etc/nginx/sites-available/imperialexchange.in
 
 # Enable
-sudo ln -sf /etc/nginx/sites-available/trading.metawebdevelopment.cloud \
+sudo ln -sf /etc/nginx/sites-available/imperialexchange.in \
             /etc/nginx/sites-enabled/
 
 # Drop the default catch-all (causes hostname-matching conflicts)
@@ -124,18 +140,18 @@ sudo systemctl reload nginx
 
 Smoke test — HTTP (before SSL):
 ```bash
-curl -H 'Host: trading.metawebdevelopment.cloud' http://localhost/api/health
+curl -H 'Host: imperialexchange.in' http://localhost/api/health
 # {"status":"ok",...}
 
-curl -I -H 'Host: trading.metawebdevelopment.cloud' http://localhost/
+curl -I -H 'Host: imperialexchange.in' http://localhost/
 # HTTP/1.1 200 OK (client SPA index)
 ```
 
 If DNS is propagated, also test from your laptop:
 ```bash
-curl http://trading.metawebdevelopment.cloud/api/health
-curl http://trading.metawebdevelopment.cloud/
-curl http://trading.metawebdevelopment.cloud/admin/
+curl http://imperialexchange.in/api/health
+curl http://imperialexchange.in/
+curl http://imperialexchange.in/admin/
 ```
 
 ---
@@ -144,7 +160,7 @@ curl http://trading.metawebdevelopment.cloud/admin/
 
 ```bash
 sudo certbot --nginx \
-  -d trading.metawebdevelopment.cloud \
+  -d imperialexchange.in -d www.imperialexchange.in \
   --redirect --agree-tos -m you@yourmail.com --no-eff-email
 ```
 
@@ -177,15 +193,16 @@ docker compose restart backend
 # Production-safe seed (instruments + plans + global routing setting)
 docker compose exec backend node src/utils/seedProd.js
 
-# Sign up a real account via https://trading.metawebdevelopment.cloud, then promote
-# yourself to SUPER_ADMIN in Atlas (via mongosh on your laptop or Atlas Data Explorer):
+# Sign up a real account via https://imperialexchange.in, then promote
+# yourself to SUPER_ADMIN via mongosh inside the mongo container:
+docker compose exec mongo mongosh -u USER -p PASS --authenticationDatabase admin trading_platform
 db.users.updateOne(
   { email: 'you@yourmail.com' },
   { $set: { role: 'SUPER_ADMIN', isActive: true, kycStatus: 'APPROVED', isEmailVerified: true } }
 )
 ```
 
-Visit https://trading.metawebdevelopment.cloud/admin → login → Profile → **Enable 2FA immediately** (production has `ADMIN_REQUIRE_2FA=true`; otherwise next login is locked).
+Visit https://imperialexchange.in/admin → login → Profile → **Enable 2FA immediately** (production has `ADMIN_REQUIRE_2FA=true`; otherwise next login is locked).
 
 ---
 
@@ -194,7 +211,7 @@ Visit https://trading.metawebdevelopment.cloud/admin → login → Profile → *
 Push to GitHub on your laptop. On EC2:
 
 ```bash
-cd ~/trading-platform\ \ last\ and/
+cd ~/ImperialExchange
 ./deploy.sh
 ```
 
@@ -258,7 +275,7 @@ curl http://127.0.0.1:5000/api/health
 curl http://127.0.0.1:5000/api/ready
 
 # WebSocket smoke (needs wscat: npm i -g wscat)
-wscat -c wss://trading.metawebdevelopment.cloud/ws
+wscat -c wss://imperialexchange.in/ws
 ```
 
 ---
@@ -267,11 +284,11 @@ wscat -c wss://trading.metawebdevelopment.cloud/ws
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| `connect ECONNREFUSED 127.0.0.1:27017` in backend logs | `MONGODB_URI` still points at localhost | Edit `backend/.env` to Atlas URI; `docker compose restart backend` |
+| `connect ECONNREFUSED 127.0.0.1:27017` in backend logs | `MONGODB_URI` still points at localhost | Edit `backend/.env` to the `mongodb://USER:PASS@mongo:27017/...` URI; `docker compose restart backend` |
 | Browser 404 on `/trade` refresh | SPA fallback missing | Verify container nginx config has `try_files $uri /index.html;` — should already be in place |
-| CORS error in browser console | `CORS_ORIGINS` missing your domain | Add exact `https://trading.metawebdevelopment.cloud` to `backend/.env`, restart |
+| CORS error in browser console | `CORS_ORIGINS` missing your domain | Add exact `https://imperialexchange.in` to `backend/.env`, restart |
 | Admin assets 404 under /admin/ | `VITE_BASE` not `/admin/` at build time | Rebuild admin image with `--build-arg VITE_BASE=/admin/` |
-| Certbot fails: "No A record" | DNS not propagated yet | Wait 5-15 min, verify with `dig trading.metawebdevelopment.cloud +short` returning 35.154.225.175 |
+| Certbot fails: "No A record" | DNS not propagated yet | Wait 5-15 min, verify with `dig imperialexchange.in +short` returning 179.197.249.237 |
 | WebSocket fails after SSL | `wss://` URL wrong / nginx /ws block missing | Verify nginx config has the WS `Upgrade` headers in the /ws location |
 | Razorpay webhook fails signature | Wrong `RAZORPAY_WEBHOOK_SECRET` | Copy from Razorpay dashboard → Webhooks → reveal secret |
 | Admin login 403 with ADMIN_2FA_REQUIRED | Admin hasn't enabled 2FA | Temporarily set `ADMIN_REQUIRE_2FA=false` → login → enable 2FA → set back to true → restart |
@@ -282,6 +299,7 @@ wscat -c wss://trading.metawebdevelopment.cloud/ws
 
 ```
 trading-platform/
+├── .env                                 ← (gitignored) APP_DOMAIN + Mongo root creds
 ├── deploy.sh                            ← one-line redeploy
 ├── docker-compose.yml                   ← 3 services, all bound to 127.0.0.1
 ├── backend/
@@ -297,5 +315,5 @@ trading-platform/
 │   ├── nginx.conf                       ← same SPA fallback
 │   └── .env.example
 └── nginx/                               ← host nginx config (single vhost)
-    └── trading.metawebdevelopment.cloud.conf
+    └── imperialexchange.in.conf
 ```
