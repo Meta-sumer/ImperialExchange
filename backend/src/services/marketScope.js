@@ -11,7 +11,8 @@
 const { getSettingSync } = require('./systemSettings.service');
 const { AppError } = require('../utils/errors');
 
-const INDIAN_EXCHANGES = ['NSE', 'BSE'];
+// NSE/BSE cash, MCX/NCDEX commodities — every exchange-bound Indian row.
+const INDIAN_EXCHANGES = ['NSE', 'BSE', 'MCX', 'NCDEX'];
 
 const isIndiaOnly = () => getSettingSync('market.indiaOnly') !== false;
 
@@ -27,7 +28,7 @@ const applyMarketScope = (filter) => {
 /** Rejects an order on an out-of-scope instrument. */
 const assertInMarketScope = (inst) => {
   if (isIndiaOnly() && !isIndianInstrument(inst)) {
-    throw new AppError('Only Indian market (NSE/BSE) instruments can be traded', 400, 'MARKET_SCOPE');
+    throw new AppError('Only Indian market (NSE/BSE/MCX) instruments can be traded', 400, 'MARKET_SCOPE');
   }
 };
 

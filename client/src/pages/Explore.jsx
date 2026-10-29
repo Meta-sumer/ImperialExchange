@@ -100,16 +100,16 @@ const MAJOR_CCY   = new Set(['EUR','GBP','USD','JPY','CHF','AUD','NZD','CAD']);
 const SECTOR_DEFS = [
   { key: 'stocks',  label: 'Stocks',         icon: I.bank,    tint: '#8B5CF6', match: isStock },
   { key: 'indices', label: 'Indices',        icon: I.stars,   tint: '#3B82F6', match: isIndex },
+  { key: 'comm',    label: 'MCX Commodities', icon: I.barrel,  tint: '#A16207', match: isCommodity },
+  { key: 'gold',    label: 'Precious Metals', icon: I.ingot,  tint: '#D4A017',
+    match: (r) => isCommodity(r)
+      && ['XAU','XAG'].includes((r.baseCurrency || '').toUpperCase()) },
   { key: 'crypto',  label: 'Crypto',         icon: I.diamond, tint: '#F7931A', match: isCrypto },
   { key: 'forex',   label: 'Forex',          icon: I.doller,  tint: '#10B981', match: isForex },
   { key: 'majors',  label: 'Forex Majors',   icon: I.doller,  tint: '#0EA5E9',
     match: (r) => isForex(r)
       && MAJOR_CCY.has((r.baseCurrency || '').toUpperCase())
       && MAJOR_CCY.has((r.quoteCurrency || '').toUpperCase()) },
-  { key: 'comm',    label: 'Commodities',    icon: I.barrel,  tint: '#A16207', match: isCommodity },
-  { key: 'gold',    label: 'Precious Metals', icon: I.ingot,  tint: '#D4A017',
-    match: (r) => isCommodity(r)
-      && ['XAU','XAG'].includes((r.baseCurrency || '').toUpperCase()) },
 ];
 
 // Products link to existing routes so each tile actually goes somewhere.
@@ -812,6 +812,7 @@ export default function Explore() {
                   {[
                     { key: 'STOCK', label: 'Stocks' },
                     { key: 'INDEX', label: 'Indices' },
+                    { key: 'COMMODITY', label: 'MCX' },
                   ].map((c) => {
                     const on = moverCategories.includes(c.key);
                     return (

@@ -180,6 +180,13 @@ const instrumentSchema = new mongoose.Schema(
     // External feed mapping
     externalFeedSymbol: String, // e.g. "BTCUSDT" on Binance
     externalProvider: String, // 'BINANCE', 'TRADINGVIEW', etc.
+    // Derived pricing for rows whose feed quotes another unit/currency (MCX
+    // commodities priced from COMEX/NYMEX futures): price = feed × fx × multiplier.
+    // fx: 'USDINR' | null (null = no FX leg). See services/mcxCommodities.js.
+    feedConvert: {
+      fx: { type: String, default: null },
+      multiplier: { type: Number, default: 1 },
+    },
 
     // Synthetic price simulator (doc Phase 2: "market maker bot").
     // Useful when there are no real users + no external feed yet.

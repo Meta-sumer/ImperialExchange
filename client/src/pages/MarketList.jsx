@@ -55,22 +55,22 @@ const MAJOR_CCY   = new Set(['EUR','GBP','USD','JPY','CHF','AUD','NZD','CAD']);
 const SECTOR_DEFS = [
   { key: 'stocks',  label: 'Stocks',          tint: '#8B5CF6', match: isStock },
   { key: 'indices', label: 'Indices',         tint: '#3B82F6', match: isIndex },
+  { key: 'comm',    label: 'MCX Commodities', tint: '#A16207', match: isCommodity },
+  { key: 'gold',    label: 'Precious Metals', tint: '#D4A017',
+    match: (r) => isCommodity(r) && ['XAU','XAG'].includes((r.baseCurrency || '').toUpperCase()) },
   { key: 'crypto',  label: 'Crypto',          tint: '#F7931A', match: isCrypto },
   { key: 'forex',   label: 'Forex',           tint: '#10B981', match: isForex },
   { key: 'majors',  label: 'Forex Majors',    tint: '#0EA5E9',
     match: (r) => isForex(r)
       && MAJOR_CCY.has((r.baseCurrency || '').toUpperCase())
       && MAJOR_CCY.has((r.quoteCurrency || '').toUpperCase()) },
-  { key: 'comm',    label: 'Commodities',     tint: '#A16207', match: isCommodity },
-  { key: 'gold',    label: 'Precious Metals', tint: '#D4A017',
-    match: (r) => isCommodity(r) && ['XAU','XAG'].includes((r.baseCurrency || '').toUpperCase()) },
 ];
 
 // ─── View configs — title + sort fn per ?view= value ──────────────────────
 const VIEWS = {
   'most-traded': {
     title: 'Most traded markets',
-    caption: 'Highest liquidity across NSE and BSE stocks and indices.',
+    caption: 'Highest liquidity across NSE and BSE stocks, indices and MCX commodities.',
     sort: (a, b) => {
       const va = Number(a.volume24h) || 0;
       const vb = Number(b.volume24h) || 0;

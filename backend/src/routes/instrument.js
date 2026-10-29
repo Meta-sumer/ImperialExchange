@@ -14,6 +14,7 @@ router.get('/auto-sync', authenticate, requireAdmin, c.getAutoSync); // Dhan dai
 router.get('/:symbol', c.getOne);
 router.get('/:symbol/volume-usage', c.volumeUsage);
 router.get('/:symbol/candles', c.candles);
+router.get('/:symbol/price-at', authenticate, requireAdmin, c.priceAt); // admin: candle price at a past moment (manual trades)
 router.get('/:symbol/orderbook', c.orderbook);
 router.get('/:symbol/fundamentals', c.fundamentals);
 router.get('/:symbol/news', c.news);

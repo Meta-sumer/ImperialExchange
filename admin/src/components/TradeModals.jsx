@@ -104,6 +104,9 @@ export function ManualTradeModal({ onClose, onSaved }) {
   const [instruments, setInstruments] = useState([]);
   const [instQ, setInstQ] = useState('');
   const [instrument, setInstrument] = useState(null);
+  const [exch, setExch] = useState('NSE');                     // market tab for the script list
+  const [auto, setAuto] = useState({ entry: true, close: true }); // price fields still auto-filled from candles?
+  const [pxHint, setPxHint] = useState({ entry: null, close: null }); // null | 'none' | { price, timeframe, candleTime }
   const [saving, setSaving] = useState(false);
   const [f, setF] = useState({
     accountId: '', side: 'BUY', quantity: '', entryPrice: '',
@@ -150,18 +153,60 @@ export function ManualTradeModal({ onClose, onSaved }) {
     return () => { on = false; };
   }, []);
 
+  // Script list: pick the market first (NSE / BSE / MCX), then every script of
+  // that market is listed straight away; typing narrows it. "All" needs a query.
   const instHits = useMemo(() => {
+    if (instrument) return [];
     const q = instQ.trim().toUpperCase();
-    if (!q || instrument) return [];
+    const pool = exch === 'ALL' ? instruments : instruments.filter((i) => String(i.exchange || '').toUpperCase() === exch);
+    if (!q) return exch === 'ALL' ? [] : [...pool].sort((a, b) => String(a.symbol).localeCompare(String(b.symbol))).slice(0, 40);
     const starts = [], contains = [];
-    for (const i of instruments) {
+    for (const i of pool) {
       const sym = String(i.symbol || '').toUpperCase(); const name = String(i.name || '').toUpperCase();
       if (sym.startsWith(q)) starts.push(i);
       else if (sym.includes(q) || name.includes(q)) contains.push(i);
-      if (starts.length >= 8) break;
+      if (starts.length >= 12) break;
     }
-    return [...starts, ...contains].slice(0, 8);
-  }, [instQ, instruments, instrument]);
+    return [...starts, ...contains].slice(0, 12);
+  }, [instQ, instruments, instrument, exch]);
+
+  // "Price at that time": once the script and a date-time are set, look up the
+  // candle at that moment (GET /instruments/:symbol/price-at) and fill the price
+  // unless the admin has typed one. Debounced so the picker can be scrubbed.
+  const fetchPriceAt = async (iso) => (await api.get(`/instruments/${instrument.symbol}/price-at`, { params: { at: iso } })).data.data;
+  useEffect(() => {
+    if (!instrument || !f.openedAt) return undefined;
+    let on = true;
+    const t = setTimeout(async () => {
+      try {
+        const r = await fetchPriceAt(toIso(f.openedAt));
+        if (!on) return;
+        setPxHint((h) => ({ ...h, entry: r && r.price != null ? r : 'none' }));
+        if (r && r.price != null && auto.entry) set('entryPrice', str(r.price));
+      } catch (_) { if (on) setPxHint((h) => ({ ...h, entry: 'none' })); }
+    }, 400);
+    return () => { on = false; clearTimeout(t); };
+  }, [instrument, f.openedAt]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!instrument || f.status !== 'CLOSED' || !f.closedAt) return undefined;
+    let on = true;
+    const t = setTimeout(async () => {
+      try {
+        const r = await fetchPriceAt(toIso(f.closedAt));
+        if (!on) return;
+        setPxHint((h) => ({ ...h, close: r && r.price != null ? r : 'none' }));
+        if (r && r.price != null && auto.close) set('closePrice', str(r.price));
+      } catch (_) { if (on) setPxHint((h) => ({ ...h, close: 'none' })); }
+    }, 400);
+    return () => { on = false; clearTimeout(t); };
+  }, [instrument, f.closedAt, f.status]); // eslint-disable-line react-hooks/exhaustive-deps
+  const priceHint = (k) => {
+    const h = pxHint[k];
+    if (!h) return k === 'entry' ? 'market price at the open time fills in automatically' : 'market price at the close time fills in automatically';
+    if (h === 'none') return 'no candle data at that time — type the price';
+    const when = new Date(h.candleTime).toLocaleString([], { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+    return `market ${fmtNum(h.price, 2)} at ${when} (${h.timeframe} candle)${auto[k] ? ' · auto-filled' : ''}`;
+  };
 
   const account = accounts.find((a) => String(a._id) === f.accountId);
   const canSave = user && f.accountId && instrument && num(f.quantity) > 0 && num(f.entryPrice) > 0 && f.openedAt
@@ -228,20 +273,32 @@ export function ManualTradeModal({ onClose, onSaved }) {
         </select>
       </Field>
 
+      {/* Market — pick it first, then the script list for that market opens. */}
+      <Field label="Market" hint="MCX = commodities (gold, silver, crude…)">
+        <div className="flex gap-1">
+          {['NSE', 'BSE', 'MCX', 'ALL'].map((x) => (
+            <button key={x} type="button" onClick={() => { setExch(x); setInstrument(null); setInstQ(''); setPxHint({ entry: null, close: null }); }}
+              className={`px-3 py-1.5 rounded text-xs font-semibold border ${exch === x ? 'bg-primary-600 border-primary-600 text-white' : 'bg-bg-card border-border-dark text-text-muted hover:text-white'}`}>
+              {x === 'ALL' ? 'All markets' : x}
+            </button>
+          ))}
+        </div>
+      </Field>
+
       {/* Instrument */}
-      <Field label="Script / instrument" hint="any symbol, active or not">
+      <Field label="Script / instrument" hint={exch === 'ALL' ? 'type to search every script' : `${exch} scripts — type to narrow`}>
         {instrument ? (
           <div className="input flex items-center justify-between gap-2">
             <span className="truncate"><b className="text-white">{instrument.symbol}</b> <span className="text-text-muted">· {instrument.name}{instrument.exchange ? ` · ${instrument.exchange}` : ''}{instrument.lastPrice ? ` · last ${fmtNum(instrument.lastPrice, 2)}` : ''}</span></span>
-            <button type="button" className="text-xs text-text-muted hover:text-white" onClick={() => { setInstrument(null); setInstQ(''); }}>change</button>
+            <button type="button" className="text-xs text-text-muted hover:text-white" onClick={() => { setInstrument(null); setInstQ(''); setPxHint({ entry: null, close: null }); }}>change</button>
           </div>
         ) : (
           <div className="relative">
-            <input className="input" value={instQ} onChange={(e) => setInstQ(e.target.value)} placeholder="e.g. RELIANCE, NIFTY…" />
+            <input className="input" value={instQ} onChange={(e) => setInstQ(e.target.value)} placeholder={exch === 'ALL' ? 'e.g. RELIANCE, NIFTY, GOLD…' : `Search ${exch} scripts…`} />
             {instHits.length > 0 && (
-              <div className="absolute z-20 left-0 right-0 mt-1 bg-bg-card border border-border-dark rounded-lg shadow-xl max-h-56 overflow-y-auto">
+              <div className="mt-1 bg-bg-card border border-border-dark rounded-lg shadow-xl max-h-56 overflow-y-auto">
                 {instHits.map((i) => (
-                  <button key={i.symbol} type="button" onClick={() => { setInstrument(i); setInstQ(i.symbol); if (!f.entryPrice && i.lastPrice) set('entryPrice', str(i.lastPrice)); }}
+                  <button key={i.symbol} type="button" onClick={() => { setInstrument(i); setInstQ(i.symbol); setAuto({ entry: true, close: true }); if (!f.entryPrice && i.lastPrice) set('entryPrice', str(i.lastPrice)); }}
                     className="w-full text-left px-3 py-2 text-sm hover:bg-bg-hover flex items-center justify-between gap-2">
                     <span className="truncate"><b className="text-white">{i.symbol}</b> <span className="text-text-muted">· {i.name}</span></span>
                     <span className="text-[11px] text-text-muted">{i.exchange || i.category}{i.isActive === false ? ' · inactive' : ''}</span>
@@ -262,11 +319,11 @@ export function ManualTradeModal({ onClose, onSaved }) {
           </select>
         </Field>
         <Field label="Quantity"><input className="input" value={f.quantity} onChange={(e) => set('quantity', e.target.value)} placeholder="e.g. 10" /></Field>
-        <Field label="Entry price"><input className="input" value={f.entryPrice} onChange={(e) => set('entryPrice', e.target.value)} placeholder="e.g. 2948.40" /></Field>
+        <Field label="Entry price" hint={priceHint('entry')}><input className="input" value={f.entryPrice} onChange={(e) => { set('entryPrice', e.target.value); setAuto((a) => ({ ...a, entry: false })); }} placeholder="e.g. 2948.40" /></Field>
         <Field label="Open date & time" hint="past, local time"><input type="datetime-local" className="input" value={f.openedAt} max={toLocalInput(new Date())} onChange={(e) => set('openedAt', e.target.value)} /></Field>
         <Field label="Leverage" hint={account ? `account default ${account.leverage || 1}×` : ''}><input className="input" value={f.leverage} onChange={(e) => set('leverage', e.target.value)} placeholder="1" /></Field>
         {f.status === 'CLOSED' && <>
-          <Field label="Close price"><input className="input" value={f.closePrice} onChange={(e) => set('closePrice', e.target.value)} placeholder="e.g. 2970.10" /></Field>
+          <Field label="Close price" hint={priceHint('close')}><input className="input" value={f.closePrice} onChange={(e) => { set('closePrice', e.target.value); setAuto((a) => ({ ...a, close: false })); }} placeholder="e.g. 2970.10" /></Field>
           <Field label="Close date & time" hint="after open, not in the future"><input type="datetime-local" className="input" value={f.closedAt} min={f.openedAt || undefined} max={toLocalInput(new Date())} onChange={(e) => set('closedAt', e.target.value)} /></Field>
         </>}
         <Field label="Stop loss" hint="optional"><input className="input" value={f.stopLoss} onChange={(e) => set('stopLoss', e.target.value)} placeholder="blank = none" /></Field>

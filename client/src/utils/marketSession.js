@@ -78,6 +78,16 @@ const nseSession = () => {
   return { isOpen: true, label: 'NSE open', tz: 'IST' };
 };
 
+// ── MCX / NCDEX (Indian commodities) — Mon-Fri 09:00-23:30 IST.
+const mcxSession = () => {
+  const { day, mins } = _istParts();
+  if (day === 0 || day === 6) return { isOpen: false, label: 'Market Closed', detail: 'MCX closed on weekends', tz: 'IST' };
+  const open = 9 * 60, close = 23 * 60 + 30;
+  if (mins < open) return { isOpen: false, label: 'Pre-open', detail: 'MCX opens 09:00 IST', tz: 'IST' };
+  if (mins >= close) return { isOpen: false, label: 'Market Closed', detail: 'MCX closes 23:30 IST', tz: 'IST' };
+  return { isOpen: true, label: 'MCX open', tz: 'IST' };
+};
+
 // ── INDICES — index CFDs typically Mon-Fri with short overnight break
 const indexSession = () => {
   const { day, hour } = getUtc();
@@ -97,6 +107,7 @@ const indexSession = () => {
 export function getMarketSession(arg) {
   const exchange = (arg && typeof arg === 'object') ? String(arg.exchange || '').toUpperCase() : '';
   if (['NSE', 'BSE', 'NFO', 'BFO'].includes(exchange)) return nseSession(); // F&O follows equity hours
+  if (exchange === 'MCX' || exchange === 'NCDEX') return mcxSession();
   const cat = String((arg && typeof arg === 'object') ? arg.category : arg || '').toUpperCase();
   switch (cat) {
     case 'CRYPTO':    return cryptoSession();

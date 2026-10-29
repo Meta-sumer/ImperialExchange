@@ -350,6 +350,25 @@ const candles = asyncHandler(async (req, res) => {
   sendSuccess(res, data.reverse());
 });
 
+// Admin: the market price of a symbol at a past moment, from stored candles
+// (lazy Yahoo backfill first). Powers the manual-trade form's "price at that
+// time" auto-fill. Tries the finest timeframe whose history reaches that far;
+// price null when nothing covers the moment (then the admin types it).
+const PRICE_AT_TF_MS = { '1m': 60e3, '5m': 300e3, '15m': 900e3, '1h': 3600e3, '1d': 86400e3 };
+const priceAt = asyncHandler(async (req, res) => {
+  const sym = String(req.params.symbol || '').toUpperCase();
+  const at = new Date(req.query.at);
+  if (Number.isNaN(at.getTime())) throw new AppError('at must be an ISO date-time', 400);
+  for (const tf of Object.keys(PRICE_AT_TF_MS)) {
+    try { await require('../services/yahooBackfill').ensureHistory(sym, tf); } catch (_) { /* best effort */ }
+    const c = await Candle.findOne({ symbol: sym, timeframe: tf, openTime: { $lte: at } }).sort({ openTime: -1 }).lean();
+    if (c && at.getTime() - new Date(c.openTime).getTime() <= PRICE_AT_TF_MS[tf] * 3) {
+      return sendSuccess(res, { symbol: sym, at, timeframe: tf, candleTime: c.openTime, price: c.close, open: c.open, high: c.high, low: c.low });
+    }
+  }
+  sendSuccess(res, { symbol: sym, at, timeframe: null, price: null });
+});
+
 const orderbook = asyncHandler(async (req, res) => {
   const { symbol } = req.params;
   const sym = symbol.toUpperCase();
@@ -475,8 +494,11 @@ const syncIndian = asyncHandler(async (req, res) => {
   if (type === 'INDICES') {
     return sendSuccess(res, { type, ...(await require('../services/indianIndices').ensureIndianIndices()) });
   }
+  if (type === 'MCX') {
+    return sendSuccess(res, { type, ...(await require('../services/mcxCommodities').ensureMcxCommodities()) });
+  }
   if (type !== 'EQUITY') {
-    throw new AppError('type must be EQUITY or INDICES', 400);
+    throw new AppError('type must be EQUITY, INDICES or MCX', 400);
   }
   if (!symbols.length) throw new AppError('symbols required (comma-separated, e.g. RELIANCE,TCS)', 400);
   if (symbols.length > 25) throw new AppError('Max 25 symbols per import — split into batches.', 400);
@@ -865,4 +887,4 @@ const economicCalendar = asyncHandler(async (req, res) => {
   sendSuccess(res, _calCache.data || []);
 });
 
-module.exports = { list, watchlist, getOne, search, volumeUsage, candles, orderbook, fundamentals, news, create, update, remove, bulkRouting, syncIndian, getAutoSync, setAutoSync, instrumentImpact, disableInstrument, enableInstrument, economicCalendar };
+module.exports = { list, watchlist, getOne, search, volumeUsage, candles, orderbook, fundamentals, news, create, update, remove, bulkRouting, syncIndian, getAutoSync, setAutoSync, instrumentImpact, disableInstrument, enableInstrument, economicCalendar, priceAt };

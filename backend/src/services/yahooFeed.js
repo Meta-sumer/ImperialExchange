@@ -177,14 +177,23 @@ async function _pollOnce() {
 async function _pollGlobalYahoo() {
   const insts = await Instrument.find({
     externalProvider: 'YAHOO', externalFeedSymbol: { $exists: true, $ne: null }, isActive: true, marketDataEnabled: { $ne: false },
-  }).select('_id symbol externalFeedSymbol pricePrecision').lean();
+  }).select('_id symbol externalFeedSymbol pricePrecision feedConvert').lean();
   if (!insts.length) return 0;
   const uniq = [...new Set(insts.map((i) => String(i.externalFeedSymbol).trim()).filter(Boolean))].slice(0, MAX);
+  // Derived rows (MCX commodities) need the USD→INR rate in the same poll.
+  if (insts.some((i) => i.feedConvert && i.feedConvert.fx === 'USDINR') && !uniq.includes('INR=X')) uniq.push('INR=X');
   const prices = new Map(await _mapPool(uniq, CONC, async (s) => [s, await _yahooQuote(s)]));
   let wrote = 0;
   for (const i of insts) {
-    const px = prices.get(String(i.externalFeedSymbol).trim());
+    let px = prices.get(String(i.externalFeedSymbol).trim());
     if (px == null) continue;
+    const conv = i.feedConvert || null;
+    if (conv && (conv.fx || (conv.multiplier && conv.multiplier !== 1))) {
+      // price(₹) = feed × USDINR × unit multiplier (services/mcxCommodities.js)
+      let fx = 1;
+      if (conv.fx === 'USDINR') { fx = prices.get('INR=X'); if (fx == null) continue; }
+      px = px * fx * (Number(conv.multiplier) || 1);
+    }
     await _publishTick(i, px); wrote += 1;   // spot instruments → price is the LTP as-is
   }
   if (wrote) { try { require('./feedOrchestrator').recordTick('YAHOO'); } catch (_) {} }

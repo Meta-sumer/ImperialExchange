@@ -2499,6 +2499,7 @@ export default function Trade() {
                   { key: 'ALL', label: 'All' },
                   { key: 'STOCK', label: 'Stocks' },
                   { key: 'INDEX', label: 'Indices' },
+                  { key: 'COMMODITY', label: 'MCX' },
                 ];
                 const ranked = withChg
                   .filter((r) => moverCat === 'ALL' || String(r.category || '').toUpperCase() === moverCat)
@@ -2595,11 +2596,11 @@ export default function Trade() {
               : cat === 'STOCK'
               ? 'Listed equity — NSE/BSE shares priced live through the exchange session (09:15–15:30 IST).'
               : cat === 'COMMODITY'
-              ? 'Physical-asset derivative — gold, silver, oil and similar contracts settled against spot reference prices.'
+              ? 'MCX commodity — gold, silver, crude and natural gas quoted in ₹ per MCX contract unit, priced live from international futures.'
               : cat === 'INDEX'
               ? 'Index — exposure to a basket of NSE/BSE listed equities tracked by the benchmark (NIFTY 50, BANK NIFTY, SENSEX).'
               : 'Tradable instrument quoted in real time.';
-            const hours = cat === 'CRYPTO' ? '24 / 7' : cat === 'FOREX' ? 'Mon 00:00 → Fri 22:00 UTC' : 'Mon–Fri 09:15 → 15:30 IST';
+            const hours = cat === 'CRYPTO' ? '24 / 7' : cat === 'FOREX' ? 'Mon 00:00 → Fri 22:00 UTC' : String(instrument.exchange || '').toUpperCase() === 'MCX' ? 'Mon–Fri 09:00 → 23:30 IST' : 'Mon–Fri 09:15 → 15:30 IST';
             return (
               <div className="flex-1 overflow-y-auto p-3 space-y-3 text-xs">
                 <div className="flex items-center gap-2.5 pb-3 border-b border-border-subtle">

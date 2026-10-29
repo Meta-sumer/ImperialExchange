@@ -104,6 +104,7 @@ const BUILT = [
 const MARKETS = [
   { name: 'Stocks', desc: 'NSE & BSE Equities', c: +0.62, icon: 'stock' },
   { name: 'Indices', desc: 'NIFTY · BANKNIFTY · SENSEX', c: +0.42, icon: 'index' },
+  { name: 'Commodities', desc: 'MCX Gold · Silver · Crude', c: +0.38, icon: 'gold' },
   { name: 'Large Caps', desc: 'NIFTY 50 leaders', c: +0.48, icon: 'stock' },
   { name: 'Banking', desc: 'BANK NIFTY names', c: +0.35, icon: 'stock' },
   { name: 'IT & Tech', desc: 'NIFTY IT names', c: +0.71, icon: 'stock' },
@@ -115,6 +116,7 @@ const MARKETS = [
 const MARKET_CATEGORY = {
   Stocks: 'STOCK',
   Indices: 'INDEX',
+  Commodities: 'COMMODITY',
   'Large Caps': 'STOCK',
   Banking: 'STOCK',
   'IT & Tech': 'STOCK',
@@ -550,6 +552,13 @@ function MarketCluster({ name }) {
         <div className="flex -space-x-2.5 justify-center">
           <LogoDisc tint="#111827"><Tag>TCS</Tag></LogoDisc>
           <LogoDisc tint="#007CC3"><Tag size={8}>INFY</Tag></LogoDisc>
+        </div>
+      );
+    case 'Commodities':
+      return (
+        <div className="flex -space-x-3 justify-center">
+          <Coin from="#FDE68A" to="#D4A017">Au</Coin>
+          <Coin from="#F3F4F6" to="#9CA3AF">Ag</Coin>
         </div>
       );
     case 'Indices':
