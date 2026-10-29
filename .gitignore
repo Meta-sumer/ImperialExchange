@@ -57,3 +57,6 @@ dump/
 *.bson.gz
 
 *.bak
+
+# Agent worktrees (local only)
+.claude/worktrees/
