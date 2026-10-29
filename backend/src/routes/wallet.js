@@ -35,6 +35,7 @@ router.get('/balances', c.getBalances);
 router.get('/equity', c.getAccountsEquity); // per-account FLOATING balance (equity = balance + Σ uPnL)
 router.get('/deposit-details', c.depositDetails); // where to send money (admin-configured)
 router.get('/ledger', c.getLedger);
+router.get('/credit', require('../controllers/creditController').listMine); // deposits/withdrawals processed on credit
 
 router.post('/deposits', c.createDeposit);
 router.get('/deposits', c.listDeposits);

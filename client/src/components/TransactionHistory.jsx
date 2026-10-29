@@ -366,6 +366,47 @@ function normalizeSubscription(t) {
   };
 }
 
+// Credit transactions — an admin processed a deposit or withdrawal "on
+// credit". The wallet moved when the credit was granted (that ledger row is
+// harvested for the balance snapshot); the status tracks the real-world
+// settlement, and the remarks come straight from the admin.
+function normalizeCredit(c, ledgerByRef, acctName) {
+  const isDep = String(c.kind || '').toUpperCase() === 'DEPOSIT';
+  const amt = Number(c.amount || 0);
+  const settled = Number(c.settledAmount || 0);
+  const outstanding = Number(c.outstanding != null ? c.outstanding : amt - settled);
+  const ccy = c.currency || BASE_CURRENCY;
+  const sym = currencySymbol(ccy);
+  const acct = (acctName && c.accountId && acctName.get(String(c.accountId))) || 'Trading Account';
+  const snap = ledgerByRef && ledgerByRef.get(String(c._id || c.id));
+  const parts = [isDep ? 'Deposit on credit' : 'Withdrawal on credit', `${sym}${fmtNum(amt, 2)}`];
+  if (c.status === 'SETTLED') parts.push('Fully settled');
+  else if (c.status === 'CANCELLED') parts.push('Cancelled');
+  else parts.push(`Settled ${sym}${fmtNum(settled, 2)} of ${sym}${fmtNum(amt, 2)} · Outstanding ${sym}${fmtNum(outstanding, 2)}`);
+  if (c.dueDate) parts.push(`Due ${new Date(c.dueDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}`);
+  if (c.remarks && String(c.remarks).trim()) parts.push(String(c.remarks).trim());
+  return {
+    id: String(c._id || c.id),
+    kind: 'credit',
+    date: c.createdAt,
+    amount: isDep ? amt : -amt,
+    currency: ccy,
+    status: c.status || 'PENDING',
+    type: isDep ? 'Credit Deposit' : 'Credit Withdrawal',
+    typeKey: 'Credit',
+    method: 'Credit',
+    receivedFrom: isDep ? 'Admin (on credit)' : acct,
+    destination: isDep ? acct : 'Admin (on credit)',
+    description: parts.join(' · '),
+    accountId: c.accountId ? String(c.accountId) : null,
+    beforeBal: snap ? snap.before : null,
+    afterBal: snap ? snap.after : null,
+    balCurrency: (snap && snap.currency) || ccy,
+    baseEq: null,
+    raw: { ...c, type: 'CREDIT' },
+  };
+}
+
 // ─── Status pill ──────────────────────────────────────────────────────
 function StatusPill({ status }) {
   const s = String(status || '').toUpperCase();
@@ -374,6 +415,8 @@ function StatusPill({ status }) {
     CONFIRMED: { dot: '#16A34A', bg: '#16A34A14', fg: '#15803D' },
     APPROVED: { dot: '#16A34A', bg: '#16A34A14', fg: '#15803D' },
     PROCESSING: { dot: '#2563EB', bg: '#2563EB14', fg: '#1D4ED8' },
+    SETTLED: { dot: '#16A34A', bg: '#16A34A14', fg: '#15803D' },
+    PARTIALLY_SETTLED: { dot: '#2563EB', bg: '#2563EB14', fg: '#1D4ED8' },
     PENDING: { dot: '#D97706', bg: '#D9770614', fg: '#B45309' },
     REJECTED: { dot: '#DC2626', bg: '#DC262614', fg: '#B91C1C' },
     CANCELLED: { dot: '#64748B', bg: '#64748B14', fg: '#475569' },
@@ -491,12 +534,13 @@ function typeIcon(label) {
 const STATUS_COLOR = {
   COMPLETED: '#16A34A', CONFIRMED: '#16A34A', APPROVED: '#16A34A', DONE: '#16A34A',
   PROCESSING: '#2563EB', PENDING: '#D97706', REJECTED: '#DC2626', CANCELLED: '#94A3B8',
+  SETTLED: '#16A34A', PARTIALLY_SETTLED: '#2563EB',
 };
 // Every status a deposit / withdrawal / ledger row can carry — so the Status
 // filter always offers the full set, even when the current history has none of
 // a given status yet. (Deposit: PENDING/CONFIRMED/REJECTED/CANCELLED,
 // Withdrawal: PENDING/APPROVED/PROCESSING/COMPLETED/REJECTED/CANCELLED.)
-const ALL_STATUSES = ['PENDING', 'PROCESSING', 'CONFIRMED', 'APPROVED', 'COMPLETED', 'REJECTED', 'CANCELLED'];
+const ALL_STATUSES = ['PENDING', 'PROCESSING', 'CONFIRMED', 'APPROVED', 'COMPLETED', 'PARTIALLY_SETTLED', 'SETTLED', 'REJECTED', 'CANCELLED'];
 const statusDot = (status) => (
   <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: STATUS_COLOR[String(status).toUpperCase()] || '#94A3B8' }} />
 );
@@ -523,6 +567,7 @@ const TYPE_CATEGORIES = [
   'Bonus',
   'Referral Commission Earned',
   'Referral Deposit Bonus',
+  'Credit',
   'Others',
 ];
 
@@ -546,6 +591,7 @@ function categoryIcon(label) {
     case 'Referral Commission Earned':
     case 'Referral Deposit Bonus': return P(<><rect x="2" y="7" width="20" height="14" rx="2" /><path d="M2 11h20" /><circle cx="7" cy="16" r="1" /></>);
     case 'Subscription': return P(<><rect x="2" y="5" width="20" height="14" rx="2" /><path d="M2 10h20" /><path d="M6 15h5" /></>);
+    case 'Credit': return P(<><rect x="2" y="5" width="20" height="14" rx="2" /><path d="M2 10h20" /><path d="M7 15h4" /><path d="M16 13v4M14 15h4" /></>);
     default: return P(<><circle cx="5" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="19" cy="12" r="1.6" /></>);
   }
 }
@@ -555,6 +601,7 @@ function categoryOf(row) {
   if (row.kind === 'subscription') return 'Subscription';
   if (row.kind === 'deposit') return 'Deposit';
   if (row.kind === 'withdrawal') return 'Withdrawal';
+  if (row.kind === 'credit') return 'Credit';
   const t = row.raw?.type;
   if (t === 'TRANSFER') return 'Transfer - Internal';
   if (t === 'INTERNAL_TRANSFER_OUT' || t === 'INTERNAL_TRANSFER_IN') return 'Transfer - External';
@@ -786,7 +833,7 @@ function DetailsModal({ row, onClose }) {
 }
 
 // ─── Main component ───────────────────────────────────────────────────
-export default function TransactionHistory({ deposits = [], withdrawals = [], ledger = [], subscriptions = [], bonusTx = [], accounts = [], loading }) {
+export default function TransactionHistory({ deposits = [], withdrawals = [], ledger = [], subscriptions = [], bonusTx = [], creditTx = [], accounts = [], loading }) {
   // Personal notes (client-side only — backend has no per-tx user note field).
   const [notes, setNotes] = useState(() => {
     try { return JSON.parse(localStorage.getItem('txnNotes') || '{}'); } catch { return {}; }
@@ -872,6 +919,7 @@ export default function TransactionHistory({ deposits = [], withdrawals = [], le
     const isWithdrawalLeg = (t) => String(t?.reason || '').toUpperCase() === 'WITHDRAWAL';
     const s = subscriptions.filter((t) => !isWithdrawalLeg(t)).map(normalizeSubscription);
     const bn = bonusTx.filter((t) => !isWithdrawalLeg(t)).map(normalizeBonus);
+    const cr = creditTx.map((x) => normalizeCredit(x, ledgerByRef, acctName));
     // Which wallet each row belongs to. Trading rows are identified by accountId,
     // but Main Wallet and Bonus Wallet rows have none — they are not tied to a
     // trading account — so the Accounts filter could never reach them. Deposits and
@@ -884,10 +932,10 @@ export default function TransactionHistory({ deposits = [], withdrawals = [], le
       if (r.kind === 'withdrawal') return String(r.raw?.source || 'trading').toLowerCase();
       return 'trading';
     };
-    return [...d, ...w, ...l, ...s, ...bn]
+    return [...d, ...w, ...l, ...s, ...bn, ...cr]
       .map((r) => ({ ...r, category: categoryOf(r), walletScope: scopeOf(r) }))
       .sort((a, b) => new Date(b.date) - new Date(a.date));
-  }, [deposits, withdrawals, ledger, subscriptions, bonusTx, accounts]);
+  }, [deposits, withdrawals, ledger, subscriptions, bonusTx, creditTx, accounts]);
 
   const typeOptions = TYPE_CATEGORIES;
   // Always offer every possible status (not just those present in the current
