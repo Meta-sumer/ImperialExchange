@@ -32,9 +32,10 @@ const ALL_COLUMNS = [
   { key: 'lastLogin',       label: 'Last Login',       sortBy: 'lastLogin' },
   { key: 'manager',         label: 'Manager',          sortBy: null, adminOnly: true },
   { key: 'admin',           label: 'Admin',            sortBy: null, adminOnly: true },
+  { key: 'depositBank',     label: 'Deposit Bank',     sortBy: null, adminOnly: true },
 ];
 const DEFAULT_ORDER = ALL_COLUMNS.map((c) => c.key);
-const LAYOUT_VERSION = 1;
+const LAYOUT_VERSION = 2;
 
 // Role-based DEFAULT visibility. Super Admin sees everything; Admin sees the
 // canonical set; Manager sees a limited subset (and no admin-only columns).
@@ -74,6 +75,16 @@ const csvEscape = (val) => {
 
 export default function Users() {
   const { user: me } = useAuthStore();
+  // Deposit bank labels for the Super Admin column — one fetch, keyed by id.
+  const [bankLabels, setBankLabels] = useState({});
+  useEffect(() => {
+    if (me?.role !== 'SUPER_ADMIN') return;
+    api.get('/admin/bank-accounts').then((r) => {
+      const m = {};
+      for (const b of (r.data?.data || [])) m[String(b._id)] = b.label;
+      setBankLabels(m);
+    }).catch(() => {});
+  }, [me?.role]);
   const role = me?.role || 'ADMIN';
   const myId = me?._id || me?.id || 'anon';
   const storageKey = `userTableLayout:${myId}`;
@@ -247,6 +258,7 @@ export default function Users() {
       case 'name': return fullName(u);
       case 'phone': return u.phone || '';
       case 'country': return u.country || '';
+      case 'depositBank': return bankLabels[String(u.depositBankAccountId || '')] || '';
       case 'role': return u.role || '';
       case 'plan': return u.plan?.name || u.plan?.code || 'Free';
       case 'walletBalance': return Number(u.walletBalance || 0).toFixed(2);
@@ -281,6 +293,7 @@ export default function Users() {
       case 'name': return <span className="text-gray-200">{fullName(u) || '—'}</span>;
       case 'phone': return <span className="font-mono text-xs text-gray-300">{u.phone || '—'}</span>;
       case 'country': return <span className="text-gray-300">{u.country || '—'}</span>;
+      case 'depositBank': return <span className="text-gray-300">{bankLabels[String(u.depositBankAccountId || '')] || (u.depositBankAccountId ? '…' : '—')}</span>;
       case 'role': return <span className="text-xs text-primary-500">{u.role}</span>;
       case 'plan': return <PlanBadge plan={u.plan} />;
       case 'walletBalance':

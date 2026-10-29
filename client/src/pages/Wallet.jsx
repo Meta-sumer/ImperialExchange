@@ -1690,6 +1690,13 @@ function InlineDepositFlow({ accounts, balances = [], fxRate, onDone, onCancel }
                     }
                     return (
                       <div className="space-y-2 text-xs">
+                        {method === 'BANK' && !selectedCustom && payDetails?.assignedBank && (
+                          <div className="text-[11px] text-text-secondary pb-2 mb-1 border-b border-border-subtle/60 leading-snug">
+                            Your assigned bank account:{' '}
+                            <span className="font-semibold text-text-primary">{payDetails.assignedBank.label}</span>
+                            {payDetails.assignedBank.bankName ? ` · ${payDetails.assignedBank.bankName}` : ''}
+                          </div>
+                        )}
                         {visible.map((r) => (
                           <div key={r.l} className="flex items-center justify-between gap-3">
                             <span className="text-text-muted">{r.l}</span>

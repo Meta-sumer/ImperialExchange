@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import { api, errorMessage } from '../services/api';
+import { useAuthStore } from '../store/auth';
 
 /**
  * Admin: edit a customer's profile (name / email / phone / country) and reset
@@ -17,6 +18,29 @@ export default function EditUserModal({ user, onClose, onSaved }) {
   const [phone, setPhone]         = useState(user.phone || '');
   const [country, setCountry]     = useState(user.country || '');
   const [savingProfile, setSavingProfile] = useState(false);
+
+  // Deposit bank account (Super Admin only) — which company account this
+  // customer pays into. '' = Auto: the least-loaded active account is assigned
+  // the next time the customer opens the deposit page.
+  const me = useAuthStore((st) => st.user);
+  const isSuper = me?.role === 'SUPER_ADMIN';
+  const [bankAccounts, setBankAccounts] = useState([]);
+  const [bankSel, setBankSel] = useState(user.depositBankAccountId ? String(user.depositBankAccountId) : '');
+  const [savingBank, setSavingBank] = useState(false);
+  useEffect(() => {
+    if (!isSuper) return;
+    api.get('/admin/bank-accounts').then((r) => setBankAccounts(r.data?.data || [])).catch(() => setBankAccounts([]));
+  }, [isSuper]);
+
+  const saveBank = async () => {
+    setSavingBank(true);
+    try {
+      await api.post('/admin/bank-accounts/assign', { userId: user._id, bankAccountId: bankSel || null });
+      toast.success(bankSel ? 'Deposit bank account assigned' : 'Set to auto — assigned on the next deposit');
+      onSaved?.();
+    } catch (e) { toast.error(errorMessage(e)); }
+    finally { setSavingBank(false); }
+  };
 
   const [pw, setPw] = useState('');
   const [resetting, setResetting] = useState(false);
@@ -91,6 +115,27 @@ export default function EditUserModal({ user, onClose, onSaved }) {
             </button>
           </div>
         </div>
+
+        {/* Deposit bank account — Super Admin only */}
+        {isSuper && (
+          <div className="px-5 py-4 border-t border-border-dark space-y-2 text-sm">
+            <div className="label">Deposit bank account</div>
+            <p className="text-[12px] text-text-muted">The company account this customer sees on the deposit page. Leave on Auto to let the pool balance itself.</p>
+            <div className="flex items-end gap-2">
+              <select className="input flex-1" value={bankSel} onChange={(e) => setBankSel(e.target.value)}>
+                <option value="">Auto (least-loaded active account)</option>
+                {bankAccounts.map((b) => (
+                  <option key={b._id} value={b._id} disabled={!b.isActive && String(b._id) !== bankSel}>
+                    {b.label}{b.bankName ? ` · ${b.bankName}` : ''}{b.accountNumber ? ` · ••••${String(b.accountNumber).slice(-4)}` : ''}{b.isActive ? '' : ' (inactive)'}
+                  </option>
+                ))}
+              </select>
+              <button onClick={saveBank} disabled={savingBank} className="btn-secondary text-sm disabled:opacity-50 shrink-0">
+                {savingBank ? 'Saving…' : 'Assign'}
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Reset password */}
         <div className="px-5 py-4 border-t border-border-dark space-y-3 text-sm">

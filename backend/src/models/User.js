@@ -57,6 +57,11 @@ const userSchema = new mongoose.Schema(
     managerId:  { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null, index: true },
     assignedAt: { type: Date, default: null },
 
+    // Deposit bank account this customer pays into (Super Admin → Bank
+    // Accounts). null = not assigned yet; the deposit-details endpoint assigns
+    // the least-loaded active account on first use. services/bankAssignment.js.
+    depositBankAccountId: { type: mongoose.Schema.Types.ObjectId, ref: 'BankAccount', default: null, index: true },
+
     // ─── Auto-provisioning / staff lifecycle (additive) ─────────────────
     // When the scalable auto-assignment engine runs out of capacity it spawns
     // ADMIN / MANAGER accounts on the fly. Those are flagged `autoCreated` and

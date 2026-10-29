@@ -132,11 +132,42 @@ const getAccountsEquity = asyncHandler(async (req, res) => {
 // Shown to the client in the "Add funds" modal. Read-only.
 const depositDetails = asyncHandler(async (req, res) => {
   const systemSettings = require('../services/systemSettings.service');
+  const bankAssignment = require('../services/bankAssignment');
   // Switched-off rails keep their enabled:false flag (the clients filter on it)
   // but ship no payee details, so a hidden rail has nothing to pay into even if
   // some surface manages to render it. The admin panel reads the unredacted
   // blob from /admin/system/deposit-details.
-  sendSuccess(res, publicPaymentDetails(await systemSettings.getSetting('deposit.paymentDetails')));
+  const details = publicPaymentDetails(await systemSettings.getSetting('deposit.paymentDetails'));
+
+  // Per-user deposit bank account (Super Admin → Bank Accounts). A customer
+  // with an assigned account sees THAT account on the BANK rail (and its UPI
+  // handle, when the account has one) instead of the global details, so
+  // deposits are spread across the pool. A customer without one is assigned
+  // the least-loaded active account right here. Staff, a disabled BANK rail
+  // and an empty pool fall through to the global details unchanged.
+  if (req.user && !bankAssignment.isStaffRole(req.user.role)) {
+    const bank = await bankAssignment.autoAssignIfMissing(req.user);
+    if (bank) {
+      const rail = details.BANK && typeof details.BANK === 'object' ? details.BANK : {};
+      if (rail.enabled !== false) {
+        details.BANK = {
+          ...rail,
+          accountName: bank.accountName,
+          accountNumber: bank.accountNumber,
+          ifsc: bank.ifsc,
+          bankName: bank.bankName,
+          note: bank.note || rail.note || '',
+          qr: bank.qr || rail.qr || '',
+        };
+      }
+      const upi = details.UPI && typeof details.UPI === 'object' ? details.UPI : null;
+      if (bank.upiId && upi && upi.enabled !== false) {
+        details.UPI = { ...upi, upiId: bank.upiId, payeeName: bank.accountName || upi.payeeName || '' };
+      }
+      details.assignedBank = { label: bank.label, bankName: bank.bankName };
+    }
+  }
+  sendSuccess(res, details);
 });
 
 const getLedger = asyncHandler(async (req, res) => {
