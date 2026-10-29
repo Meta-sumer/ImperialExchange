@@ -4,7 +4,7 @@
 #
 # Build context = client/
 #   cd client
-#   docker build --build-arg VITE_API_URL=https://trading.metawebdevelopment.cloud/api -t tp-client .
+#   docker build --build-arg VITE_API_URL=https://imperialexchange.in/api -t tp-client .
 
 FROM node:20-alpine AS build
 WORKDIR /app
@@ -16,10 +16,12 @@ COPY . .
 # Baked into the bundle at build time. Override with `--build-arg` for
 # different environments (staging vs prod). Default points at the prod
 # subdomain so a no-arg build still produces a correct artifact.
-ARG VITE_API_URL=https://trading.metawebdevelopment.cloud/api
+ARG VITE_API_URL=https://imperialexchange.in/api
 ENV VITE_API_URL=$VITE_API_URL
-ARG VITE_WS_URL=wss://trading.metawebdevelopment.cloud/ws
+ARG VITE_WS_URL=wss://imperialexchange.in/ws
 ENV VITE_WS_URL=$VITE_WS_URL
+ARG VITE_PUBLIC_URL=https://imperialexchange.in
+ENV VITE_PUBLIC_URL=$VITE_PUBLIC_URL
 
 RUN npm run build
 

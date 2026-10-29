@@ -68,8 +68,9 @@ services:
       # APP_DOMAIN comes from the root .env (same file as the Mongo creds),
       # so one repo can serve several brands — each server sets its own.
       args:
-        VITE_API_URL: https://${APP_DOMAIN:-frexever.com}/api
-        VITE_WS_URL: wss://${APP_DOMAIN:-frexever.com}/ws
+        VITE_API_URL: https://${APP_DOMAIN:-imperialexchange.in}/api
+        VITE_WS_URL: wss://${APP_DOMAIN:-imperialexchange.in}/ws
+        VITE_PUBLIC_URL: https://${APP_DOMAIN:-imperialexchange.in}
     image: tp-client:latest
     container_name: tp-client
     restart: unless-stopped
@@ -87,7 +88,7 @@ services:
     build:
       context: ./admin
       args:
-        VITE_API_URL: https://${APP_DOMAIN:-frexever.com}/api
+        VITE_API_URL: https://${APP_DOMAIN:-imperialexchange.in}/api
         VITE_BASE: /admin/
     image: tp-admin:latest
     container_name: tp-admin
