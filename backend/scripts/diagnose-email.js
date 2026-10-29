@@ -32,13 +32,13 @@ const post = async (url, opts = {}, timeoutMs = 10000) => {
 };
 
 // Copied from emailService.parseFrom so this reports the sender the service
-// would ACTUALLY use — including its 'Frexever' default name — rather than a
+// would ACTUALLY use — including its 'Imperial Exchange' default name — rather than a
 // near-copy that could disagree about the very field being diagnosed.
 const parseFrom = (raw) => {
   const s = String(raw || '').trim();
   const m = s.match(/^\s*"?([^"<]*)"?\s*<\s*([^>]+)\s*>\s*$/);
-  if (m) return { name: (m[1] || '').trim() || 'Frexever', email: m[2].trim() };
-  return { name: 'Frexever', email: s };
+  if (m) return { name: (m[1] || '').trim() || 'Imperial Exchange', email: m[2].trim() };
+  return { name: 'Imperial Exchange', email: s };
 };
 
 (async () => {
@@ -127,7 +127,7 @@ const parseFrom = (raw) => {
     body: JSON.stringify({
       sender,
       to: [{ email: to }],
-      subject: 'Frexever email test',
+      subject: 'Imperial Exchange email test',
       htmlContent: '<p>If you are reading this, the Brevo transport works.</p>',
       textContent: 'If you are reading this, the Brevo transport works.',
     }),

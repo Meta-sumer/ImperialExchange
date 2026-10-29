@@ -274,8 +274,11 @@ input[type="month"]::-webkit-calendar-picker-indicator:hover {
 .cms-content h1 { font-size: 1.6rem; font-weight: 700; color: rgb(var(--color-text-primary)); margin: 1rem 0 .5rem; }
 .cms-content img, .cms-editor img { max-width: 100%; border-radius: .5rem; margin: .5rem 0; }
 
-/* Frexever logo — transparent PNG. Dark-text art on light surfaces; the
-   white-text variant under dark theme (admin default) so the wordmark stays
-   readable on the dark sidebar/login. */
-.brand-logo { background: url('/frexever-logo.png') center / contain no-repeat; }
-[data-theme='dark'] .brand-logo { background-image: url('/frexever-logo-dark.png'); }
+/* Imperial Exchange logo — the artwork sits on its own navy ground, so one
+   image serves the light theme and the dark sidebar/login alike. */
+.brand-logo {
+  background: url('/imperialexchange-logo.jpg') center / contain no-repeat;
+  background-image: -webkit-image-set(url('/imperialexchange-logo.webp') type('image/webp'), url('/imperialexchange-logo.jpg') type('image/jpeg'));
+  background-image: image-set(url('/imperialexchange-logo.webp') type('image/webp'), url('/imperialexchange-logo.jpg') type('image/jpeg'));
+  border-radius: 12%;
+}

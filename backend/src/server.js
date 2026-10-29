@@ -331,7 +331,7 @@ if (fs.existsSync(clientIndex)) {
       const a = await CmsNews.findOne({ slug: String(req.params.slug).toLowerCase(), status: 'PUBLISHED' }).lean();
       if (!a) return res.sendFile(clientIndex);
       return serveWithMeta(res, {
-        title: `${a.title} · Frexever`,
+        title: `${a.title} · Imperial Exchange`,
         description: a.excerpt,
         keywords: (a.tags || []).join(', '),
         image: a.featuredImageUrl,

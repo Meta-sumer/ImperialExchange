@@ -75,7 +75,7 @@ export default function CmsFooter() {
   }, []);
 
   const year = new Date().getFullYear();
-  const brand = config.brand || 'Frexever';
+  const brand = config.brand || 'Imperial Exchange';
   const socials = config.socials || {};
   const activeSocials = useMemo(
     () => Object.keys(SOCIAL_ICONS).filter((k) => socials[k] && String(socials[k]).trim()),

@@ -20,7 +20,7 @@ const DEFAULTS = {
   // Brand + address + socials + copyright shown alongside the column links.
   // Edited from Admin → CMS Pages → Footer Settings.
   'footer.config': {
-    brand: 'Frexever',
+    brand: 'Imperial Exchange',
     logoUrl: '', // brand logo image URL (blank → letter mark)
     tagline: '',
     // Deliberately BLANK. A default is what gets served whenever the stored

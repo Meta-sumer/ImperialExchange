@@ -380,27 +380,18 @@ input[type='color']::-webkit-color-swatch-wrapper { padding: 0; border-radius: 6
 input[type='color']::-webkit-color-swatch { border: none; border-radius: 6px; }
 input[type='color']::-moz-color-swatch { border: none; border-radius: 6px; }
 
-/* Frexever logo — transparent art. Dark-text on light surfaces; the
-   white-text variant under dark theme so the wordmark stays readable.
-
-   WebP first, PNG second: the art is 600px wide (3x the 64px-tall largest
-   render) instead of the original 2500px, which weighed 651 KB and 515 KB —
-   between them more than the whole JS bundle. A browser without WebP still
-   gets the PNG, and the plain url() below covers anything that does not
-   understand image-set() at all. Keep the two formats in step: if the art
-   is ever replaced, replace BOTH or the fallback silently serves stale art. */
+/* Imperial Exchange logo — the artwork sits on its own navy ground, so one
+   image serves both themes. WebP first, JPEG second (900px wide, ~3x the
+   largest render). Keep the two formats in step: if the art is ever
+   replaced, replace BOTH or the fallback silently serves stale art. */
 .brand-logo {
-  background: url('/frexever-logo.png') center / contain no-repeat;
-  background-image: -webkit-image-set(url('/frexever-logo.webp') type('image/webp'), url('/frexever-logo.png') type('image/png'));
-  background-image: image-set(url('/frexever-logo.webp') type('image/webp'), url('/frexever-logo.png') type('image/png'));
-}
-[data-theme='dark'] .brand-logo {
-  background-image: url('/frexever-logo-dark.png');
-  background-image: -webkit-image-set(url('/frexever-logo-dark.webp') type('image/webp'), url('/frexever-logo-dark.png') type('image/png'));
-  background-image: image-set(url('/frexever-logo-dark.webp') type('image/webp'), url('/frexever-logo-dark.png') type('image/png'));
+  background: url('/imperialexchange-logo.jpg') center / contain no-repeat;
+  background-image: -webkit-image-set(url('/imperialexchange-logo.webp') type('image/webp'), url('/imperialexchange-logo.jpg') type('image/jpeg'));
+  background-image: image-set(url('/imperialexchange-logo.webp') type('image/webp'), url('/imperialexchange-logo.jpg') type('image/jpeg'));
+  border-radius: 12%;
 }
 
-/* The icon alone (circular arrows + chart mark), for places that show the
+/* The eye mark alone, for places that show the
    brand without the wordmark. Same art on both themes — it carries no text,
    so it needs no light/dark variant. */
-.brand-mark { background: url('/frexever-icon.svg') center / contain no-repeat; }
+.brand-mark { background: url('/imperialexchange-icon.png') center / contain no-repeat; border-radius: 18%; }

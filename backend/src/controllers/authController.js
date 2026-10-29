@@ -525,8 +525,8 @@ const changePassword = asyncHandler(async (req, res) => {
       await require('../services/emailService').send({
         to: user.email,
         subject: 'Your password was changed',
-        html: '<p>Your Frexever password was just changed from your profile. If this wasn\'t you, reset it immediately and contact support.</p>',
-        text: 'Your Frexever password was just changed. If this wasn\'t you, reset it immediately and contact support.',
+        html: '<p>Your Imperial Exchange password was just changed from your profile. If this wasn\'t you, reset it immediately and contact support.</p>',
+        text: 'Your Imperial Exchange password was just changed. If this wasn\'t you, reset it immediately and contact support.',
       });
     } catch (_) { /* non-fatal */ }
   });

@@ -57,8 +57,8 @@ export default function Affiliate() {
     if (navigator.share) {
       try {
         await navigator.share({
-          title: 'Join me on Frexever',
-          text: "I'm trading on Frexever — sign up with my link and we both win.",
+          title: 'Join me on Imperial Exchange',
+          text: "I'm trading on Imperial Exchange — sign up with my link and we both win.",
           url: link,
         });
       } catch (_) { /* cancelled */ }
@@ -69,13 +69,13 @@ export default function Affiliate() {
 
   const shareTo = (platform) => {
     if (!link) return;
-    const text = encodeURIComponent("Join me on Frexever — sign up with my link and start trading.");
+    const text = encodeURIComponent("Join me on Imperial Exchange — sign up with my link and start trading.");
     const url = encodeURIComponent(link);
     const map = {
       whatsapp: `https://wa.me/?text=${text}%20${url}`,
       telegram: `https://t.me/share/url?url=${url}&text=${text}`,
       twitter:  `https://twitter.com/intent/tweet?text=${text}&url=${url}`,
-      mail:     `mailto:?subject=${encodeURIComponent('Join me on Frexever')}&body=${text}%20${url}`,
+      mail:     `mailto:?subject=${encodeURIComponent('Join me on Imperial Exchange')}&body=${text}%20${url}`,
     };
     window.open(map[platform], '_blank', 'noopener,noreferrer');
   };

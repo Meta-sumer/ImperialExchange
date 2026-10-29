@@ -349,7 +349,7 @@ function PaymentMethodsCard({ mode = 'deposit' }) {
           <legend className="px-1 text-[11px] uppercase tracking-wider font-bold text-text-secondary"><span className="inline-flex items-center gap-2">📱 UPI {togglePill(isOn('UPI'), () => toggleMethod('UPI'))}</span></legend>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {field('UPI', 'upiId', 'UPI ID', 'name@bank')}
-            {field('UPI', 'payeeName', 'Payee name', 'Frexever')}
+            {field('UPI', 'payeeName', 'Payee name', 'Imperial Exchange')}
             <div className="sm:col-span-2">{field('UPI', 'note', 'Note (optional)', 'Add your user-id in the remarks')}</div>
             {wFixedFields('UPI')}
             {qrUpload('UPI')}
@@ -360,7 +360,7 @@ function PaymentMethodsCard({ mode = 'deposit' }) {
         <fieldset className={railBox(isOn('BANK'))}>
           <legend className="px-1 text-[11px] uppercase tracking-wider font-bold text-text-secondary"><span className="inline-flex items-center gap-2">🏦 Bank transfer {togglePill(isOn('BANK'), () => toggleMethod('BANK'))}</span></legend>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {field('BANK', 'accountName', 'Account name', 'Frexever Pvt Ltd')}
+            {field('BANK', 'accountName', 'Account name', 'Imperial Exchange Pvt Ltd')}
             {field('BANK', 'accountNumber', 'Account number', '0000 0000 0000')}
             {field('BANK', 'ifsc', 'IFSC', 'HDFC0000001')}
             {field('BANK', 'bankName', 'Bank name', 'HDFC Bank')}

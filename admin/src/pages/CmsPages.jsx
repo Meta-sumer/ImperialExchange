@@ -165,7 +165,7 @@ function FooterSettings() {
       <p className="text-[11px] text-text-muted">Brand, address & socials shown on the public footer. Links/columns are the pages above (set each page's Footer Column).</p>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <div><label className="label">Brand name</label><input className="input" value={f.brand} onChange={(e) => set('brand', e.target.value)} placeholder="Frexever" /></div>
+        <div><label className="label">Brand name</label><input className="input" value={f.brand} onChange={(e) => set('brand', e.target.value)} placeholder="Imperial Exchange" /></div>
         <div><label className="label">Tagline <span className="text-text-muted">(optional)</span></label><input className="input" value={f.tagline} onChange={(e) => set('tagline', e.target.value)} /></div>
         <div className="md:col-span-2"><label className="label">Brand logo <span className="text-text-muted">(blank = letter mark)</span></label>
           <div className="flex items-center gap-3 flex-wrap">
@@ -181,7 +181,7 @@ function FooterSettings() {
           <p className="text-[11px] text-text-muted mt-1">PNG / SVG / JPG, up to ~400&nbsp;KB. Saved with the footer.</p>
         </div>
         <div className="md:col-span-2"><label className="label">Address</label><textarea className="input min-h-[60px]" value={f.address} onChange={(e) => set('address', e.target.value)} placeholder={'Street address\nCity, Country POSTCODE'} /></div>
-        <div className="md:col-span-2"><label className="label">Copyright <span className="text-text-muted">(blank = auto)</span></label><input className="input" value={f.copyright} onChange={(e) => set('copyright', e.target.value)} placeholder="© 2026 · Frexever · All rights reserved" /></div>
+        <div className="md:col-span-2"><label className="label">Copyright <span className="text-text-muted">(blank = auto)</span></label><input className="input" value={f.copyright} onChange={(e) => set('copyright', e.target.value)} placeholder="© 2026 · Imperial Exchange · All rights reserved" /></div>
       </div>
 
       <div>

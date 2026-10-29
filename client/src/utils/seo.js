@@ -38,6 +38,6 @@ export function setPageSeo({ title, description, keywords, image, type = 'articl
 }
 
 // Restore a sane default when leaving a CMS page.
-export function resetPageSeo(defaultTitle = 'Frexever') {
+export function resetPageSeo(defaultTitle = 'Imperial Exchange') {
   document.title = defaultTitle;
 }

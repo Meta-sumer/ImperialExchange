@@ -42,8 +42,8 @@ const initEmail = () => {
 // Parse EMAIL_FROM ("Name <email@x>" or bare "email@x") into Brevo's sender shape.
 const parseFrom = (from) => {
   const m = /^\s*"?([^"<]*)"?\s*<([^>]+)>\s*$/.exec(from || '');
-  if (m) return { name: (m[1] || '').trim() || 'Frexever', email: m[2].trim() };
-  return { name: 'Frexever', email: (from || '').trim() };
+  if (m) return { name: (m[1] || '').trim() || 'Imperial Exchange', email: m[2].trim() };
+  return { name: 'Imperial Exchange', email: (from || '').trim() };
 };
 
 // Brevo transactional email API. The sender MUST be a Brevo-verified sender or a
@@ -120,12 +120,12 @@ const tpl = (title, body) => `
     <div style="background:#121821;border:1px solid #222a36;border-radius:12px;padding:32px;">
       <div style="display:flex;align-items:center;margin-bottom:24px;">
         <span style="display:inline-block;width:32px;height:32px;background:#2dd4bf;color:#0a0e13;border-radius:6px;text-align:center;line-height:32px;font-weight:bold;margin-right:10px;">▲</span>
-        <span style="font-size:18px;font-weight:bold;color:#fff;">Frexever</span>
+        <span style="font-size:18px;font-weight:bold;color:#fff;">Imperial Exchange</span>
       </div>
       <h1 style="font-size:22px;color:#fff;margin:0 0 16px;">${title}</h1>
       <div style="font-size:14px;line-height:1.6;color:#d1d5db;">${body}</div>
       <p style="font-size:12px;color:#6b7280;margin-top:32px;border-top:1px solid #222a36;padding-top:16px;">
-        Frexever &middot; This is an automated message. Please do not reply.
+        Imperial Exchange &middot; This is an automated message. Please do not reply.
       </p>
     </div>
   </div>
@@ -135,7 +135,7 @@ const tpl = (title, body) => `
 const sendWelcome = ({ to, firstName }) =>
   send({
     to,
-    subject: 'Welcome to Frexever',
+    subject: 'Welcome to Imperial Exchange',
     html: tpl(
       `Welcome${firstName ? ', ' + firstName : ''}!`,
       `<p>Your account is ready. We've set up a Demo account with $10,000 of virtual funds and an empty Live account.</p>
@@ -226,7 +226,7 @@ const sendVerifyEmail = ({ to, token, baseUrl }) => {
     subject: 'Verify your email address',
     html: tpl(
       'Verify your email',
-      `<p>Welcome to Frexever! Click below to verify your email address:</p>
+      `<p>Welcome to Imperial Exchange! Click below to verify your email address:</p>
        <p><a href="${link}" style="background:#2dd4bf;color:#0a0e13;padding:10px 20px;border-radius:6px;text-decoration:none;font-weight:bold;">Verify Email</a></p>
        <p style="font-size:12px;color:#9ca3af;">This link expires in 24 hours. If you didn't create an account, ignore this email.</p>`
     ),

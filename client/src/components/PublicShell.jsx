@@ -1,3 +1,4 @@
+import BrandLogo from './BrandLogo';
 import { Link } from 'react-router-dom';
 import { useAuthStore } from '../store/auth';
 import Layout from './Layout';
@@ -18,10 +19,8 @@ export default function PublicShell({ children }) {
     <div className="min-h-screen flex flex-col bg-bg-dark">
       <header className="border-b border-border-dark">
         <div className="max-w-[1100px] mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-2 text-lg font-extrabold text-text-primary">
-            <span className="w-8 h-8 rounded-lg flex items-center justify-center font-extrabold text-white text-sm"
-              style={{ background: 'linear-gradient(135deg, #1D4ED8 0%, #1E40AF 100%)' }}>T</span>
-            Frexever
+          <Link to="/" className="flex items-center shrink-0">
+            <BrandLogo size={48} />
           </Link>
           <Link to="/login" className="btn-primary text-sm px-4 py-1.5">Sign In</Link>
         </div>

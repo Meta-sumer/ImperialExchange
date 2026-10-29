@@ -272,7 +272,7 @@ export default function Layout({ children }) {
           Hidden entirely on /trade so the terminal owns the full viewport. */}
       <header className={`${location.pathname === '/trade' ? 'hidden' : 'sticky top-0 z-40 bg-white border-b border-border-dark'}`}>
         <div className="max-w-[1400px] mx-auto px-4 sm:px-6 h-20 flex items-center gap-4">
-          {/* Brand — the full Frexever lockup image (icon + wordmark + tagline). */}
+          {/* Brand — the full Imperial Exchange lockup image (icon + wordmark + tagline). */}
           <Link to="/explore" className="flex items-center shrink-0">
             {/* 64px tall renders 183px WIDE at the 2500/874 lockup aspect — a quarter
                 of the header on a 768px tablet, where all six nav items still

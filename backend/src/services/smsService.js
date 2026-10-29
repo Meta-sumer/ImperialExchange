@@ -50,12 +50,12 @@ const send = async ({ to, body }) => {
 };
 
 const sendVerificationCode = ({ to, code }) =>
-  send({ to, body: `Your Frexever verification code is: ${code}. Valid for 10 minutes.` });
+  send({ to, body: `Your Imperial Exchange verification code is: ${code}. Valid for 10 minutes.` });
 
 const sendWithdrawalAlert = ({ to, amount, currency }) =>
-  send({ to, body: `Frexever: Withdrawal of ${amount} ${currency} requested. If this wasn't you, contact support immediately.` });
+  send({ to, body: `Imperial Exchange: Withdrawal of ${amount} ${currency} requested. If this wasn't you, contact support immediately.` });
 
 const sendMarginCallAlert = ({ to, accountNumber, marginLevel }) =>
-  send({ to, body: `Frexever ALERT: Account ${accountNumber} margin at ${Number(marginLevel).toFixed(1)}%. Add funds or close positions to avoid stop-out.` });
+  send({ to, body: `Imperial Exchange ALERT: Account ${accountNumber} margin at ${Number(marginLevel).toFixed(1)}%. Add funds or close positions to avoid stop-out.` });
 
 module.exports = { init, send, sendVerificationCode, sendWithdrawalAlert, sendMarginCallAlert };

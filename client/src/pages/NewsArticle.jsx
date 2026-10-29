@@ -22,7 +22,7 @@ export default function NewsArticle() {
         const a2 = r.data.data;
         setA(a2); setState('ok');
         setPageSeo({
-          title: `${a2.title} · Frexever`,
+          title: `${a2.title} · Imperial Exchange`,
           description: a2.excerpt,
           keywords: a2.tags,
           image: a2.featuredImageUrl,

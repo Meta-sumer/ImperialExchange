@@ -25,7 +25,7 @@ export default function CmsPageView() {
         setPage(p);
         setState('ok');
         setPageSeo({
-          title: p.seoTitle || p.title || 'Frexever',
+          title: p.seoTitle || p.title || 'Imperial Exchange',
           description: p.seoDescription,
           keywords: p.metaKeywords,
           image: p.featuredImageUrl,

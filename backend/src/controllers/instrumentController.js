@@ -815,7 +815,7 @@ async function _fetchFFCalendar() {
   const seen = new Set();
   for (const url of FF_URLS) {
     try {
-      const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (Frexever calendar)' } });
+      const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (Imperial Exchange calendar)' } });
       if (!res.ok) continue;
       const rows = await res.json();
       if (!Array.isArray(rows)) continue;

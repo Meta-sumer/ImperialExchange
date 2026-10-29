@@ -18,7 +18,7 @@ export default function News() {
   const [pagination, setPagination] = useState({ page: 1, pages: 1, total: 0 });
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => { document.title = 'Daily News Updates · Frexever'; }, []);
+  useEffect(() => { document.title = 'Daily News Updates · Imperial Exchange'; }, []);
   useEffect(() => { api.get('/cms/news/categories').then((r) => setCats(r.data.data || [])).catch(() => {}); }, []);
 
   const load = useCallback(async () => {

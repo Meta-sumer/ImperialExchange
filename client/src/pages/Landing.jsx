@@ -15,7 +15,7 @@ import { fmtNum } from '../utils/format';
  * Section order mirrors the reference marketing layout: Hero → Ticker →
  * Trust badges → Why Choose → Everything you need → Built for Every Trader
  * → Markets → Platform → Protected banner → How It Works →
- * Why Traders Love Frexever (testimonials + merged benefit badges) →
+ * Why Traders Love Imperial Exchange (testimonials + merged benefit badges) →
  * App download → Final CTA.
  */
 
@@ -135,7 +135,7 @@ const STEPS = [
 ];
 
 const TESTIMONIALS = [
-  { name: 'Rahul Sharma', role: 'Professional Trader', init: 'RS', img: 'https://i.pravatar.cc/96?img=13', quote: 'Frexever is by far the best platform I have used. The execution speed and low fees are unmatched — I have moved all my trading here.' },
+  { name: 'Rahul Sharma', role: 'Professional Trader', init: 'RS', img: 'https://i.pravatar.cc/96?img=13', quote: 'Imperial Exchange is by far the best platform I have used. The execution speed and low fees are unmatched — I have moved all my trading here.' },
   { name: 'Sarah Williams', role: 'Crypto Investor', init: 'SW', img: 'https://i.pravatar.cc/96?img=47', quote: 'I have been trading crypto for years and this is the fastest, most reliable terminal I have come across. Highly recommended.' },
   { name: 'Michael Chen', role: 'Day Trader', init: 'MC', img: 'https://i.pravatar.cc/96?img=33', quote: 'The platform is super fast and reliable. I can trade anywhere, anytime, on any device, without any interruptions.' },
 ];
@@ -370,7 +370,7 @@ function TrustBadges() {
 function WhyChoose() {
   return (
     <section id="why" className="max-w-[1200px] mx-auto px-4 sm:px-6 py-16">
-      <SectionHead eyebrow="Why Choose Us" title="Why Choose Frexever?" sub="Everything you need to trade with confidence — speed, security and total transparency." />
+      <SectionHead eyebrow="Why Choose Us" title="Why Choose Imperial Exchange?" sub="Everything you need to trade with confidence — speed, security and total transparency." />
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-10">
         {WHY.map((w) => (
           <div key={w.title} className="card p-5 hover:border-primary-500/40 hover:shadow-elevated transition-all">
@@ -417,7 +417,7 @@ function Features() {
 function BuiltForEveryTrader() {
   return (
     <section className="max-w-[1200px] mx-auto px-4 sm:px-6 py-16">
-      <SectionHead eyebrow="For Everyone" title="Built for Every Trader" sub="Whether you're just starting or a pro, Frexever gives you the tools, flexibility and freedom to trade your way." />
+      <SectionHead eyebrow="For Everyone" title="Built for Every Trader" sub="Whether you're just starting or a pro, Imperial Exchange gives you the tools, flexibility and freedom to trade your way." />
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-10">
         {BUILT.map((b) => (
           <div key={b.title} className="card p-6 text-center hover:border-primary-500/40 hover:shadow-elevated transition-all">
@@ -685,7 +685,7 @@ function Platform() {
             <span className="w-2.5 h-2.5 rounded-full" style={{ background: '#FF5F57' }} />
             <span className="w-2.5 h-2.5 rounded-full" style={{ background: '#FEBC2E' }} />
             <span className="w-2.5 h-2.5 rounded-full" style={{ background: '#28C840' }} />
-            <span className="ml-2 text-[9px] font-semibold" style={{ color: '#64748B' }}>Frexever Terminal</span>
+            <span className="ml-2 text-[9px] font-semibold" style={{ color: '#64748B' }}>Imperial Exchange Terminal</span>
           </div>
           {/* chart + order panel */}
           <div className="p-2.5 grid grid-cols-[1fr_86px] gap-2">
@@ -873,7 +873,7 @@ function Steps() {
 }
 
 /* ───────────────────────── Testimonials ───────────────────────── */
-// "Why Traders Love Frexever" — testimonial + benefit merged into ONE card each.
+// "Why Traders Love Imperial Exchange" — testimonial + benefit merged into ONE card each.
 // Top: avatar/name/role → stars → review; a separator; then a colorful benefit
 // badge pinned to the bottom. The review uses flex-1 so every badge lines up at
 // the same baseline → visually equal card heights across the row.
@@ -891,8 +891,8 @@ function Testimonials() {
           <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" /></svg>
           Loved by thousands of traders
         </div>
-        <h2 className="text-4xl sm:text-5xl font-extrabold tracking-tight">Why Traders Love Frexever</h2>
-        <p className="mt-3 text-text-secondary">Join thousands of traders who trust Frexever every day.</p>
+        <h2 className="text-4xl sm:text-5xl font-extrabold tracking-tight">Why Traders Love Imperial Exchange</h2>
+        <p className="mt-3 text-text-secondary">Join thousands of traders who trust Imperial Exchange every day.</p>
       </div>
       {/* Responsive: 1 col (mobile) → 2 (tablet) → 3 (desktop). Cards stretch to equal height. */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 mt-12">
@@ -1084,7 +1084,7 @@ function AppDownload() {
         <div className="flex flex-col sm:flex-row items-start gap-6">
           <div className="flex-1">
             <h2 className="text-3xl sm:text-[34px] font-extrabold tracking-tight">Trade Anytime, <span style={teal}>Anywhere</span></h2>
-            <p className="mt-3 text-text-secondary max-w-md">Download the Frexever app and trade on the go. Available on iOS and Android — your portfolio, always in your pocket.</p>
+            <p className="mt-3 text-text-secondary max-w-md">Download the Imperial Exchange app and trade on the go. Available on iOS and Android — your portfolio, always in your pocket.</p>
             <div className="mt-6 flex flex-wrap gap-3">
               <StoreBadge store="apple" />
               <StoreBadge store="google" />
@@ -1152,7 +1152,7 @@ function FinalCTA() {
         <span className="pointer-events-none absolute inset-0 opacity-25" style={{ background: 'radial-gradient(120% 120% at 15% 10%, rgba(255,255,255,0.35), transparent 55%)' }} />
         <div className="relative text-center md:text-left">
           <h2 className="text-2xl sm:text-3xl font-extrabold" style={{ color: '#FFFFFF' }}>Ready To Start Your Trading Journey?</h2>
-          <p className="mt-2 text-sm sm:text-base font-medium" style={{ color: 'rgba(255,255,255,0.88)' }}>Trade Free. Trade Smart. Trade Frexever.</p>
+          <p className="mt-2 text-sm sm:text-base font-medium" style={{ color: 'rgba(255,255,255,0.88)' }}>Trade. Invest. Grow. Imperial Exchange.</p>
         </div>
         <Link
           to="/register"
