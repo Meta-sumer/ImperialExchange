@@ -80,8 +80,8 @@ export default function SubscriptionWallet() {
   const balanceNum = Number(wallet?.balance || 0);
   const lowThreshold = Number(wallet?.lowBalanceThreshold || 0);
   const isLow = wallet?.isLowBalance || balanceNum <= lowThreshold;
-  const ccy = wallet?.currency || 'USD';
-  const sym = ccy === 'USD' ? '$' : `${ccy} `;
+  const ccy = wallet?.currency || 'INR';
+  const sym = ccy === 'INR' ? '₹' : ccy === 'INR' ? '₹' : `${ccy} `;
   const fmt = (n) => Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   const status = sub?.status || (effectivePlan?.code === 'FREE' ? 'FREE' : 'NONE');
@@ -310,7 +310,7 @@ function StatusTile({ label, value, sub, badge, tone }) {
 // Fixed methods (admin-fillable + Shown/Hidden toggle). TRADING (instant
 // internal transfer) is always available and appended last.
 // No hard-coded minimums: min/max come from the admin's per-method limits
-// (deposit.paymentDetails, USD). The Main Wallet is USD-denominated so the
+// (deposit.paymentDetails, INR). The Main Wallet is INR-denominated so the
 // stored figure needs no conversion. Nothing configured = no floor.
 const FIXED_METHODS = [
   { id: 'UPI',      label: 'UPI',           sub: 'Instant · Free',        kind: 'manual', emoji: '📱' },
@@ -320,7 +320,7 @@ const FIXED_METHODS = [
   { id: 'NETELLER', label: 'Neteller',      sub: 'Instant',               kind: 'manual', emoji: '💳' },
 ];
 
-// The admin's limits and fee for a rail, in USD. Same shape the trading
+// The admin's limits and fee for a rail, in INR. Same shape the trading
 // wallet reads, so one Settings change now reaches every wallet.
 // Which currency a rail takes payment in, from the admin's own list.
 // Mirrors payoutCurrency() on the server and in WithdrawModal:
@@ -328,13 +328,13 @@ const FIXED_METHODS = [
 //   currency, otherwise the first one listed.
 //
 // This used to HIDE a rail whose list excluded the wallet currency, which
-// made an INR-only UPI rail invisible on a USD wallet. A rail is never
+// made an INR-only UPI rail invisible on a INR wallet. A rail is never
 // hidden for its currency now — it simply quotes that currency.
 const railCurrency = (cfg, walletCcy) => {
   const list = Array.isArray(cfg?.supportedCurrencies)
     ? cfg.supportedCurrencies.map((c) => String(c || '').toUpperCase()).filter(Boolean)
     : [];
-  const base = String(walletCcy || 'USD').toUpperCase();
+  const base = String(walletCcy || 'INR').toUpperCase();
   if (!list.length) return base;
   return list.includes(base) ? base : list[0];
 };
@@ -348,7 +348,7 @@ const railRules = (cfg) => ({
 const TRADING_METHOD = { id: 'TRADING', label: 'Trading account', sub: 'Instant transfer', min: 1, kind: 'instant', emoji: '↔️' };
 
 function DepositModal({ currency, onClose, onSuccess }) {
-  // Rates are needed to quote the admin's USD limits in whichever currency
+  // Rates are needed to quote the admin's INR limits in whichever currency
   // the chosen rail actually takes.
   const { rateOf, symbolFor } = useDisplayRates();
   const [step, setStep] = useState(0);
@@ -413,13 +413,13 @@ function DepositModal({ currency, onClose, onSuccess }) {
     return list;
   }, [payDetails, payState, currency]);
 
-  const sym = currency === 'USD' ? '$' : `${currency} `;
-  // The currency THIS rail takes, and the rate to quote the admin's USD
+  const sym = currency === 'INR' ? '₹' : currency === 'INR' ? '₹' : `${currency} `;
+  // The currency THIS rail takes, and the rate to quote the admin's INR
   // limits in it. The internal trading transfer is always wallet currency.
   const payCcy = (method && method.id !== 'TRADING' && method.payCcy) || currency;
   const payRate = payCcy === currency ? 1 : (rateOf(payCcy, 'deposit') ?? 1);
   const paySym = symbolFor(payCcy);
-  // The admin stores limits in USD; show them in what the user will type.
+  // The admin stores limits in INR; show them in what the user will type.
   const payMin = (method?.min || 0) * payRate;
   const payMax = (method?.max || 0) * payRate;
   const fmt = (n) => Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });

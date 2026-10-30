@@ -15,7 +15,7 @@ const { connectDB } = require('../config/db');
 const User = require('../models/User');
 const TradingAccount = require('../models/TradingAccount');
 const { Wallet } = require('../models/Wallet');
-const { ACCOUNT_TYPES, TRADING_MODE, ROLES } = require('../config/constants');
+const { BASE_CURRENCY, ACCOUNT_TYPES, TRADING_MODE, ROLES } = require('../config/constants');
 
 const run = async () => {
   await connectDB();
@@ -36,12 +36,12 @@ const run = async () => {
         userId: user._id,
         accountNumber,
         accountType: ACCOUNT_TYPES.DEMO,
-        baseCurrency: 'USD',
+        baseCurrency: BASE_CURRENCY,
         leverage: 100,
         mode: TRADING_MODE.HYBRID,
         nickname: 'Practice Account',
       });
-      await Wallet.create({ userId: user._id, accountId: acct._id, currency: 'USD', balance: '10000' });
+      await Wallet.create({ userId: user._id, accountId: acct._id, currency: BASE_CURRENCY, balance: '10000' });
       console.log(`  + Demo account for ${user.email}`);
       demoAdded++;
     }
@@ -54,13 +54,13 @@ const run = async () => {
         userId: user._id,
         accountNumber,
         accountType: ACCOUNT_TYPES.REAL,
-        baseCurrency: 'USD',
+        baseCurrency: BASE_CURRENCY,
         leverage: 100,
         mode: TRADING_MODE.HYBRID,
         nickname: 'Live Account',
       });
       // Real account starts at $0 - user funds it via deposit
-      await Wallet.create({ userId: user._id, accountId: acct._id, currency: 'USD', balance: '0' });
+      await Wallet.create({ userId: user._id, accountId: acct._id, currency: BASE_CURRENCY, balance: '0' });
       console.log(`  + Live account for ${user.email}`);
       liveAdded++;
     }

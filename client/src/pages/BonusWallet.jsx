@@ -93,8 +93,8 @@ export default function BonusWallet() {
     );
   }
 
-  const ccy = wallet?.currency || 'USD';
-  const sym = ccy === 'USD' ? '$' : `${ccy} `;
+  const ccy = wallet?.currency || 'INR';
+  const sym = ccy === 'INR' ? '₹' : ccy === 'INR' ? '₹' : `${ccy} `;
   const fmt = (n) => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   const stats = [

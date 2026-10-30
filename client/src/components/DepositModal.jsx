@@ -11,7 +11,7 @@ import { api, errorMessage } from '../services/api';
  * account) backs every wallet.
  *
  * Props:
- *   currency        display currency (default 'USD')
+ *   currency        display currency (default 'INR')
  *   walletName      'Main Wallet' | 'Bonus Wallet' (default 'Main Wallet')
  *   instantEndpoint POST endpoint for the instant trading-account transfer
  *   manualEndpoint  POST endpoint for manual (admin-verified) deposits
@@ -20,7 +20,7 @@ import { api, errorMessage } from '../services/api';
 // Fixed methods the admin can fill in + toggle Shown/Hidden. TRADING (instant
 // internal transfer) is always available and appended last.
 // No hard-coded minimums: min/max come from the admin's per-method limits
-// (deposit.paymentDetails, USD). These wallets are USD-denominated, so the
+// (deposit.paymentDetails, INR). These wallets are INR-denominated, so the
 // stored figure needs no conversion. Nothing configured = no floor.
 const FIXED_METHODS = [
   { id: 'UPI',      label: 'UPI',           sub: 'Instant · Free',        kind: 'manual', emoji: '📱' },
@@ -30,7 +30,7 @@ const FIXED_METHODS = [
   { id: 'NETELLER', label: 'Neteller',      sub: 'Instant',               kind: 'manual', emoji: '💳' },
 ];
 
-// The admin limits + fee for a rail, in USD.
+// The admin limits + fee for a rail, in INR.
 const railRules = (cfg) => ({
   min: Number(cfg?.minDeposit) > 0 ? Number(cfg.minDeposit) : 0,
   max: Number(cfg?.maxDeposit) > 0 ? Number(cfg.maxDeposit) : 0,
@@ -40,7 +40,7 @@ const railRules = (cfg) => ({
 const TRADING_METHOD = { id: 'TRADING', label: 'Trading account', sub: 'Instant transfer', min: 1, kind: 'instant', emoji: '↔️' };
 
 export default function DepositModal({
-  currency = 'USD',
+  currency = 'INR',
   walletName = 'Main Wallet',
   instantEndpoint = '/subscription-wallet/deposit',
   manualEndpoint = '/subscription-wallet/manual-deposit',
@@ -102,7 +102,7 @@ export default function DepositModal({
     return list;
   }, [payDetails, payState]);
 
-  const sym = currency === 'USD' ? '$' : `${currency} `;
+  const sym = currency === 'INR' ? '₹' : currency === 'INR' ? '₹' : `${currency} `;
   const fmt = (n) => Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   useEffect(() => {

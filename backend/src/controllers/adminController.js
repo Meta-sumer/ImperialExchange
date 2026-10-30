@@ -10,7 +10,7 @@ const Feedback = require('../models/Feedback');
 const walletService = require('../services/walletService');
 const { sendSuccess, asyncHandler, AppError } = require('../utils/errors');
 const { applyDateRange, applyDateTimeRange, localDayStart, endOfDay } = require('../utils/dateRange');
-const { KYC_STATUS, WALLET_TX_TYPE, BOOK_TYPE, LP_PROVIDER, EXECUTION_MODE, ROUTING_RESULT, ROUTING } = require('../config/constants');
+const { BASE_CURRENCY, KYC_STATUS, WALLET_TX_TYPE, BOOK_TYPE, LP_PROVIDER, EXECUTION_MODE, ROUTING_RESULT, ROUTING } = require('../config/constants');
 const { add, sub, mul, gt } = require('../utils/decimal');
 
 const logAction = async (req, action, target, metadata = {}) => {
@@ -148,9 +148,8 @@ const listUsers = asyncHandler(async (req, res) => {
 
   // One live FX rate so non-USD trading balances normalise to USD INSIDE
   // the pipeline (deposits/withdrawals already carry a USD `baseAmount`).
-  let usdInr = 83;
-  try { usdInr = Number(await currencyService.getUsdInrRate()) || 83; } catch (_) {}
-  const toUsd = (bal, cur) => ({ $cond: [{ $eq: [cur, 'USD'] }, bal, { $divide: [bal, usdInr] }] });
+  // INR ledger — every wallet is already rupees, so nothing to normalise.
+  const toUsd = (bal) => bal;
   // Safe string→number: bad/empty/null money strings become 0 instead of
   // throwing and 500-ing the entire user list.
   const num = (f) => ({ $convert: { input: f, to: 'double', onError: 0, onNull: 0 } });
@@ -894,7 +893,7 @@ const approveWithdrawal = asyncHandler(async (req, res) => {
     // Debit balance + unlock on the canonical base wallet. Use the
     // pre-stored baseCurrency / baseAmount; fall back to currency /
     // amount for legacy records written before the base columns existed.
-    const wdBaseCcy = wd.baseCurrency || 'USD';
+    const wdBaseCcy = wd.baseCurrency || BASE_CURRENCY;
     const wdBaseAmt = wd.baseAmount && Number(wd.baseAmount) > 0 ? wd.baseAmount : wd.amount;
     await walletService.unlock({
       userId: wd.userId,
@@ -979,7 +978,7 @@ const rejectWithdrawal = asyncHandler(async (req, res) => {
     await walletService.unlock({
       userId: wd.userId,
       accountId: wd.accountId,
-      currency: wd.baseCurrency || 'USD',
+      currency: wd.baseCurrency || BASE_CURRENCY,
       amount: wdRefundAmt,
     });
   }
@@ -1020,7 +1019,7 @@ const confirmDeposit = asyncHandler(async (req, res) => {
   if (dep.status !== 'PENDING') throw new AppError('Deposit already processed', 400);
 
   // Credit amount — always in the base USD value pre-computed at submit.
-  const creditCurrency = dep.baseCurrency || 'USD';
+  const creditCurrency = dep.baseCurrency || BASE_CURRENCY;
   const grossCredit = dep.baseAmount && Number(dep.baseAmount) > 0
     ? dep.baseAmount
     : dep.amount;
@@ -1630,7 +1629,7 @@ const getExchangeRates = asyncHandler(async (req, res) => {
   await fxService.ensureSeed();
   const rows = await ExchangeRate.find({}).sort({ quoteCurrency: 1 }).lean();
   sendSuccess(res, {
-    base: 'USD',
+    base: BASE_CURRENCY,
     currencies: rows.map((r) => ({
       code: r.quoteCurrency,
       symbol: r.symbol || fxService.symbolFor(r.quoteCurrency),
@@ -1668,10 +1667,10 @@ const updateExchangeRates = asyncHandler(async (req, res) => {
   const results = [];
   for (const raw of list) {
     const code = String(raw.code || '').toUpperCase().trim();
-    if (!code || code === 'USD') continue; // USD is the base — nothing to store
+    if (!code || code === BASE_CURRENCY) continue; // the base currency has no rate
     if (!/^[A-Z]{3,5}$/.test(code)) throw new AppError(`Invalid currency code "${code}"`, 400, 'INVALID_CURRENCY');
 
-    const set = { baseCurrency: 'USD', quoteCurrency: code, updatedBy: req.userId };
+    const set = { baseCurrency: BASE_CURRENCY, quoteCurrency: code, updatedBy: req.userId };
     if (raw.symbol !== undefined) set.symbol = String(raw.symbol).slice(0, 4);
     if (raw.enabled !== undefined) set.enabled = raw.enabled !== false;
     if (raw.mode !== undefined) {
@@ -1725,7 +1724,7 @@ const deleteExchangeRate = asyncHandler(async (req, res) => {
 
   const code = String(req.params.code || '').toUpperCase().trim();
   if (!/^[A-Z]{3,5}$/.test(code)) throw new AppError(`Invalid currency code "${code}"`, 400, 'INVALID_CURRENCY');
-  if (code === 'USD') throw new AppError('USD is the base currency and cannot be removed', 400, 'BASE_CURRENCY');
+  if (code === BASE_CURRENCY) throw new AppError(`${BASE_CURRENCY} is the base currency and cannot be removed`, 400, 'BASE_CURRENCY');
 
   // Still referenced by a payment rail?
   const details = (await systemSettings.getSetting('deposit.paymentDetails')) || {};
@@ -2928,9 +2927,8 @@ const getPortfolio = asyncHandler(async (req, res) => {
   const { Commission } = require('../models/Compliance');
   const RoutingDecision = require('../models/RoutingDecision');
   const currencyService = require('../services/currencyService');
-  let usdInr = 83;
-  try { usdInr = Number(await currencyService.getUsdInrRate()) || 83; } catch (_) {}
-  const toUsd = (bal, cur) => ({ $cond: [{ $eq: [cur, 'USD'] }, bal, { $divide: [bal, usdInr] }] });
+  // INR ledger — every wallet is already rupees, so nothing to normalise.
+  const toUsd = (bal) => bal;
 
   const [twBal, mwBal, bwBal, depAgg, wdAgg, openAgg, closedAgg, routeAgg, commPaidAgg, series] = await Promise.all([
     Wallet.aggregate([{ $group: { _id: null, t: { $sum: toUsd(_num('$balance'), '$currency') } } }]),

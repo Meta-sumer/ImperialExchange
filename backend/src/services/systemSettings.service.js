@@ -8,6 +8,7 @@
  * Keys + their meaning are documented in models/SystemSetting.js.
  */
 const SystemSetting = require('../models/SystemSetting');
+const { BASE_CURRENCY } = require('../config/constants');
 
 const TTL_MS = Number(process.env.SETTINGS_CACHE_TTL_MS) || 60_000;
 
@@ -85,7 +86,7 @@ const DEFAULTS = {
   'partner.enabled':      true,
   'partner.bonusAmount':  '10',     // instant credit on referee's first qualifying deposit
   'partner.minDeposit':   '50',     // deposit threshold that "activates" a referee
-  'partner.bonusCurrency': 'USD',   // currency recorded for the first-deposit bonus
+  'partner.bonusCurrency': BASE_CURRENCY,   // currency recorded for the first-deposit bonus
   'partner.tiers': [
     { name: 'BRONZE',  minActive:   1, maxActive:  20, percent: '10' },
     { name: 'SILVER',  minActive:  21, maxActive:  50, percent: '15' },

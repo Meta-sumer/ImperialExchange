@@ -120,7 +120,7 @@ export default function TraderDashboard() {
         <ChartCard title="Weekly Performance" sub="Realized PnL per week · last 12">
           <BarChart data={charts.weekly} />
         </ChartCard>
-        <ChartCard title="Profit Distribution" sub="Trades by PnL bucket (USD)">
+        <ChartCard title="Profit Distribution" sub="Trades by PnL bucket (INR)">
           <DistributionChart data={charts.distribution} />
         </ChartCard>
       </div>
@@ -743,7 +743,7 @@ function MasterEarnings({ earnings }) {
       </div>
 
       <p className="text-[11px] text-text-muted mt-3 leading-snug">
-        You earn a share of each follower's <span className="font-semibold text-text-secondary">profit</span> on winning copied trades. The fee is held in escrow as it is charged and released to your Main Wallet (USD) when you transfer it. Losing and breakeven trades never generate a fee.
+        You earn a share of each follower's <span className="font-semibold text-text-secondary">profit</span> on winning copied trades. The fee is held in escrow as it is charged and released to your Main Wallet (INR) when you transfer it. Losing and breakeven trades never generate a fee.
         {isMonthNegative && ' Your commission is accumulating but locked until your own trading P&L for this month is positive.'}
       </p>
     </div>

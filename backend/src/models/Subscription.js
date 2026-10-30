@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { BASE_CURRENCY } = require('../config/constants');
 
 /**
  * Subscription Plans (doc §7.16).
@@ -66,7 +67,7 @@ const planSchema = new mongoose.Schema(
       perDevicePerMonth: { type: String, default: '0' },
       perAccountPerMonth: { type: String, default: '0' },
       minimumMonthlyFee: { type: String, default: '0' },
-      currency: { type: String, default: 'USD' },
+      currency: { type: String, default: BASE_CURRENCY },
     },
 
     // Display in pricing page UI
@@ -102,7 +103,7 @@ const subscriptionSchema = new mongoose.Schema(
       provider: String, // 'RAZORPAY' | 'STRIPE' | 'MANUAL'
       transactionId: String,
       amount: String,
-      currency: { type: String, default: 'USD' },
+      currency: { type: String, default: BASE_CURRENCY },
       paidAt: Date,
     },
   },

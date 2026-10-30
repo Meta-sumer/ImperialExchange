@@ -244,7 +244,7 @@ function Row({ row, isActive, isFav, fxRate, onSelect, onToggleFav }) {
   const change = Number(row.change24h);
   const changeColor =
     !Number.isFinite(change) ? 'text-text-muted' : change >= 0 ? 'text-bull' : 'text-bear';
-  const quote = row.quoteCurrency || 'USD';
+  const quote = row.quoteCurrency || 'INR';
   const bidPx = fmtPriceDual(row.bid, quote, fxRate, row.pricePrecision || 2);
   const askPx = fmtPriceDual(row.ask, quote, fxRate, row.pricePrecision || 2);
   const av = avatarFor(row);

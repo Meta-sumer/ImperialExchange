@@ -20,7 +20,7 @@ const CopyBox = require('../models/CopyBox');
 const User = require('../models/User');
 const Instrument = require('../models/Instrument');
 const { dateRangeFilter } = require('../utils/dateRange');
-const { POSITION_STATUS } = require('../config/constants');
+const { BASE_CURRENCY, POSITION_STATUS } = require('../config/constants');
 
 const oid = (id) => mongoose.Types.ObjectId.createFromHexString(String(id));
 const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
@@ -399,7 +399,7 @@ async function getCopyAnalytics(followerId, relationId, { from, to } = {}) {
     CopyTrade.find({ relationId: rel._id }).lean(),
     CopyTradeEarnings.find({ relationId: rel._id }).lean(),
   ]);
-  const currency = acc?.baseCurrency || 'USD';
+  const currency = acc?.baseCurrency || BASE_CURRENCY;
   const perfFeePaid = round2(earnings.reduce((s, e) => s + num(e.feeAmount), 0));
 
   const openTrades = allTrades.filter((t) => t.status === 'OPEN').length;

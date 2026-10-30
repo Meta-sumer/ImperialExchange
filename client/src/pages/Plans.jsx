@@ -110,7 +110,7 @@ export default function Plans() {
           balance: details?.balance ?? subWallet?.balance ?? '0',
           needed: details?.needed ?? String(billing === 'YEARLY' ? confirmPlan.yearlyPrice : confirmPlan.monthlyPrice),
           shortfall: details?.shortfall ?? '0',
-          currency: details?.currency ?? subWallet?.currency ?? 'USD',
+          currency: details?.currency ?? subWallet?.currency ?? 'INR',
         });
       } else {
         toast.error(errorMessage(e));
@@ -135,8 +135,8 @@ export default function Plans() {
 
   const isCurrent = (plan) => effective?.code === plan.code;
   const balanceNum = Number(subWallet?.balance || 0);
-  const walletCcy = subWallet?.currency || 'USD';
-  const walletSym = walletCcy === 'USD' ? '$' : `${walletCcy} `;
+  const walletCcy = subWallet?.currency || 'INR';
+  const walletSym = walletCcy === 'INR' ? '₹' : walletCcy === 'INR' ? '₹' : `${walletCcy} `;
   const fmt = (n) => Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   // Plan billing history — charges, renewals and refunds pulled from the Main
@@ -439,7 +439,7 @@ export default function Plans() {
 }
 
 function RechargePromptModal({ plan, billing, balance, needed, shortfall, currency, onClose }) {
-  const sym = currency === 'USD' ? '$' : `${currency} `;
+  const sym = currency === 'INR' ? '₹' : currency === 'INR' ? '₹' : `${currency} `;
   const fmt = (n) => Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   return (
     <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={onClose}>
@@ -502,7 +502,7 @@ function ConfirmPayModal({ plan, billing, wallet, submitting, onConfirm, onClose
   const after = balance - price;
   const canAfford = balance >= price;
   const fmt = (n) => Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const ccy = wallet?.currency || 'USD';
+  const ccy = wallet?.currency || 'INR';
 
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={onClose}>
@@ -576,8 +576,8 @@ function PostPaidRateBlock({ plan }) {
   const perDevice = Number(rates.perDevicePerMonth || 0);
   const perAccount = Number(rates.perAccountPerMonth || 0);
   const minFee = Number(rates.minimumMonthlyFee || 0);
-  const ccy = rates.currency || 'USD';
-  const sym = ccy === 'USD' ? '$' : `${ccy} `;
+  const ccy = rates.currency || 'INR';
+  const sym = ccy === 'INR' ? '₹' : ccy === 'INR' ? '₹' : `${ccy} `;
   return (
     <div className="space-y-1">
       <div className="flex items-baseline gap-2">

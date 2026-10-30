@@ -164,9 +164,9 @@ function AnalyticsStrip({ a }) {
   const chips = [
     { label: 'Partners',              value: a.totalPartners },
     { label: 'Total referrals',       value: a.totalReferrals },
-    { label: 'Bonuses paid',          value: `$${a.bonusesPaid}`,   tint: 'text-bull' },
-    { label: 'Profit',                value: `$${a.revenueShared}`, tint: 'text-bull' },
-    { label: 'Commission liability',  value: `$${a.commissionLiability}`, tint: 'text-warn' },
+    { label: 'Bonuses paid',          value: `₹${a.bonusesPaid}`,   tint: 'text-bull' },
+    { label: 'Profit',                value: `₹${a.revenueShared}`, tint: 'text-bull' },
+    { label: 'Commission liability',  value: `₹${a.commissionLiability}`, tint: 'text-warn' },
   ];
   return (
     <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">

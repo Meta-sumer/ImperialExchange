@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { BASE_CURRENCY } = require('../config/constants');
 
 /**
  * Bonus Wallet — a dedicated, withdrawal-locked wallet that receives ALL
@@ -20,7 +21,7 @@ const bonusWalletSchema = new mongoose.Schema(
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, unique: true, index: true },
     walletType: { type: String, default: 'bonus', immutable: true },
     balance: { type: String, default: '0' }, // string-decimal
-    currency: { type: String, default: 'USD' },
+    currency: { type: String, default: BASE_CURRENCY },
 
     // Subscription billing lives on this wallet: plan purchases / renewals
     // debit it, and these knobs drive the auto-renew + low-balance UX.
@@ -71,7 +72,7 @@ const bonusTransactionSchema = new mongoose.Schema(
     status: { type: String, enum: ['SUCCESS', 'PENDING', 'FAILED'], default: 'SUCCESS', index: true },
 
     amount: { type: String, required: true },   // unsigned string-decimal
-    currency: { type: String, default: 'USD' },
+    currency: { type: String, default: BASE_CURRENCY },
     balanceAfter: { type: String },
 
     // What this movement belongs to — a Withdrawal id for a WITHDRAWAL /

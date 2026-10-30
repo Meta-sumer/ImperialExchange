@@ -1,4 +1,5 @@
 const Instrument = require('../models/Instrument');
+const { BASE_CURRENCY } = require('../config/constants');
 const cacheService = require('../services/cacheService');
 const Candle = require('../models/Candle');
 const { sendSuccess, asyncHandler, AppError } = require('../utils/errors');
@@ -598,7 +599,7 @@ const disableInstrument = asyncHandler(async (req, res) => {
         try {
           await walletService.releaseMargin({
             userId: fresh.userId, accountId: fresh.accountId,
-            currency: acc?.baseCurrency || 'USD', amount: releaseAmt,
+            currency: acc?.baseCurrency || BASE_CURRENCY, amount: releaseAmt,
             orderId: fresh._id, note: `Instrument disabled: released ${releaseAmt} for unfilled ${remaining}`,
           });
         } catch (_) { /* best-effort */ }

@@ -732,7 +732,7 @@ function Platform() {
           <div className="px-2.5 pb-2.5">
             <div className="rounded-lg border overflow-hidden" style={{ background: '#0E1626', borderColor: 'rgba(255,255,255,0.08)' }}>
               <div className="px-2 py-1 text-[8px] font-bold text-white border-b" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>Open Positions</div>
-              {[['ETH/USD', 'BUY', '#22C55E', '+2.31%'], ['SOL/USD', 'BUY', '#22C55E', '+4.12%'], ['XAU/USD', 'SELL', '#EF4444', '-0.80%']].map((r, i) => (
+              {[['RELIANCE', 'BUY', '#22C55E', '+1.12%'], ['TCS', 'SELL', '#EF4444', '-0.35%'], ['GOLD', 'BUY', '#22C55E', '+0.64%']].map((r, i) => (
                 <div key={i} className="px-2 py-1 flex items-center justify-between border-b last:border-0" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
                   <span className="text-[8px] font-semibold w-12" style={{ color: '#E2E8F0' }}>{r[0]}</span>
                   <span className="text-[7px] font-bold px-1.5 py-px rounded" style={{ background: `${r[2]}22`, color: r[2] }}>{r[1]}</span>
@@ -1136,19 +1136,11 @@ function StoreBadge({ store }) {
 }
 
 function QR() {
-  // Decorative QR-like pattern (fixed, not scannable).
-  const cells = [
-    [0, 0], [1, 0], [2, 0], [4, 0], [6, 0], [0, 1], [2, 1], [4, 1], [6, 1], [0, 2], [1, 2], [2, 2], [4, 2], [5, 2],
-    [1, 3], [3, 3], [5, 3], [6, 3], [0, 4], [2, 4], [3, 4], [6, 4], [0, 5], [2, 5], [4, 5], [5, 5],
-    [1, 6], [2, 6], [3, 6], [5, 6], [6, 6], [4, 4], [3, 1],
-  ];
+  // Real QR code (public/download-qr.svg) → https://imperialexchange.in/download
   return (
-    <svg width="90" height="90" viewBox="0 0 70 70" className="mx-auto">
-      <rect x="0" y="0" width="70" height="70" rx="6" fill="#fff" stroke="#E2E8F0" />
-      {cells.map(([x, y], i) => (
-        <rect key={i} x={6 + x * 8} y={6 + y * 8} width="7" height="7" rx="1.2" fill="#0F172A" />
-      ))}
-    </svg>
+    <a href="/download" aria-label="Scan or tap to download the Android app" className="inline-block mx-auto">
+      <img src="/download-qr.svg" alt="QR code to download the app" width="96" height="96" className="rounded-md bg-white border border-border-dark p-1" />
+    </a>
   );
 }
 

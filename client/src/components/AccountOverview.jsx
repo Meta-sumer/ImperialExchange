@@ -13,24 +13,24 @@ import { fmtNum } from '../utils/format';
  * four KPI stat cards + a Recent Transactions panel, and a Recent
  * Wallet Transactions table.
  *
- * Trading figures arrive USD-normalised from the parent (`totals`,
+ * Trading figures arrive INR-normalised from the parent (`totals`,
  * `usd`, `usdSub`); wallet balances (Main / Referral) come from their
- * own endpoints in their own currency and are normalised to USD locally.
+ * own endpoints in their own currency and are normalised to INR locally.
  */
 export default function AccountOverview({
   accounts = [], balances = [], deposits = [], withdrawals = [],
   positions = [], priceMap = {}, totals = {}, usd, usdSub, fxRate, setView,
 }) {
-  // Display in the user's chosen currency — USD by default, and USD is what
+  // Display in the user's chosen currency — INR by default, and INR is what
   // these figures are actually denominated in.
   const { money, code } = useMoney();
   const rate = Number(fxRate) > 0 ? Number(fxRate) : 83;
-  // Blank when the display currency already IS USD — otherwise this sub-line
+  // Blank when the display currency already IS INR — otherwise this sub-line
   // just repeats the figure printed directly above it.
-  const usdStr = (usdVal) => (code === 'USD' ? '' : `≈ $${fmtNum(Number(usdVal) || 0, 2)} USD`);
-  // Normalise INTO USD. This ran the other way — the comment read "INR /
+  const usdStr = () => ''; // INR-only — no secondary currency line
+  // Normalise INTO INR. This ran the other way — the comment read "INR /
   // unknown treated as INR" — so every figure on this panel was summed in
-  // rupees while the wallets it describes are USD-denominated, with a
+  // rupees while the wallets it describes are INR-denominated, with a
   // hardcoded 83 standing in whenever the live rate had not loaded yet.
   const toUsd = (amount, currency) => {
     const n = Number(amount) || 0;
@@ -78,22 +78,22 @@ export default function AccountOverview({
     return () => { dead = true; };
   }, [perfRange]);
 
-  // ── Derived wallet balances (USD) ──────────────────────────────────
+  // ── Derived wallet balances (INR) ──────────────────────────────────
   const mainUsd = toUsd(mainWallet?.balance, mainWallet?.currency);
   const refUsd = toUsd(refWallet?.balance, refWallet?.currency);
-  // totals.equity already arrives USD-normalised from the parent, so the * rate
+  // totals.equity already arrives INR-normalised from the parent, so the * rate
   // that used to be here was converting an already-correct figure into rupees.
   const tradingUsd = Number(totals.equity) || 0;
   const totalUsd = mainUsd + refUsd + tradingUsd;
 
-  // Deposit / withdrawal totals (USD) from the real records.
+  // Deposit / withdrawal totals (INR) from the real records.
   const isSettled = (s) => ['CONFIRMED', 'COMPLETED', 'APPROVED'].includes(String(s).toUpperCase());
   const isPending = (s) => ['PENDING', 'PROCESSING'].includes(String(s).toUpperCase());
   const totalDeposits = deposits.filter((d) => isSettled(d.status)).reduce((s, d) => s + toUsd(d.amount, d.currency), 0);
   const totalWithdrawals = withdrawals.filter((w) => isSettled(w.status)).reduce((s, w) => s + toUsd(w.amount, w.currency), 0);
   const pendingWithdrawals = withdrawals.filter((w) => isPending(w.status)).reduce((s, w) => s + toUsd(w.amount, w.currency), 0);
 
-  // ── Per-account unrealized P&L (USD) ───────────────────────────────
+  // ── Per-account unrealized P&L (INR) ───────────────────────────────
   const unrealByAcc = useMemo(() => {
     const m = new Map();
     for (const p of positions) {
@@ -102,7 +102,7 @@ export default function AccountOverview({
       const qty = Number(p.quantity);
       const pnl = p.side === 'BUY' ? (mark - entry) * qty : (entry - mark) * qty;
       const acc = accounts.find((a) => String(a._id) === String(p.accountId));
-      const cur = acc?.baseCurrency || 'USD';
+      const cur = acc?.baseCurrency || 'INR';
       m.set(String(p.accountId), (m.get(String(p.accountId)) || 0) + toUsd(pnl, cur));
     }
     return m;
@@ -124,7 +124,7 @@ export default function AccountOverview({
         const native = Number(b.balance) || 0;
         const pnl = unrealByAcc.get(String(b.accountId)) || 0;
         if (!native && !pnl) return null;
-        const cur = String(b.currency || 'USD').toUpperCase();
+        const cur = String(b.currency || 'INR').toUpperCase();
         return {
           key: `${b.accountId}-${cur}`,
           name: acc.nickname || acc.accountNumber,
@@ -139,7 +139,7 @@ export default function AccountOverview({
   const realAccounts = accounts.filter((a) => a.accountType !== 'DEMO' && a.accountType !== 'VIRTUAL');
   const accountRows = realAccounts.map((a) => {
     const bals = balances.filter((b) => String(b.accountId) === String(a._id));
-    const cur = a.baseCurrency || bals[0]?.currency || 'USD';
+    const cur = a.baseCurrency || bals[0]?.currency || 'INR';
     const balanceUsd = bals.reduce((s, b) => s + toUsd(b.balance, b.currency), 0);
     const pnl = unrealByAcc.get(String(a._id)) || 0;
     const equity = balanceUsd + pnl;
@@ -162,12 +162,12 @@ export default function AccountOverview({
   const wins = closed.summary?.wins ?? 0;
   const losses = closed.summary?.losses ?? 0;
 
-  const rangeNet = (s) => (s ? Number(s.netProfit || 0) : 0); // USD base
+  const rangeNet = (s) => (s ? Number(s.netProfit || 0) : 0); // INR base
   const netWeek = rangeNet(rangeStats.week);
   const netMonth = rangeNet(rangeStats.month);
   const netYear = rangeNet(rangeStats.year);
 
-  // Performance headline = sum over the selected series (USD base).
+  // Performance headline = sum over the selected series (INR base).
   const perfNet = series.reduce((s, b) => s + Number(b.netProfit || 0), 0);
   const perfPct = (() => {
     const base = Number(totals.equity) || 0;
@@ -225,7 +225,7 @@ export default function AccountOverview({
             title={equityParts.length
               ? `Across ${equityParts.length} wallet${equityParts.length === 1 ? '' : 's'}:\n` + equityParts
                 .map((p) => `  ${p.name} · ${p.cur} ${p.native.toFixed(2)}`
-                  + (p.cur === 'USD' ? '' : ` → $${p.usd.toFixed(2)}`))
+                  + '')
                 .join('\n')
               : 'No funded trading accounts'}
           />
@@ -446,7 +446,7 @@ export default function AccountOverview({
                 <th className="text-left px-4 py-2.5">Type</th>
                 <th className="text-left px-4 py-2.5">Description</th>
                 <th className="text-right px-4 py-2.5">Amount</th>
-                <th className="text-right px-4 py-2.5">Amount (USD)</th>
+                <th className="text-right px-4 py-2.5">Amount (INR)</th>
                 <th className="text-center px-4 py-2.5">Status</th>
               </tr>
             </thead>
@@ -463,7 +463,7 @@ export default function AccountOverview({
                     <td className="px-4 py-3"><span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded ${dep ? 'bg-bull/15 text-bull' : 'bg-bear/15 text-bear'}`}>{dep ? 'Deposit' : 'Withdrawal'}</span></td>
                     <td className="px-4 py-3 text-[12px] text-text-secondary truncate max-w-[220px]">{t.note || `${dep ? 'Deposit' : 'Withdrawal'}${t.method ? ` · ${t.method}` : ''}`}</td>
                     <td className={`px-4 py-3 text-right font-mono tabular-nums font-bold ${dep ? 'text-bull' : 'text-bear'}`}>{dep ? '+' : '-'}{money(amtUsd)}</td>
-                    <td className="px-4 py-3 text-right font-mono tabular-nums text-text-muted">{dep ? '+' : '-'}${fmtNum(amtUsd, 2)}</td>
+                    <td className="px-4 py-3 text-right font-mono tabular-nums text-text-muted">{dep ? '+' : '-'}₹{fmtNum(amtUsd, 2)}</td>
                     <td className="px-4 py-3 text-center"><TxStatus status={t.status} /></td>
                   </tr>
                 );

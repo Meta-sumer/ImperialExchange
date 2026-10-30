@@ -13,6 +13,7 @@
  * Exits 0 if all pass, 1 otherwise.
  */
 const path = require('path');
+const { BASE_CURRENCY } = require('../config/constants');
 
 // Mutable test state — each scenario re-seeds these before calling routeOrder.
 const stub = {
@@ -160,7 +161,7 @@ const makeOrder = (over = {}) => ({
 const seed = (over = {}) => {
   stub.account = {
     _id: 'acc-1', userId: 'user-1', isActive: true, isTradingEnabled: true,
-    accountNumber: 'ACC1', baseCurrency: 'USD',
+    accountNumber: 'ACC1', baseCurrency: BASE_CURRENCY,
     // toObject for compatibility with orderRouter's `...account.toObject()` spread
     toObject() { return { ...this }; },
     ...over.account,

@@ -27,7 +27,7 @@ export default function LimitsModal({ userId, onClose }) {
 
   const fmt = (v, kind) => {
     if (v == null) return '∞';
-    if (kind === 'money') return `$${Number(v).toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
+    if (kind === 'money') return `₹${Number(v).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
     if (kind === 'percent') return `${v}%`;
     if (kind === 'value') return `1:${v}`;
     return Number(v).toLocaleString('en-US');

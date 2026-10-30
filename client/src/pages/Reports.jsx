@@ -79,7 +79,7 @@ export default function Reports() {
         <div className="card p-5 hover:border-border-accent/40 transition-colors">
           <div className="text-[10px] uppercase tracking-[0.15em] text-text-muted font-bold">Realized P&L</div>
           <div className={`text-2xl font-bold mt-2 font-mono ${totalPnl >= 0 ? 'text-bull' : 'text-bear'}`}>
-            {totalPnl >= 0 ? '+' : ''}{Number(totalPnl).toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            {totalPnl >= 0 ? '+' : ''}{Number(totalPnl).toLocaleString('en-US', { style: 'currency', currency: 'INR', minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
         </div>
         <div className="card p-5 hover:border-border-accent/40 transition-colors">

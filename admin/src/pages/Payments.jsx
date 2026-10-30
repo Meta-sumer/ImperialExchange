@@ -247,10 +247,10 @@ function PaymentMethodsCard({ mode = 'deposit' }) {
   // blank = all enabled currencies allowed for this method.
   const inputCls = 'w-full px-2 py-1.5 rounded bg-bg-dark border border-border-dark text-xs font-mono text-white focus:border-primary-500 focus:outline-none';
 
-  // Per-transaction min/max for a method, in USD.
+  // Per-transaction min/max for a method, in INR.
   //
-  // USD and not the client's display currency: the same rail serves INR, USDT
-  // and USD users, and the limit has to mean one thing for all of them. The
+  // INR and not the client's display currency: the same rail serves INR, USDT
+  // and INR users, and the limit has to mean one thing for all of them. The
   // client converts it at the live rate for display, and the server checks the
   // converted figure — so "min 10" is $10 whether the user typed ₹960 or $10.
   // Blank / 0 = no limit (previous behaviour).
@@ -258,7 +258,7 @@ function PaymentMethodsCard({ mode = 'deposit' }) {
     <div className="col-span-2 sm:col-span-2 grid grid-cols-2 sm:grid-cols-4 gap-2 border-t border-border-dark/40 pt-2 mt-1">
       <div className="col-span-2 sm:col-span-4 -mb-1">
         <span className="text-[10px] font-bold text-text-muted uppercase tracking-wider">
-          Per-transaction {isWithdrawal ? 'withdrawal' : 'deposit'} limits (USD · blank = no limit)
+          Per-transaction {isWithdrawal ? 'withdrawal' : 'deposit'} limits (INR · blank = no limit)
         </span>
       </div>
       {(isWithdrawal
@@ -292,7 +292,7 @@ function PaymentMethodsCard({ mode = 'deposit' }) {
         <input type="text"
           value={Array.isArray(d?.[method]?.supportedCurrencies) ? d[method].supportedCurrencies.join(', ') : ''}
           onChange={(e) => set(method, 'supportedCurrencies', e.target.value.split(',').map((s) => s.trim().toUpperCase()).filter(Boolean))}
-          placeholder="USD, INR, GBP" className={inputCls} />
+          placeholder="INR, INR, GBP" className={inputCls} />
       </div>
       {limitFields(
         (k) => d?.[method]?.[k] ?? '',
@@ -525,7 +525,7 @@ function PaymentMethodsCard({ mode = 'deposit' }) {
                     </p>
                   </div>
 
-                  {/* Per-transaction limits (USD) */}
+                  {/* Per-transaction limits (INR) */}
                   <div className="mt-2 grid grid-cols-2 gap-2">
                     {limitFields(
                       (k) => m[k] ?? '',
@@ -573,8 +573,8 @@ function PaymentMethodsCard({ mode = 'deposit' }) {
 
 /**
  * Exchange-rate configuration (multi-currency). The account base currency is
- * always USD; these rates only convert display + deposit/withdrawal amounts.
- * Rate convention: 1 USD = <rate> <currency>. AUTO uses the live online rate;
+ * always INR; these rates only convert display + deposit/withdrawal amounts.
+ * Rate convention: 1 INR = <rate> <currency>. AUTO uses the live online rate;
  * MANUAL uses the entered rates and needs a positive deposit + withdrawal rate.
  */
 const BLANK_CCY = { code: '', symbol: '', mode: 'MANUAL', displayRate: '', depositRate: '', withdrawalRate: '' };
@@ -618,8 +618,8 @@ function ExchangeRatesCard() {
       toast.error('Currency code must be 3-5 letters, e.g. USDC');
       return;
     }
-    if (code === 'USD') {
-      toast.error('USD is the base currency — it has no rate');
+    if (code === 'INR') {
+      toast.error('INR is the base currency — it has no rate');
       return;
     }
     if (rows.some((c) => String(c.code).toUpperCase() === code)) {
@@ -681,7 +681,7 @@ function ExchangeRatesCard() {
         </button>
       </div>
       <p className="text-[11px] text-text-muted mb-3">
-        Base currency is <span className="text-white font-semibold">USD</span>. Rates are <span className="font-mono">1 USD = rate</span>.
+        Base currency is <span className="text-white font-semibold">INR</span>. Rates are <span className="font-mono">1 INR = rate</span>.
         AUTO uses the live online rate; MANUAL uses the values below (deposit &amp; withdrawal rate required).
       </p>
       <div className="overflow-x-auto">
@@ -783,7 +783,7 @@ function ExchangeRatesCard() {
           </button>
         </div>
         <p className="text-[10px] text-text-muted mt-2 leading-snug">
-          Rates are <span className="font-mono">1 USD = rate</span>. Untick <span className="text-white">On</span> to hide a currency from every picker but keep it configured;
+          Rates are <span className="font-mono">1 INR = rate</span>. Untick <span className="text-white">On</span> to hide a currency from every picker but keep it configured;
           <span className="text-white"> Remove</span> deletes it outright. Past transactions keep the rate they were made at either way, so history stays correct.
           A currency still listed on a payment method cannot be removed until it is taken off that method.
         </p>

@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { BASE_CURRENCY } = require('../config/constants');
 
 const depositSchema = new mongoose.Schema(
   {
@@ -22,7 +23,7 @@ const depositSchema = new mongoose.Schema(
     // Canonical base-currency view. The wallet is single-source-of-
     // truth in USD; every deposit gets normalised here so credit /
     // debit logic only ever touches one currency row per account.
-    baseCurrency: { type: String, default: 'USD' },
+    baseCurrency: { type: String, default: BASE_CURRENCY },
     baseAmount:   { type: String, default: '0' },
     fxRateUsed:   { type: Number, default: 1 },   // rate that was applied to derive baseAmount
     // Deposit fee charged (admin-configured per payment method). The wallet is
@@ -86,7 +87,7 @@ const withdrawalSchema = new mongoose.Schema(
     // USD equivalent stored in `baseAmount`.
     currency: { type: String, required: true },
     amount: { type: String, required: true },
-    baseCurrency: { type: String, default: 'USD' },
+    baseCurrency: { type: String, default: BASE_CURRENCY },
     baseAmount:   { type: String, default: '0' },
     fxRateUsed:   { type: Number, default: 1 },
     fee: { type: String, default: '0' },        // USD (base)

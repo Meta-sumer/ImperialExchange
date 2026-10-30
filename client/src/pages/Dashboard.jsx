@@ -21,7 +21,7 @@ export default function Dashboard() {
   const [positions, setPositions] = useState([]);
   const fxRate = useFxRate();
   // Only needed to decide whether the rupee reference line is worth showing;
-  // the headline figures below are already USD.
+  // the headline figures below are already INR.
   const { code: dispCcy } = useMoney();
   const { rows: instruments } = useInstruments();
 
@@ -148,9 +148,9 @@ export default function Dashboard() {
 
   // ── Derived figures (only reached when data is non-null) ──────────
   const fullName = [data.user?.firstName, data.user?.lastName].filter(Boolean).join(' ') || 'Trader';
-  // USD: the backend reports USD as the primary currency now, and wallets are
-  // USD-denominated, so an INR fallback disagreed with the data it labels.
-  const primaryCur = data.balance?.primaryCurrency || 'USD';
+  // INR: the backend reports INR as the primary currency now, and wallets are
+  // INR-denominated, so an INR fallback disagreed with the data it labels.
+  const primaryCur = data.balance?.primaryCurrency || 'INR';
   const liveByCur = data.balance?.liveByCurrency || {};
   const liveBalance = (() => {
     const direct = Number(data.balance?.live || 0);
@@ -160,8 +160,8 @@ export default function Dashboard() {
       const bal = Number(t?.balance || 0);
       if (!Number.isFinite(bal) || bal === 0) return sum;
       if (cur === primaryCur) return sum + bal;
-      if (cur === 'USD' && primaryCur === 'INR') return sum + bal * rate;
-      if (cur === 'INR' && primaryCur === 'USD') return sum + bal / rate;
+      if (cur === 'INR' && primaryCur === 'INR') return sum + bal * rate;
+      if (cur === 'INR' && primaryCur === 'INR') return sum + bal / rate;
       return sum + bal;
     }, 0);
   })();
@@ -247,8 +247,8 @@ export default function Dashboard() {
           Open Positions · Win Rate — plus a Balance footer row. */}
       {(() => {
         // The rupee reference line is only shown when the user has actually
-        // selected a non-USD display currency.
-        const showAlt = dispCcy !== 'USD';
+        // selected a non-INR display currency.
+        const showAlt = false; // INR-only
         const eq = fmtMoneyBoth(equity, primaryCur, fxRate, false, showAlt);
         const bal = fmtMoneyBoth(liveBalance, primaryCur, fxRate, false, showAlt);
         const floatPnl = fmtMoneyBoth(unrealized, primaryCur, fxRate, true, showAlt);
@@ -576,16 +576,16 @@ function PortfolioStats() {
   // 8 cells (Net profit emphasised). "Lifetime" row removed — was a
   // verbatim duplicate of Net profit when no date filter is set.
   const rows = [
-    { label: 'Net profit',     value: `${sign(netProfit)} USD`,            tone: toneOf(netProfit),  emphasis: true },
-    { label: 'Net P&L',        value: `${sign(netPnl)} USD`,               tone: toneOf(netPnl),     emphasis: true },
-    { label: 'Profit',         value: `+${profit.toFixed(2)} USD`,         tone: 'bull' },
-    { label: 'Loss',           value: `-${lossDisp.toFixed(2)} USD`,       tone: 'bear' },
-    { label: 'Charges',        value: `-${charges.toFixed(2)} USD`,        tone: 'bear' },
-    { label: 'Unrealised P/L', value: `${sign(unrealized)} USD`,           tone: toneOf(unrealized) },
+    { label: 'Net profit',     value: `${sign(netProfit)} INR`,            tone: toneOf(netProfit),  emphasis: true },
+    { label: 'Net P&L',        value: `${sign(netPnl)} INR`,               tone: toneOf(netPnl),     emphasis: true },
+    { label: 'Profit',         value: `+${profit.toFixed(2)} INR`,         tone: 'bull' },
+    { label: 'Loss',           value: `-${lossDisp.toFixed(2)} INR`,       tone: 'bear' },
+    { label: 'Charges',        value: `-${charges.toFixed(2)} INR`,        tone: 'bear' },
+    { label: 'Unrealised P/L', value: `${sign(unrealized)} INR`,           tone: toneOf(unrealized) },
     { label: 'Closed orders',  value: closedOrders.toLocaleString() },
     { label: 'Profitable',     value: profitable.toLocaleString(),         tone: 'bull' },
     { label: 'Unprofitable',   value: unprofitable.toLocaleString(),       tone: 'bear' },
-    { label: 'Trading volume', value: `${tradingVolume.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD` },
+    { label: 'Trading volume', value: `${tradingVolume.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} INR` },
   ];
 
   return (
@@ -650,7 +650,7 @@ function PortfolioStats() {
             )}
             {accounts.map((a) => (
               <option key={a._id} value={a._id}>
-                {a.nickname || a.accountNumber} · {a.baseCurrency || 'USD'}
+                {a.nickname || a.accountNumber} · {a.baseCurrency || 'INR'}
               </option>
             ))}
           </select>
@@ -692,7 +692,7 @@ const TIMEFRAMES = [
   { id: 'all', label: 'ALL' },
 ];
 
-// fxRate is gone from the signature: its only job here was converting USD to
+// fxRate is gone from the signature: its only job here was converting INR to
 // rupees for display, which useMoney now does against the user's selection.
 function PortfolioChart({ accountId, dash: dashFromParent }) {
   const { money, signed } = useMoney();
@@ -818,7 +818,7 @@ function PortfolioChart({ accountId, dash: dashFromParent }) {
   const totalNonZero = buckets.length > 0 && buckets.some((b) => Number(b[tab] || 0) !== 0);
 
   // ── Inline analytics stat strip figures ──────────────────────────
-  // These arrive in USD. They used to be multiplied by a USD->INR rate and
+  // These arrive in INR. They used to be multiplied by a INR->INR rate and
   // stamped with a rupee sign regardless of what the user had selected;
   // useMoney converts and labels them in the chosen display currency instead.
   const netVals = buckets.map((b) => Number(b.netProfit || 0));
@@ -1177,7 +1177,7 @@ function PortfolioChart({ accountId, dash: dashFromParent }) {
                   <span className="font-mono font-extrabold text-text-primary tabular-nums">
                     {tab === 'closedOrders'
                       ? hovered.closedOrders.toLocaleString()
-                      : `$${Number(hovered[tab] || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                      : `₹${Number(hovered[tab] || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                   </span>
                 </div>
               )}
@@ -1251,7 +1251,7 @@ function fmtAxis(n) {
  */
 // PnlTile — one of the three money tiles in the hero band (Portfolio
 // Value / Total P&L / Today's P&L). Icon-circle + label (+ optional badge)
-// + big colored value + secondary USD figure + a ↑/↓ percent chip.
+// + big colored value + secondary INR figure + a ↑/↓ percent chip.
 function PnlTile({ tint, icon, label, badge, value, valueColor, secondary, pct }) {
   const pos = (pct ?? 0) >= 0;
   const hasPct = Number.isFinite(pct) && Math.abs(pct) > 0.005;
@@ -1389,7 +1389,7 @@ const ALLOC_COLORS = { FOREX: '#3B82F6', INDEX: '#22C55E', COMMODITY: '#F59E0B',
 const InfoIcon = () => <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><path d="M12 16v-4" /><path d="M12 8h.01" /></svg>;
 
 function AssetAllocationCard({ positions = [] }) {
-  // Position values are USD; useMoney renders them in the selected currency.
+  // Position values are INR; useMoney renders them in the selected currency.
   const { money } = useMoney();
   const [accounts, setAccounts] = useState([]);
   const [sel, setSel] = useState('all');
@@ -1530,8 +1530,8 @@ function MiniPositionCard({ p, cur, rate }) {
   const prec = Math.min(p._inst?.pricePrecision || 2, 5);
   const pnlNative = Number(p.unrealizedPnl || 0);
   // unrealizedPnl is in the INSTRUMENT's quote currency — rupees for an NSE
-  // position, dollars elsewhere — so normalise to USD before display. This used
-  // to convert the other way (USD -> INR) and label everything with a rupee
+  // position, dollars elsewhere — so normalise to INR before display. This used
+  // to convert the other way (INR -> INR) and label everything with a rupee
   // sign, which was right only for a user who wanted rupees.
   const pnlUsd = cur === 'INR' && Number(rate) > 0 ? pnlNative / Number(rate) : pnlNative;
   const movePct = entry > 0 ? ((mark - entry) / entry) * 100 * (buy ? 1 : -1) : 0;
@@ -1578,11 +1578,11 @@ function MiniPositionCard({ p, cur, rate }) {
 // ─── Your Trading Accounts table ─────────────────────────────────────
 function AccountsTable({ positions = [], fxRate }) {
   // fxRate stays: it is still needed to normalise an NSE position's rupee P&L
-  // into USD. It is no longer used for DISPLAY — that is useMoney's job.
+  // into INR. It is no longer used for DISPLAY — that is useMoney's job.
   const { money, signed, code } = useMoney();
   const rate = Number(fxRate) > 0 ? Number(fxRate) : 83;
-  // Normalise to USD, the currency everything is actually held in. This was the
-  // mirror image — it converted USD figures INTO rupees and treated rupees as
+  // Normalise to INR, the currency everything is actually held in. This was the
+  // mirror image — it converted INR figures INTO rupees and treated rupees as
   // the common unit — so the table's own base disagreed with the wallets it
   // was summarising. Display conversion happens once, at render, via useMoney.
   const toUsd = (a, c) => { const n = Number(a) || 0; return c === 'INR' && rate > 0 ? n / rate : n; };
@@ -1645,7 +1645,7 @@ function AccountsTable({ positions = [], fxRate }) {
     if (sel === 'demo') return isDemo(a.accountType);
     return String(a._id) === sel;
   }).map((a) => {
-    const cur = a.baseCurrency || 'USD';
+    const cur = a.baseCurrency || 'INR';
     const bal = balances.filter((b) => String(b.accountId) === String(a._id)).reduce((s, b) => s + toUsd(b.balance, b.currency), 0);
     const accPos = positions.filter((p) => String(p.accountId) === String(a._id));
     const flo = accPos.reduce((s, p) => s + toUsd(p.unrealizedPnl, cur), 0);
@@ -1663,14 +1663,14 @@ function AccountsTable({ positions = [], fxRate }) {
   ];
   const selLabel = options.find((o) => o.k === sel)?.label || 'All Accounts';
 
-  // `n` is USD. The primary line is whatever the user selected; the secondary
-  // USD line is only worth showing when that selection ISN'T USD, otherwise it
+  // `n` is INR. The primary line is whatever the user selected; the secondary
+  // INR line is only worth showing when that selection ISN'T INR, otherwise it
   // repeats the number above it verbatim.
   const usdSmall = (n) => `≈ $${Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   const Both = ({ n, colored }) => (
     <div>
       <div className={`font-mono tabular-nums font-bold ${colored ? (n >= 0 ? 'text-bull' : 'text-bear') : 'text-text-primary'}`}>{colored && n >= 0 ? '+' : ''}{money(n)}</div>
-      {code !== 'USD' && (
+      {false && (
         <div className="text-[10px] font-mono text-text-muted">{colored && n >= 0 ? '+' : ''}{usdSmall(n)}</div>
       )}
     </div>
@@ -1814,7 +1814,7 @@ function AccountsTable({ positions = [], fxRate }) {
 }
 
 // ─── Recent Closed Trades table ──────────────────────────────────────
-// realizedPnl arrives in USD, so there is nothing to normalise here — it was
+// realizedPnl arrives in INR, so there is nothing to normalise here — it was
 // simply multiplied into rupees for display.
 function RecentClosedTrades() {
   const { signed, symbol } = useMoney();
@@ -1845,7 +1845,7 @@ function RecentClosedTrades() {
               <th className="text-right px-4 py-2.5">Open Price</th>
               <th className="text-right px-4 py-2.5">Close Price</th>
               <th className="text-right px-4 py-2.5">P&L ({symbol})</th>
-              <th className="text-right px-4 py-2.5">P&L (USD)</th>
+              <th className="text-right px-4 py-2.5">P&L (INR)</th>
               <th className="text-left px-4 py-2.5">Close Time</th>
             </tr>
           </thead>

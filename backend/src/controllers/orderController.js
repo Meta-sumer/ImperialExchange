@@ -651,7 +651,7 @@ const placeOrder = asyncHandler(async (req, res) => {
       await walletService.lockMargin({
         userId: req.userId,
         accountId,
-        currency: account.baseCurrency || 'USD',
+        currency: account.baseCurrency || BASE_CURRENCY,
         amount: marginAmount,
         orderId: order._id,
         // Ledger rows are keyed to the ORDER here (the position does not exist
@@ -695,7 +695,7 @@ const placeOrder = asyncHandler(async (req, res) => {
       await walletService.releaseMargin({
         userId: req.userId,
         accountId,
-        currency: account.baseCurrency || 'USD',
+        currency: account.baseCurrency || BASE_CURRENCY,
         amount,
         orderId: order._id,
         note: `Order rejected: released ${amount} (${reason})`,
@@ -809,7 +809,7 @@ const cancelOrder = asyncHandler(async (req, res) => {
       await walletService.releaseMargin({
         userId: order.userId,
         accountId: order.accountId,
-        currency: account?.baseCurrency || 'USD',
+        currency: account?.baseCurrency || BASE_CURRENCY,
         amount: releaseAmt,
         orderId: order._id,
         note: `Cancel: released ${releaseAmt} for unfilled ${remaining}`,
@@ -1556,7 +1556,7 @@ const modifyOrder = asyncHandler(async (req, res) => {
         await walletService.lockMargin({
           userId: order.userId,
           accountId: order.accountId,
-          currency: account.baseCurrency || 'USD',
+          currency: account.baseCurrency || BASE_CURRENCY,
           amount: topUp,
           orderId: order._id,
           note: `Modify: top-up margin by ${topUp}`,
@@ -1582,7 +1582,7 @@ const modifyOrder = asyncHandler(async (req, res) => {
       await walletService.releaseMargin({
         userId: order.userId,
         accountId: order.accountId,
-        currency: account.baseCurrency || 'USD',
+        currency: account.baseCurrency || BASE_CURRENCY,
         amount: release,
         orderId: order._id,
         note: `Modify: released margin ${release}`,
@@ -1871,7 +1871,7 @@ const placeOcoOrder = asyncHandler(async (req, res) => {
       await walletService.lockMargin({
         userId: req.userId,
         accountId,
-        currency: account.baseCurrency || 'USD',
+        currency: account.baseCurrency || BASE_CURRENCY,
         amount: marginAmount,
         orderId: limitOrder._id,
         note: `OCO margin: ${side} ${openQty} ${instrument.symbol} (group ${ocoGroupId})`,

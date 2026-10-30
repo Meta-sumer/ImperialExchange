@@ -41,7 +41,7 @@ const { Wallet, WalletLedger } = require('../models/Wallet');
 const { Notification } = require('../models/index');
 const orderRouter = require('./orderRouter.service');
 const walletService = require('./walletService');
-const { ORDER_STATUS, ORDER_TYPE, POSITION_STATUS, BOOK_TYPE } = require('../config/constants');
+const { BASE_CURRENCY, ORDER_STATUS, ORDER_TYPE, POSITION_STATUS, BOOK_TYPE } = require('../config/constants');
 const { add, sub, mul, div, gt, lte } = require('../utils/decimal');
 
 let broadcaster = null;
@@ -154,7 +154,7 @@ const _submit = async (order) => {
 const computeAccountEquity = async (account, opts = {}) => {
   const atExecutionPrice = opts.markSource === 'execution';
   const pre = opts.preloaded || null;
-  const currency = account.baseCurrency || 'USD';
+  const currency = account.baseCurrency || BASE_CURRENCY;
   const wallet = pre
     ? pre.walletRaw(account.userId, account._id, currency)
     : await Wallet.findOne({ userId: account.userId, accountId: account._id, currency }).lean();
@@ -410,7 +410,7 @@ const triggerStopOut = async (account, meta = {}) => {
     );
     const acc = claimed || (await TradingAccount.findById(account._id));
     if (!acc) return { skipped: 'no-account' };
-    const currency = acc.baseCurrency || 'USD';
+    const currency = acc.baseCurrency || BASE_CURRENCY;
     const newlyStopped = !!claimed;
 
     // 2. Cancel pending orders (release margin) so nothing fills post-stopout.

@@ -498,7 +498,7 @@ function PortfolioCard() {
   const returnsPct = investedValue > 0 ? (totalReturns / investedValue) * 100 : 0;
   const positive = totalReturns >= 0;
 
-  const fmt = (v) => hidden ? '••••••' : '$' + fmtNum(Number(v) || 0, 2);
+  const fmt = (v) => hidden ? '••••••' : '₹' + fmtNum(Number(v) || 0, 2);
 
   return (
     <Link to="/dashboard" className="block bg-white border border-border-dark rounded-2xl p-5 hover:shadow-card transition-shadow">

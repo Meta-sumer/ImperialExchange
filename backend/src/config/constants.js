@@ -136,18 +136,13 @@ module.exports = {
     CLOSED: 'CLOSED',
   },
 
-  // The currency every wallet is actually denominated in, and the currency any
-  // amount is converted to before it is stored, summed, or compared.
-  //
-  // It lives here because it was previously a literal repeated across the money
-  // layer — and, worse, several places fell back to 'INR' instead, for a field
-  // whose schema default has always been USD. Those two disagreeing is how a
-  // threshold written as "10 lakh" came to mean a million dollars.
-  //
-  // Display currency is a SEPARATE concern: a user may read their balance in
-  // rupees, and NSE instruments are genuinely rupee-quoted. Neither changes what
-  // is stored. Convert for display; never for storage.
-  BASE_CURRENCY: 'USD',
+  // The currency every wallet is denominated in. The platform is INR-only: the
+  // ledger, margin, P&L, fees, deposits and withdrawals are all rupees, and
+  // every instrument it offers (NSE/BSE/MCX) is rupee-quoted, so trading math
+  // needs no FX. (It used to be USD while INR-quoted P&L was booked 1:1 into
+  // it — a ₹1,000 profit landed as $1,000.) Use this constant, never an
+  // 'INR'/'USD' literal.
+  BASE_CURRENCY: 'INR',
 
   WALLET_TX_TYPE: {
     DEPOSIT: 'DEPOSIT',

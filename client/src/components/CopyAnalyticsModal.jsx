@@ -11,7 +11,7 @@ import { wsClient } from '../services/ws';
  * pattern — no extra chart dependency).
  */
 
-const sym = (c) => (c === 'USD' ? '$' : c === 'INR' ? '₹' : `${c} `);
+const sym = (c) => (c === 'INR' ? '₹' : c === 'INR' ? '₹' : `${c} `);
 const money = (n, c) => `${Number(n) < 0 ? '-' : ''}${sym(c)}${Math.abs(Number(n || 0)).toFixed(2)}`;
 const pct = (n) => `${Number(n || 0).toFixed(1)}%`;
 
@@ -55,7 +55,7 @@ export default function CopyAnalyticsModal({ rel, onClose }) {
     else if (p === '90d') { setFrom(fmt(ago(89))); setTo(fmt(now)); }
   };
 
-  const c = data?.currency || 'USD';
+  const c = data?.currency || 'INR';
 
   const exportCsv = () => {
     if (!data?.trades?.length) return toast.error('No trades to export');

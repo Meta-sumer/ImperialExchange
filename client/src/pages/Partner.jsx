@@ -35,7 +35,7 @@ const ORDER = ['BRONZE', 'SILVER', 'GOLD', 'PLATINUM', 'ELITE'];
 const metaFor = (name) => LEVEL_META[String(name || '').toUpperCase()] || LEVEL_META.BRONZE;
 
 // ─── Formatters ──────────────────────────────────────────────────────
-const usdFull = (n) => '$' + Math.round(Number(n) || 0).toLocaleString('en-US');
+const usdFull = (n) => '₹' + Math.round(Number(n) || 0).toLocaleString('en-IN');
 const usdCompact = (n) => {
   const v = Number(n) || 0;
   if (v >= 1e9) return '$' + (v / 1e9).toFixed(v % 1e9 === 0 ? 0 : 1) + 'B';
@@ -124,7 +124,7 @@ export default function Partner() {
 
   const code = d.referralCode || '';
   const link = code ? `${PUBLIC_ORIGIN}/register?ref=${code}` : '';
-  const cur = d.walletCurrency || 'USD';
+  const cur = d.walletCurrency || 'INR';
 
   return (
     <div className="space-y-6 max-w-[1500px] mx-auto pb-10">
@@ -173,7 +173,7 @@ function FirstDepositRewardCard({ bonus, cur }) {
   if (!bonus || bonus.enabled === false) return null;
   const amt = Number(bonus.amount) || 0;
   if (amt <= 0) return null;
-  const currency = bonus.currency || cur || 'USD';
+  const currency = bonus.currency || cur || 'INR';
   return (
     <div
       className="relative overflow-hidden rounded-2xl border border-emerald-500/30 shadow-card"

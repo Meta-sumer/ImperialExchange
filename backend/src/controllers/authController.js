@@ -5,7 +5,7 @@ const TradingAccount = require('../models/TradingAccount');
 const { Wallet } = require('../models/Wallet');
 const { signAccessToken, signRefreshToken, verifyRefreshToken } = require('../utils/jwt');
 const { AppError, asyncHandler, sendSuccess } = require('../utils/errors');
-const { ACCOUNT_TYPES, TRADING_MODE, ROLES } = require('../config/constants');
+const { BASE_CURRENCY, ACCOUNT_TYPES, TRADING_MODE, ROLES } = require('../config/constants');
 
 const register = asyncHandler(async (req, res) => {
   const { email, password, firstName, lastName, phone, country, referralCode } = req.body;
@@ -135,26 +135,21 @@ const register = asyncHandler(async (req, res) => {
   // money before trading (Standard tier minDeposit gate) and all volume / PnL
   // counts for real (including referral commission). Additional tiers can be
   // opened later via the /accounts/new tier picker after login.
-  // baseCurrency MUST be USD. The whole money layer is USD-denominated:
-  // walletController's BASE_CURRENCY is 'USD', so every deposit, withdrawal
-  // and admin credit lands in the USD wallet — while margin locking, trade
-  // settlement and the Trade page's balance lookup all key off
-  // `account.baseCurrency`. Creating the signup account as INR split those
-  // two apart: deposits credited a USD wallet the account never referenced,
-  // so the Trade page (which does `balances.find(b => b.currency ===
-  // account.baseCurrency)`) read the empty INR wallet and showed 0, and
-  // placing an order failed with INSUFFICIENT_FREE despite a funded account.
+  // The account and its wallet are both BASE_CURRENCY (INR — the whole money
+  // layer is rupee-denominated). They must agree: margin locking, trade
+  // settlement and the Trade page's balance lookup key off
+  // `account.baseCurrency`, and every deposit credits the BASE_CURRENCY wallet.
   const practiceAccountNumber = 'TA' + Date.now().toString().slice(-9);
   const practiceAccount = await TradingAccount.create({
     userId: user._id,
     accountNumber: practiceAccountNumber,
     accountType: ACCOUNT_TYPES.STANDARD,
-    baseCurrency: 'USD',
+    baseCurrency: BASE_CURRENCY,
     leverage: 100,
     mode: TRADING_MODE.HYBRID,
     nickname: 'Standard Account',
   });
-  await Wallet.create({ userId: user._id, accountId: practiceAccount._id, currency: 'USD', balance: '0' });
+  await Wallet.create({ userId: user._id, accountId: practiceAccount._id, currency: BASE_CURRENCY, balance: '0' });
 
   // Issue real tokens. Push the refresh token via atomic $push so a
   // concurrent login doesn't blow away the array.

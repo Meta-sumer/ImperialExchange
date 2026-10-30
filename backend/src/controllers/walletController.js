@@ -1186,6 +1186,11 @@ const convertCurrency = asyncHandler(async (req, res) => {
   if (!accountId || !fromCurrency || !toCurrency) {
     throw new AppError('accountId, fromCurrency, toCurrency required', 400);
   }
+  // INR-only ledger: every wallet is rupees, so there is no second currency to
+  // convert into. The endpoint stays for older clients and always refuses.
+  if (String(fromCurrency).toUpperCase() !== BASE_CURRENCY || String(toCurrency).toUpperCase() !== BASE_CURRENCY) {
+    throw new AppError(`Only ${BASE_CURRENCY} wallets exist`, 400, 'CURRENCY_NOT_SUPPORTED');
+  }
   if (String(fromCurrency).toUpperCase() === String(toCurrency).toUpperCase()) {
     throw new AppError('Source and target currency must be different', 400);
   }
@@ -1211,10 +1216,7 @@ const convertCurrency = asyncHandler(async (req, res) => {
 
   // Compute the target amount. Only USD↔INR pairs are auto-converted;
   // anything else returns the same magnitude (no FX risk taken).
-  let targetAmount;
-  if (from === 'USD' && to === 'INR') targetAmount = amtNum * rate;
-  else if (from === 'INR' && to === 'USD') targetAmount = amtNum / rate;
-  else targetAmount = amtNum;
+  const targetAmount = amtNum; // single-currency ledger — no FX
 
   // Debit source first; if credit fails, compensate to keep the user whole.
   await walletService.debit({
@@ -1332,7 +1334,7 @@ const transferToUser = asyncHandler(async (req, res) => {
  * USD amount; net USD credited = gross − fee.
  */
 const quoteDeposit = asyncHandler(async (req, res) => {
-  const { method, currency = 'USD', amount } = req.body || {};
+  const { method, currency = BASE_CURRENCY, amount } = req.body || {};
   const amt = Number(amount);
   if (!(amt > 0)) throw new AppError('Enter a valid amount', 400, 'INVALID_AMOUNT');
   const code = String(currency).toUpperCase();
@@ -1361,7 +1363,7 @@ const quoteDeposit = asyncHandler(async (req, res) => {
  * RECEIVES (also converted back to `currency`).
  */
 const quoteWithdrawal = asyncHandler(async (req, res) => {
-  const { method, currency = 'USD', amount } = req.body || {};
+  const { method, currency = BASE_CURRENCY, amount } = req.body || {};
   const amt = Number(amount);
   if (!(amt > 0)) throw new AppError('Enter a valid amount', 400, 'INVALID_AMOUNT');
   const code = String(currency).toUpperCase();

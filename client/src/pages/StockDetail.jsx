@@ -150,7 +150,7 @@ export default function StockDetail() {
   const dayLow = candles.length ? Math.min(...candles.map((c) => Number(c.low))) : lastPrice;
   const dayHigh = candles.length ? Math.max(...candles.map((c) => Number(c.high))) : lastPrice;
   const isEquity = inst?.category === 'STOCK' && ['NSE', 'BSE'].includes(inst?.exchange);
-  const cur = (inst?.quoteCurrency === 'INR' || isEquity) ? '₹' : (inst?.quoteCurrency === 'USD' ? '$' : '');
+  const cur = (inst?.quoteCurrency === 'INR' || isEquity) ? '₹' : (inst?.quoteCurrency === 'INR' ? '₹' : '');
 
   const name = inst?.name || symbol;
   // Prefer the account selected in the header dropdown; fall back to the first
@@ -762,14 +762,14 @@ function OrderPanel({ symbol, name, inst, lastPrice, pct, up, cur, prec, isEquit
   const px = mode === 'LIMIT' ? (Number(limitPrice) || lastPrice) : lastPrice;
   const approx = q * px;
 
-  // Real free balance for this account, normalised to USD base then shown
+  // Real free balance for this account, normalised to INR base then shown
   // in the instrument's display currency.
   const freeUsd = balances
     .filter((b) => String(b.accountId) === String(account?._id))
     .reduce((s, b) => {
       const f = Number(b.free ?? b.balance ?? 0);
       const c = b.currency;
-      return s + (c === 'USD' ? f : c === 'INR' ? f / rate : f);
+      return s + (c === 'INR' ? f : c === 'INR' ? f / rate : f);
     }, 0);
   const balDisp = cur === '₹' ? freeUsd * rate : freeUsd;
 

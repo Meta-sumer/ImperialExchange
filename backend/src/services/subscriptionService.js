@@ -1,4 +1,5 @@
 const { Plan, Subscription } = require('../models/Subscription');
+const { BASE_CURRENCY } = require('../config/constants');
 
 /**
  * Resolve a user's effective plan.
@@ -232,12 +233,8 @@ async function _chargeTradingWallet(userId, priceUsd, note) {
   const acc = await TradingAccount.findOne({ userId, accountType: { $nin: ['DEMO', 'VIRTUAL'] }, isActive: true })
     .sort({ createdAt: 1 }).lean();
   if (!acc) return null;
-  const cur = acc.baseCurrency || 'USD';
-  let amt = priceUsd;
-  if (cur !== 'USD') {
-    try { const r = Number(await currencyService.getUsdInrRate()) || 83; amt = priceUsd * r; }
-    catch { return null; }
-  }
+  const cur = acc.baseCurrency || BASE_CURRENCY;
+  const amt = priceUsd; // plan prices and wallets are both INR
   const w = await Wallet.findOne({ userId, accountId: acc._id, currency: cur }).lean();
   if (!w || !gte(w.balance, String(amt))) return null;
   await walletService.debit({
@@ -263,12 +260,12 @@ async function computePostpaidBill(userId, plan) {
   });
   const usage = Number(rates.perDevicePerMonth || 0) * devices + Number(rates.perAccountPerMonth || 0) * accounts;
   const bill = Math.max(Number(rates.minimumMonthlyFee || 0), usage);
-  return { bill, devices, accounts, currency: rates.currency || 'USD', min: Number(rates.minimumMonthlyFee || 0) };
+  return { bill, devices, accounts, currency: rates.currency || BASE_CURRENCY, min: Number(rates.minimumMonthlyFee || 0) };
 }
 
 async function chargePlan({ userId, amount, note, planCode, billingCycle }) {
   const price = Number(amount);
-  if (!(price > 0)) return { provider: 'FREE', amount: '0', currency: 'USD', paidAt: new Date() };
+  if (!(price > 0)) return { provider: 'FREE', amount: '0', currency: BASE_CURRENCY, paidAt: new Date() };
 
   const subscriptionWalletService = require('./subscriptionWalletService');
   const systemSettings = require('./systemSettings.service');
@@ -285,7 +282,7 @@ async function chargePlan({ userId, amount, note, planCode, billingCycle }) {
       planCode: planCode ? String(planCode).toUpperCase() : undefined,
       billingCycle: billingCycle ? String(billingCycle).toUpperCase() : undefined,
     });
-    return { provider: 'MAIN_WALLET', transactionId: String(tx._id), amount: String(price), currency: tx.currency || 'USD', paidAt: new Date() };
+    return { provider: 'MAIN_WALLET', transactionId: String(tx._id), amount: String(price), currency: tx.currency || BASE_CURRENCY, paidAt: new Date() };
   }
 
   // 2) Trading Wallet (secondary) — only if explicitly enabled.
@@ -304,7 +301,7 @@ async function chargePlan({ userId, amount, note, planCode, billingCycle }) {
       balance: mainW.balance,
       needed: String(price),
       shortfall: String(Math.max(0, price - Number(mainW.balance)).toFixed(2)),
-      currency: mainW.currency || 'USD',
+      currency: mainW.currency || BASE_CURRENCY,
     }
   );
 }

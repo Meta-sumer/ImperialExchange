@@ -14,7 +14,9 @@ import { api } from '../services/api';
  * a USD-quoted price by it to render the INR equivalent.
  */
 
-const FALLBACK = Number(import.meta.env.VITE_USDINR_RATE) || 83;
+// INR-only ledger: nothing is USD-quoted any more, so the multiplier is 1
+// (the backend's /fx/usdinr answers 1 as well). Kept for older callers.
+const FALLBACK = 1;
 const TTL_MS = 5 * 60 * 1000;
 
 let currentRate = FALLBACK;

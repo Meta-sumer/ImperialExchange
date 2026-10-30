@@ -11,7 +11,7 @@ import CopySettingsFields, { settingsPayload } from './CopySettingsFields';
  * Saves via PUT /copy-trading/copy/:id.
  */
 
-const sym = (c) => (c === 'USD' ? '$' : c === 'INR' ? '₹' : `${c} `);
+const sym = (c) => (c === 'INR' ? '₹' : c === 'INR' ? '₹' : `${c} `);
 
 export default function EditCopyModal({ rel, onClose, onSaved }) {
   const [accounts, setAccounts] = useState([]);

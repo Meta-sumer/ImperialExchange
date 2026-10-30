@@ -6,7 +6,7 @@ const User = require('../models/User');
 const Instrument = require('../models/Instrument');
 const TradingAccount = require('../models/TradingAccount');
 const { Wallet } = require('../models/Wallet');
-const { ROLES, KYC_STATUS, ACCOUNT_TYPES, TRADING_MODE } = require('../config/constants');
+const { BASE_CURRENCY, ROLES, KYC_STATUS, ACCOUNT_TYPES, TRADING_MODE } = require('../config/constants');
 
 /**
  * Generate Instrument config for a list of forex pairs. Centralises the
@@ -116,12 +116,12 @@ const seed = async () => {
       userId: trader._id,
       accountNumber: 'TA' + Date.now().toString().slice(-9),
       accountType: ACCOUNT_TYPES.DEMO,
-      baseCurrency: 'USD',
+      baseCurrency: BASE_CURRENCY,
       leverage: 100,
       mode: TRADING_MODE.HYBRID,
       nickname: 'Demo Account',
     });
-    await Wallet.create({ userId: trader._id, accountId: demoAcct._id, currency: 'USD', balance: '50000' });
+    await Wallet.create({ userId: trader._id, accountId: demoAcct._id, currency: BASE_CURRENCY, balance: '50000' });
     console.log(`  ✓ Demo account added ($50,000 USD)`);
   } else {
     console.log(`  • Demo account already exists`);
@@ -137,12 +137,12 @@ const seed = async () => {
       userId: trader._id,
       accountNumber: 'TA' + (Date.now() + 1).toString().slice(-9),
       accountType: ACCOUNT_TYPES.REAL,
-      baseCurrency: 'USD',
+      baseCurrency: BASE_CURRENCY,
       leverage: 100,
       mode: TRADING_MODE.HYBRID,
       nickname: 'Live Account',
     });
-    await Wallet.create({ userId: trader._id, accountId: realAcct._id, currency: 'USD', balance: '2500' });
+    await Wallet.create({ userId: trader._id, accountId: realAcct._id, currency: BASE_CURRENCY, balance: '2500' });
     console.log(`  ✓ Live (Real) account added ($2,500 USD)`);
   } else {
     console.log(`  • Live account already exists`);

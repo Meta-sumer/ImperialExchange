@@ -2,7 +2,7 @@ const User = require('../models/User');
 const TradingAccount = require('../models/TradingAccount');
 const { Wallet } = require('../models/Wallet');
 const { asyncHandler, sendSuccess, AppError } = require('../utils/errors');
-const { ACCOUNT_TYPES, TRADING_MODE, KYC_STATUS } = require('../config/constants');
+const { BASE_CURRENCY, ACCOUNT_TYPES, TRADING_MODE, KYC_STATUS } = require('../config/constants');
 
 const updateProfile = asyncHandler(async (req, res) => {
   const allowed = ['firstName', 'lastName', 'phone', 'country', 'preferredDisplayCurrency'];
@@ -10,11 +10,8 @@ const updateProfile = asyncHandler(async (req, res) => {
   allowed.forEach((k) => k in req.body && (updates[k] = req.body[k]));
   // Normalise the country to an uppercase ISO-2 code (or clear it).
   if ('country' in updates) updates.country = String(updates.country || '').trim().toUpperCase().slice(0, 2) || null;
-  // Display currency: uppercase 3–5 letter code (USD/INR/GBP/EUR/USDT…), else USD.
-  if ('preferredDisplayCurrency' in updates) {
-    const c = String(updates.preferredDisplayCurrency || '').trim().toUpperCase();
-    updates.preferredDisplayCurrency = /^[A-Z]{3,5}$/.test(c) ? c : 'USD';
-  }
+  // INR-only: the display currency is always the ledger currency.
+  if ('preferredDisplayCurrency' in updates) updates.preferredDisplayCurrency = BASE_CURRENCY;
   const user = await User.findByIdAndUpdate(req.userId, updates, { new: true });
   sendSuccess(res, user.toSafeJSON());
 });
@@ -130,7 +127,7 @@ const createAccount = asyncHandler(async (req, res) => {
     // credit it, payouts convert out of it, every total normalises to it —
     // so an account in another currency ended up holding two wallets and
     // the summaries disagreed by the converted value of the odd one.
-    baseCurrency: 'USD',
+    baseCurrency: BASE_CURRENCY,
     leverage: acctLeverage,
     mode: mode || TRADING_MODE.HYBRID,
     nickname: nickname || plan?.name || accountType,
@@ -138,7 +135,7 @@ const createAccount = asyncHandler(async (req, res) => {
   await Wallet.create({
     userId: req.userId,
     accountId: account._id,
-    currency: 'USD',
+    currency: BASE_CURRENCY,
     balance: seed,
   });
 
@@ -146,7 +143,7 @@ const createAccount = asyncHandler(async (req, res) => {
   // the user to fund the account. Not a hard gate (account exists at
   // $0; the user just can't trade until they fund the minimum).
   const minDepositHint = plan && plan.minDeposit > 0
-    ? { minDeposit: plan.minDeposit, currency: 'USD', needsFunding: true }
+    ? { minDeposit: plan.minDeposit, currency: BASE_CURRENCY, needsFunding: true }
     : null;
 
   sendSuccess(res, { ...account.toObject(), minDepositHint }, 201);

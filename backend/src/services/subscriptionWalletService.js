@@ -8,10 +8,11 @@
  * drift on USD amounts.
  */
 const { SubscriptionWallet, SubscriptionTransaction } = require('../models/SubscriptionWallet');
+const { BASE_CURRENCY } = require('../config/constants');
 const { add, sub, gte, gt, D } = require('../utils/decimal');
 const { AppError } = require('../utils/errors');
 
-const DEFAULT_CURRENCY = 'USD';
+const DEFAULT_CURRENCY = BASE_CURRENCY;
 
 /**
  * Get or create the user's subscription wallet. Single wallet per user.

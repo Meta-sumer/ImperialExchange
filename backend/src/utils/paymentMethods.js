@@ -1,4 +1,5 @@
 const systemSettings = require('../services/systemSettings.service');
+const { BASE_CURRENCY } = require('../config/constants');
 const { AppError } = require('./errors');
 
 /**
@@ -6,7 +7,9 @@ const { AppError } = require('./errors');
  * (plus `custom[]`) into `deposit.paymentDetails`, each with an optional
  * `enabled` flag — absent/true = shown, false = hidden from the picker.
  */
-const FIXED_METHOD_IDS = ['UPI', 'BANK', 'CRYPTO', 'SKRILL', 'NETELLER', 'RAZORPAY'];
+// INR-only: UPI, bank transfer and Razorpay. (Crypto / Skrill / Neteller were
+// dollar rails; their labels stay below so old records still read correctly.)
+const FIXED_METHOD_IDS = ['UPI', 'BANK', 'RAZORPAY'];
 
 /** Display names, so a refusal reads "Skrill", not the storage key "SKRILL". */
 const FIXED_METHOD_LABELS = {
@@ -175,14 +178,8 @@ async function assertWithinLimits(method, kind, baseAmountUsd, display) {
   const word = String(kind).toLowerCase() === 'withdrawal' ? 'Withdrawal' : 'Deposit';
   // Show the limit in the SAME currency the user typed, so they don't have to
   // do the conversion themselves to understand the refusal.
-  const asTyped = (limitUsd) => {
-    const cur = display && display.currency;
-    const amt = Number(display && display.amount);
-    if (!cur || cur === 'USD' || !Number.isFinite(amt) || amt <= 0 || usd <= 0) {
-      return `${limitUsd.toFixed(2)} USD`;
-    }
-    return `${(limitUsd * (amt / usd)).toFixed(2)} ${cur} (${limitUsd.toFixed(2)} USD)`;
-  };
+  // Limits and amounts are both INR.
+  const asTyped = (limit) => `₹${Number(limit).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 
   if (min && usd < min) {
     throw new AppError(
@@ -383,12 +380,10 @@ async function assertCurrencySupported(method, code) {
  * the admin never restricted pays the base. One setting decides, for
  * every method.
  */
-function payoutCurrency(cfg, base = 'USD') {
-  const list = Array.isArray(cfg?.supportedCurrencies)
-    ? cfg.supportedCurrencies.map((c) => String(c || '').toUpperCase()).filter(Boolean)
-    : [];
-  if (!list.length) return base;
-  return list.includes(base) ? base : list[0];
+// INR-only: every rail pays out in INR whatever an older config listed in
+// supportedCurrencies.
+function payoutCurrency() {
+  return BASE_CURRENCY;
 }
 
 async function preparePayout(method, usdAmount) {
@@ -397,7 +392,7 @@ async function preparePayout(method, usdAmount) {
 
   // The rail's own currency, per the admin's list — not a hard-coded USD.
   const resolved = await resolveMethod(method);
-  const payCcy = payoutCurrency(resolved && resolved.cfg, 'USD');
+  const payCcy = payoutCurrency(resolved && resolved.cfg, BASE_CURRENCY);
   await assertCurrencySupported(method, payCcy);
 
   // Limits and the fee stay in USD: they are STORED in the base currency

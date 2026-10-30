@@ -1,4 +1,5 @@
 const Position = require('../models/Position');
+const { BASE_CURRENCY } = require('../config/constants');
 const Instrument = require('../models/Instrument');
 const { Wallet } = require('../models/Wallet');
 const { D, add, sub, mul, div, gt, lt, gte } = require('../utils/decimal');
@@ -17,7 +18,7 @@ const { D, add, sub, mul, div, gt, lt, gte } = require('../utils/decimal');
 // the queries below return, so a field missing from the stored document
 // reads its schema default exactly as before (Instrument.lastPrice → "0").
 // Callers that do not pass it run the original queries.
-const calculateAccountMetrics = async (userId, accountId, baseCurrency = 'USD', preloaded = null) => {
+const calculateAccountMetrics = async (userId, accountId, baseCurrency = BASE_CURRENCY, preloaded = null) => {
   const wallet = preloaded
     ? preloaded.walletDoc(userId, accountId, baseCurrency)
     : await Wallet.findOne({ userId, accountId, currency: baseCurrency });

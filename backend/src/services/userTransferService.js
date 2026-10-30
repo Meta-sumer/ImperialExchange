@@ -24,7 +24,7 @@ const walletService = require('./walletService');
 const systemSettings = require('./systemSettings.service');
 const { AppError } = require('../utils/errors');
 const { D, gt, gte, mul, sub, add } = require('../utils/decimal');
-const { WALLET_TX_TYPE, ROLES } = require('../config/constants');
+const { BASE_CURRENCY, WALLET_TX_TYPE, ROLES } = require('../config/constants');
 
 const User = require('../models/User');
 const TradingAccount = require('../models/TradingAccount');
@@ -199,7 +199,7 @@ const transferToUser = async ({
   const isMainFrom = String(fromAccountId) === 'subscription';
   const subscriptionWalletService = require('./subscriptionWalletService');
   if (isMainFrom) {
-    if (currency !== 'USD') throw new AppError('Main Wallet transfers must be in USD', 400, 'MAIN_USD_ONLY');
+    if (currency !== BASE_CURRENCY) throw new AppError(`Main Wallet transfers must be in ${BASE_CURRENCY}`, 400, 'MAIN_CURRENCY_ONLY');
   } else {
     // Verify sender's trading account belongs to them.
     const fromAcct = await TradingAccount.findOne({ _id: fromAccountId, userId: fromUserId }).lean();
@@ -302,7 +302,7 @@ const transferToUser = async ({
       title:    'Funds received',
       message:  `You received $${recvUsd.toString()} in your Main Wallet from ${senderName}` + (note ? ` — "${note}"` : ''),
       channels: ['IN_APP'],
-      data:     { fromUserId: String(fromUserId), amount: recvUsd.toString(), currency: 'USD', wallet: 'MAIN', referenceId: String(referenceId) },
+      data:     { fromUserId: String(fromUserId), amount: recvUsd.toString(), currency: BASE_CURRENCY, wallet: 'MAIN', referenceId: String(referenceId) },
     });
   } catch (e) {
     console.warn('[userTransfer] notification create failed:', e.message);

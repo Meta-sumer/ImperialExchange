@@ -21,6 +21,7 @@
  */
 
 const mongoose = require('mongoose');
+const { BASE_CURRENCY } = require('../config/constants');
 const { Commission } = require('../models/Compliance');
 const User = require('../models/User');
 const Trade = require('../models/Trade');
@@ -47,7 +48,7 @@ const getSettings = async () => {
     enabled: enabled !== false,
     bonusAmount: String(bonusAmount || '0'),
     minDeposit:  String(minDeposit  || '0'),
-    bonusCurrency: String(bonusCurrency || 'USD').toUpperCase(),
+    bonusCurrency: String(bonusCurrency || BASE_CURRENCY).toUpperCase(),
   };
 };
 
@@ -265,7 +266,7 @@ const handleFirstQualifyingDeposit = async ({ userId, deposit }) => {
 
     const bonus = D(settings.bonusAmount);
     if (bonus.lte(0)) return null;
-    const bonusCurrency = settings.bonusCurrency || deposit.baseCurrency || 'USD';
+    const bonusCurrency = settings.bonusCurrency || deposit.baseCurrency || BASE_CURRENCY;
 
     // 1. Record the Commission row FIRST so the audit trail exists even if
     //    the wallet credit fails — and so the unique index is the lock that
@@ -391,7 +392,7 @@ const distributeRevenueShare = async ({ tradeId, refereeId, feeAmount, currency,
       sourceId:   tradeId,
       positionId,
       volume,
-      currency:   currency || 'USD',
+      currency:   currency || BASE_CURRENCY,
       amount:     amount.toString(),
       rate:       pct.toString(),
       status:     'PENDING',
@@ -471,7 +472,7 @@ const getDashboardData = async (userId) => {
 
   const tot = rollup[0] || { lifetime: 0, pending: 0, paid: 0, bonusSum: 0, revShareSum: 0, today: 0, monthly: 0 };
   const availableBalance = wallet?.balance || '0';
-  const walletCurrency = wallet?.currency || 'USD';
+  const walletCurrency = wallet?.currency || BASE_CURRENCY;
 
   // The one genuine dependency: needs settings.minDeposit.
   const active = await getActiveReferrals(userId, { minDeposit: settings.minDeposit });
@@ -767,7 +768,7 @@ const getVolumeDashboard = async (userId) => {
       enabled: base.settings.enabled,
       amount: base.settings.bonusAmount,
       minDeposit: base.settings.minDeposit,
-      currency: base.settings.bonusCurrency || 'USD',
+      currency: base.settings.bonusCurrency || BASE_CURRENCY,
     },
     // ── Level + progression (PREVIOUS-MONTH volume-driven, fixed for month) ──
     partnerLevel: base.level.name,

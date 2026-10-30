@@ -6,7 +6,7 @@ const subscriptionWalletService = require('./subscriptionWalletService');
 const bonusWalletService = require('./bonusWalletService');
 const { D, mul, gt } = require('../utils/decimal');
 const { computeInstrumentCommission } = require('../utils/commission');
-const { WALLET_TX_TYPE } = require('../config/constants');
+const { BASE_CURRENCY, WALLET_TX_TYPE } = require('../config/constants');
 
 /**
  * Affiliate Commission Service (per doc §7.15).
@@ -195,7 +195,7 @@ const creditManual = async ({ userId, amount, currency, note, adminId }) => {
   // Subscription wallet is single-currency (USD by default). The Commission
   // row keeps the requested currency for the audit trail, but the actual
   // credit lands in the subscription wallet's currency.
-  const ccy = currency || 'USD';
+  const ccy = currency || BASE_CURRENCY;
 
   // 1. Record the commission row first so the affiliate page can show it
   //    even if the wallet credit fails (status will be PENDING in that case).
@@ -284,7 +284,7 @@ const accrueCloseCommission = async ({ position, closeQty, feeAmount, instrument
     await distributeCommissions({
       tradeId, userId,
       feeAmount: String(fee),
-      currency: currency || (instrument && instrument.quoteCurrency) || 'USD',
+      currency: currency || (instrument && instrument.quoteCurrency) || BASE_CURRENCY,
       positionId: position._id,
       volume: oneSideVolume,
     });

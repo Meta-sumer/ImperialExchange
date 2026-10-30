@@ -230,7 +230,7 @@ export default function OrderForm({
   // Display modes:
   //   'price'   → raw asset price (default)
   //   'pips'    → distance from reference price in pips
-  //   'money'   → desired USD profit (TP) / loss (SL)
+  //   'money'   → desired INR profit (TP) / loss (SL)
   //   'percent' → same as money but expressed as % of free equity
   const [tpMode, setTpMode] = useState('price');
   const [slMode, setSlMode] = useState('price');
@@ -366,7 +366,7 @@ export default function OrderForm({
           params: { accountId: account._id },
         });
         if (cancelled) return;
-        // The account holds ONE real wallet (USD base). Matching purely by
+        // The account holds ONE real wallet (INR base). Matching purely by
         // `currency === account.baseCurrency` silently returned nothing whenever
         // baseCurrency didn't equal the wallet row's currency (undefined / display
         // currency mismatch) → accountFree fell to '0' → EVERY order showed
@@ -784,7 +784,7 @@ export default function OrderForm({
   }, [takeProfit, refPrice]);
 
   const acctSym = account?.baseCurrency === 'INR' ? '₹'
-    : account?.baseCurrency === 'USD' ? '$'
+    : account?.baseCurrency === 'INR' ? '₹'
     : (account?.baseCurrency + ' ');
   const fmtAcct = (v) =>
     `${acctSym}${Number(v).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -835,12 +835,12 @@ export default function OrderForm({
   // Spread Cost is the CONFIGURED spread (ask − bid) × qty — matches the fill. Amounts are in the
   // instrument's quote currency. Nothing is hardcoded — it all reads the tier's
   // feeKind / feeValue / feeDisplay (via /account-plans) + the live spread.
-  const quoteCcy = instrument?.quoteCurrency || 'USD';
+  const quoteCcy = instrument?.quoteCurrency || 'INR';
   const fmtQuote = (v) => `${Number(v).toFixed(2)} ${quoteCcy}`;
-  // Notional is denominated in the INSTRUMENT's quote currency (e.g. USD for
+  // Notional is denominated in the INSTRUMENT's quote currency (e.g. INR for
   // BTCUSD), not the account currency — format it with that symbol so an INR
-  // account doesn't show a USD figure with a ₹ sign.
-  const quoteSym = quoteCcy === 'INR' ? '₹' : quoteCcy === 'USD' ? '$' : `${quoteCcy} `;
+  // account doesn't show a INR figure with a ₹ sign.
+  const quoteSym = quoteCcy === 'INR' ? '₹' : quoteCcy === 'INR' ? '₹' : quoteCcy === 'INR' ? '₹' : `${quoteCcy} `;
   const fmtQuoteAmt = (v) =>
     `${quoteSym}${Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 

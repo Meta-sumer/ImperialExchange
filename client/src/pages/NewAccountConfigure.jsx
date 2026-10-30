@@ -23,7 +23,7 @@ export default function NewAccountConfigure() {
   const [loading, setLoading] = useState(true);
   const [mode, setMode] = useState('REAL');           // 'REAL' | 'DEMO'
   const [nickname, setNickname] = useState('');
-  const [baseCurrency, setBaseCurrency] = useState('USD');
+  const [baseCurrency, setBaseCurrency] = useState('INR');
   const [leverage, setLeverage] = useState(100);
   const [submitting, setSubmitting] = useState(false);
 
@@ -248,15 +248,15 @@ export default function NewAccountConfigure() {
                 placeholder={plan.name}
               />
             </Field>
-            {/* Accounts are USD-denominated. Offering another base currency
+            {/* Accounts are INR-denominated. Offering another base currency
                 created a wallet in it while every deposit still credited
-                USD, so the account held two and the summaries disagreed by
+                INR, so the account held two and the summaries disagreed by
                 the converted value of the leftover. Amounts are still
                 DISPLAYED in whatever currency the user picks — that is the
                 display-currency selector, and it is unaffected. */}
             <Field label="Base currency">
               <div className="w-full px-3.5 py-2.5 rounded-xl border border-border-dark bg-bg-hover/40 text-sm font-semibold flex items-center justify-between cursor-not-allowed select-none">
-                <span className="text-text-primary">USD</span>
+                <span className="text-text-primary">INR</span>
                 <span className="text-[10px] uppercase tracking-wider font-bold text-emerald-600 bg-emerald-500/15 px-1.5 py-0.5 rounded">
                   Fixed
                 </span>

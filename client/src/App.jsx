@@ -48,6 +48,7 @@ const OrderModalPreview = lazy(() => import('./pages/OrderModalPreview'));
 
 // Public marketing landing (shown at "/" to logged-out visitors).
 const Landing = lazy(() => import('./pages/Landing'));
+const Download = lazy(() => import('./pages/Download'));
 
 // Public CMS-driven content pages (no auth wrapper — SEO-friendly URLs).
 const CmsPageView = lazy(() => import('./pages/CmsPageView'));
@@ -105,6 +106,8 @@ export default function App() {
         <Route path="/page/:slug" element={<Suspense fallback={<RouteFallback />}><CmsPageView /></Suspense>} />
         <Route path="/news" element={<Suspense fallback={<RouteFallback />}><News /></Suspense>} />
         <Route path="/news/:slug" element={<Suspense fallback={<RouteFallback />}><NewsArticle /></Suspense>} />
+        {/* Android app download — the landing badges and the QR code land here. */}
+        <Route path="/download" element={<Suspense fallback={<RouteFallback />}><Download /></Suspense>} />
 
         <Route path="/" element={<RootRoute />} />
         <Route path="/dashboard" element={<Page><Dashboard /></Page>} />

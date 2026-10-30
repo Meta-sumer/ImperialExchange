@@ -12,7 +12,7 @@ require('dotenv').config();
 const { connectDB } = require('../config/db');
 const TradingAccount = require('../models/TradingAccount');
 const { Wallet } = require('../models/Wallet');
-const { ACCOUNT_TYPES } = require('../config/constants');
+const { BASE_CURRENCY, ACCOUNT_TYPES } = require('../config/constants');
 
 const DEFAULT_BALANCES = {
   [ACCOUNT_TYPES.DEMO]: '50000',
@@ -28,20 +28,20 @@ const DEFAULT_BALANCES = {
   let walletsCreated = 0;
 
   for (const acc of accounts) {
-    if (acc.baseCurrency !== 'USD') {
+    if (acc.baseCurrency !== BASE_CURRENCY) {
       console.log(`Account ${acc.accountNumber} (${acc.accountType}): baseCurrency ${acc.baseCurrency} → USD`);
-      acc.baseCurrency = 'USD';
+      acc.baseCurrency = BASE_CURRENCY;
       await acc.save();
       accountsUpdated++;
     }
 
-    const usdWallet = await Wallet.findOne({ userId: acc.userId, accountId: acc._id, currency: 'USD' });
+    const usdWallet = await Wallet.findOne({ userId: acc.userId, accountId: acc._id, currency: BASE_CURRENCY });
     if (!usdWallet) {
       const startBalance = DEFAULT_BALANCES[acc.accountType] || '0';
       await Wallet.create({
         userId: acc.userId,
         accountId: acc._id,
-        currency: 'USD',
+        currency: BASE_CURRENCY,
         balance: startBalance,
       });
       console.log(`  → created USD wallet with $${startBalance}`);

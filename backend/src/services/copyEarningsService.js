@@ -49,7 +49,7 @@ const bonusWalletService= require('./bonusWalletService');
 const subscriptionWalletService = require('./subscriptionWalletService'); // "Main Wallet"
 const currencyService   = require('./currencyService');
 const systemSettings    = require('./systemSettings.service');
-const { WALLET_TX_TYPE, POSITION_STATUS } = require('../config/constants');
+const { BASE_CURRENCY, WALLET_TX_TYPE, POSITION_STATUS } = require('../config/constants');
 const { sub, mul, div, gt } = require('../utils/decimal');
 
 const oid = (id) => mongoose.Types.ObjectId.createFromHexString(String(id));
@@ -146,7 +146,7 @@ async function settleCopyTradeProfit(mirror) {
     const wallet = await Wallet
       .findOne({ userId: mirror.followerId, accountId: pos.accountId })
       .select('currency').lean();
-    const currency = (wallet && wallet.currency) || 'USD';
+    const currency = (wallet && wallet.currency) || BASE_CURRENCY;
 
     // ── Convert each leg to USD (Bonus Wallet + Main Wallet are USD). ──
     const feeConv = gt(feeAmount, '0') ? await currencyService.toBase(currency, Number(feeAmount)) : { baseAmount: 0, rate: 1 };

@@ -5,7 +5,7 @@ const Trade = require('../models/Trade');
 const Instrument = require('../models/Instrument');
 const Position = require('../models/Position');
 const TradingAccount = require('../models/TradingAccount');
-const { ORDER_STATUS, ORDER_SIDE, POSITION_STATUS, ROUTING } = require('../config/constants');
+const { BASE_CURRENCY, ORDER_STATUS, ORDER_SIDE, POSITION_STATUS, ROUTING } = require('../config/constants');
 const { add, sub, mul, div, eq, gt, lte, D } = require('../utils/decimal');
 const { computeInstrumentCommission } = require('../utils/commission');
 const LedgerCache = require('./LedgerCache');
@@ -735,7 +735,7 @@ class MatchingEngine {
     ledger.loadBalance(order.accountId, {
       balance: wallet ? wallet.balance : '0',
       locked: wallet ? wallet.locked : '0',
-      currency: wallet ? wallet.currency : 'USD',
+      currency: wallet ? wallet.currency : BASE_CURRENCY,
     });
     if (pre) {
       ledger.loadPosition({
@@ -1120,7 +1120,7 @@ class MatchingEngine {
 
     const instrument = await this._getInstrument(instrumentId);
     const account = await this._getAccountMeta(accountId);
-    const currency = account?.baseCurrency || 'USD';
+    const currency = account?.baseCurrency || BASE_CURRENCY;
 
     // Reduce qty caps at remaining size — no flip leg in hedge mode.
     const closeQty = (gt(pos.quantity, qty) || eq(pos.quantity, qty)) ? qty : pos.quantity;

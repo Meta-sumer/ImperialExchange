@@ -13,6 +13,7 @@
  */
 require('dotenv').config();
 const mongoose = require('mongoose');
+const { BASE_CURRENCY } = require('../config/constants');
 
 (async () => {
   await mongoose.connect(process.env.MONGODB_URI);
@@ -28,7 +29,7 @@ const mongoose = require('mongoose');
     const held = Number(rel.heldAmount || 0);
     if (held > 0) {
       const acc = await TradingAccount.findById(rel.followerAccountId).select('baseCurrency').lean();
-      const currency = acc?.baseCurrency || 'USD';
+      const currency = acc?.baseCurrency || BASE_CURRENCY;
       try {
         await walletService.releaseMargin({
           userId: rel.followerId, accountId: rel.followerAccountId, currency,

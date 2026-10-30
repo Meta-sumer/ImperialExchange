@@ -656,18 +656,18 @@ export default function Trade() {
 
   // Display currency — the SAME global store the profile menu writes to, so the
   // two selectors are one setting rather than two that can disagree. Presentation
-  // only: the account and wallet stay in USD and no trading math sees this.
+  // only: the account and wallet stay in INR and no trading math sees this.
   const displayCode = useDisplayCurrency((s) => s.code);
   const setDisplayCode = useDisplayCurrency((s) => s.setCode);
   const { currencies: displayCurrencies, rateFor } = useDisplayRates();
-  const displayRate = rateFor(displayCode);      // 1 USD = displayRate <displayCode>
-  // Same normalisation Layout uses: any row -> USD (legacy INR rows divided back
-  // out, everything else 1:1 as the backend treats them), then USD -> display.
+  const displayRate = rateFor(displayCode);      // 1 INR = displayRate <displayCode>
+  // Same normalisation Layout uses: any row -> INR (legacy INR rows divided back
+  // out, everything else 1:1 as the backend treats them), then INR -> display.
   const _fxUsd = Number(fxRate) > 0 ? Number(fxRate) : 83;
   const toUsdAmt = (v, ccy) => {
     const n = Number(v) || 0;
-    const c = String(ccy || 'USD').toUpperCase();
-    if (c === 'USD') return n;
+    const c = String(ccy || 'INR').toUpperCase();
+    if (c === 'INR') return n;
     if (c === 'INR') return _fxUsd > 0 ? n / _fxUsd : n;
     return n;
   };
@@ -1432,7 +1432,7 @@ export default function Trade() {
       balance,
       used: usedMargin,
       marginLevel,
-      base: account.baseCurrency || 'USD',
+      base: account.baseCurrency || 'INR',
     };
   }, [account, walletFree, positionsWithLivePnl, positions]);
 
@@ -1846,7 +1846,7 @@ export default function Trade() {
             {(() => {
               const acc = account;
               const name = acc?.nickname || acc?.accountNumber || '—';
-              const ccy = acc?.baseCurrency || 'USD';
+              const ccy = acc?.baseCurrency || 'INR';
               // The chip shows EQUITY (realized balance + unrealized P&L) —
               // the live figure a trader watches, and the same thing the
               // profile menu in Layout shows. It used to show `walletFree`
@@ -1907,7 +1907,7 @@ export default function Trade() {
               );
             })()}
             {accountMenuOpen && (() => {
-              const ccy = account?.baseCurrency || 'USD';
+              const ccy = account?.baseCurrency || 'INR';
               const balanceN = Number(
                 walletFree
                   ?? (account?._id ? accountBalances[account._id] : null)
@@ -2057,7 +2057,7 @@ export default function Trade() {
                           aria-label="Display currency"
                           className="text-[11px] font-semibold bg-bg-hover border border-border-subtle rounded px-1.5 py-1 text-text-primary cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary-500"
                         >
-                          {(displayCurrencies && displayCurrencies.length ? displayCurrencies : [{ code: 'USD' }]).map((c) => (
+                          {(displayCurrencies && displayCurrencies.length ? displayCurrencies : [{ code: 'INR' }]).map((c) => (
                             <option key={c.code} value={c.code}>{c.code}</option>
                           ))}
                         </select>
@@ -2065,7 +2065,7 @@ export default function Trade() {
                       {accounts.map((a) => {
                         const isActive = a._id === selectedAccountId;
                         const name = a.nickname || a.accountNumber || '—';
-                        const acCcy = a.baseCurrency || 'USD';
+                        const acCcy = a.baseCurrency || 'INR';
                         const balance = Number(
                           (a._id === selectedAccountId ? walletFree : null)
                             ?? accountBalances[a._id]
@@ -4454,7 +4454,7 @@ function SidebarPerformance({ instrument, livePrice }) {
           { l: 'Range',     v: hasRange ? fmtNum(hi - lo, prec) : null },
           { l: 'Range (%)', v: rangePct != null ? rangePct.toFixed(2) + '%' : null },
           { l: 'Volume',    v: Number.isFinite(volNum) && volNum > 0 ? fmtCompact(volNum) : null },
-          { l: 'Turnover',  v: turnover != null && turnover > 0 ? `${currencySymbol(instrument.quoteCurrency || 'USD')}${fmtCompact(turnover)}` : null },
+          { l: 'Turnover',  v: turnover != null && turnover > 0 ? `${currencySymbol(instrument.quoteCurrency || 'INR')}${fmtCompact(turnover)}` : null },
         ].filter((r) => r.v != null);
         if (!rows.length) return null;
         return (
@@ -4698,15 +4698,15 @@ function PositionsTable({ positions, onClose, onPartialClose, onModify, fxRate, 
         {positions.map((p) => {
           const pnl = Number(p.unrealizedPnl || 0);
           const inst = instrumentsBySymbol?.[p.symbol];
-          const quote = inst?.quoteCurrency || 'USD';
+          const quote = inst?.quoteCurrency || 'INR';
           const prec = inst?.pricePrecision || 4;
           const entry = fmtPriceDual(p.entryPrice, quote, fxRate, prec);
           const mark = fmtPriceDual(p.markPrice || p.entryPrice, quote, fxRate, prec);
           const tpPx = p.takeProfit ? fmtPriceDual(p.takeProfit, quote, fxRate, prec) : null;
           const slPx = p.stopLoss ? fmtPriceDual(p.stopLoss, quote, fxRate, prec) : null;
           // PnL / fees on the wire are already in the position's quote currency
-          // (₹ for NSE/BSE, $ for USD-quoted). Show them natively so an INR stock
-          // reads ₹ P/L instead of a USD conversion.
+          // (₹ for NSE/BSE, $ for INR-quoted). Show them natively so an INR stock
+          // reads ₹ P/L instead of a INR conversion.
           const fee = Number(p.commission || 0);
           const swap = Number(p.swap || 0);
           // A trade's single fee belongs to exactly ONE group (by its type):
@@ -4893,7 +4893,7 @@ function OrdersTable({ orders, onCancel, onModify, fxRate, instrumentsBySymbol, 
       <tbody>
         {orders.map((o) => {
           const inst = instrumentsBySymbol?.[o.symbol];
-          const quote = inst?.quoteCurrency || 'USD';
+          const quote = inst?.quoteCurrency || 'INR';
           const prec = inst?.pricePrecision || 4;
           // "Open price" — the price the order opens at: trigger for STOP
           // orders, limit price otherwise (falls back to whichever exists).
@@ -5001,7 +5001,7 @@ function ClosedTable({ trades, fxRate, instrumentsBySymbol }) {
       <tbody>
         {trades.map((t) => {
           const inst = instrumentsBySymbol?.[t.symbol];
-          const quote = inst?.quoteCurrency || 'USD';
+          const quote = inst?.quoteCurrency || 'INR';
           const prec = inst?.pricePrecision || 4;
           const entry = fmtPriceDual(t.entryPrice, quote, fxRate, prec);
           const close = t.closePrice ? fmtPriceDual(t.closePrice, quote, fxRate, prec) : null;

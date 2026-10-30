@@ -24,7 +24,7 @@ const orderRouter = require('../services/orderRouter.service');
 const walletService = require('../services/walletService');
 const { sendSuccess, asyncHandler, AppError } = require('../utils/errors');
 const { applyDateRange } = require('../utils/dateRange');
-const { ORDER_TYPE, ORDER_STATUS, POSITION_STATUS, ROLES, ACCOUNT_TYPES } = require('../config/constants');
+const { BASE_CURRENCY, ORDER_TYPE, ORDER_STATUS, POSITION_STATUS, ROLES, ACCOUNT_TYPES } = require('../config/constants');
 const { gt, mul, div, sub, D } = require('../utils/decimal');
 const { ticketShort } = require('../utils/ticket');
 const { marginFor, realizedPnlFor, netOf, checkTradeTimes } = require('../utils/manualTradeMath');
@@ -888,7 +888,7 @@ const cancelPending = asyncHandler(async (req, res) => {
       const account = await TradingAccount.findById(order.accountId);
       await walletService.releaseMargin({
         userId: order.userId, accountId: order.accountId,
-        currency: account?.baseCurrency || 'USD', amount: releaseAmt,
+        currency: account?.baseCurrency || BASE_CURRENCY, amount: releaseAmt,
         orderId: order._id, note: `Admin cancel: released ${releaseAmt} for unfilled ${remaining}`,
       });
     }
@@ -1023,7 +1023,7 @@ async function cancelOne(req, id) {
     if (gt(remaining, '0')) {
       const releaseAmt = div(mul(order.lockedMargin, remaining), order.quantity);
       const account = await TradingAccount.findById(order.accountId);
-      await walletService.releaseMargin({ userId: order.userId, accountId: order.accountId, currency: account?.baseCurrency || 'USD', amount: releaseAmt, orderId: order._id, note: 'Admin bulk cancel' });
+      await walletService.releaseMargin({ userId: order.userId, accountId: order.accountId, currency: account?.baseCurrency || BASE_CURRENCY, amount: releaseAmt, orderId: order._id, note: 'Admin bulk cancel' });
     }
   }
   await audit(req, 'ADMIN_CANCEL_ORDER', order._id, { symbol: order.symbol, bulk: true, reason: order.rejectionReason });
@@ -1153,7 +1153,7 @@ const manualTrade = asyncHandler(async (req, res) => {
   if (timeErr) throw new AppError(timeErr, 400);
   const closePrice = status === 'CLOSED' ? parseDec(b.closePrice, 'closePrice') : null;
 
-  const currency = account.baseCurrency || 'USD';
+  const currency = account.baseCurrency || BASE_CURRENCY;
   const positionSide = side === 'BUY' ? 'LONG' : 'SHORT';
   const margin = marginFor(quantity, entryPrice, leverage);
 
@@ -1272,7 +1272,7 @@ const editTrade = asyncHandler(async (req, res) => {
   const quantity = has('quantity') ? parseDec(b.quantity, 'quantity') : oldQty;
 
   const account = await TradingAccount.findById(position.accountId).select('baseCurrency').lean();
-  const currency = account?.baseCurrency || 'USD';
+  const currency = account?.baseCurrency || BASE_CURRENCY;
   const ticket = ticketShort(position._id);
   const positionSide = side === 'BUY' ? 'LONG' : 'SHORT';
   let wallet = { effect: 'NONE', amount: '0' };

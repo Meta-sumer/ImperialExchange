@@ -9,7 +9,7 @@ import CopySettingsFields, { defaultSettings, settingsPayload } from './CopySett
  * balance warning (advisory), and captures lot size + copy settings.
  */
 
-const sym = (c) => (c === 'USD' ? '$' : c === 'INR' ? '₹' : `${c} `);
+const sym = (c) => (c === 'INR' ? '₹' : c === 'INR' ? '₹' : `${c} `);
 
 export default function CopySetupModal({ trader, onClose, onStarted }) {
   const [accounts, setAccounts] = useState([]);

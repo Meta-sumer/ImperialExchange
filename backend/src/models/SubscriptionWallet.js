@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { BASE_CURRENCY } = require('../config/constants');
 
 /**
  * Subscription Wallet — completely separate from the trading wallet.
@@ -14,7 +15,7 @@ const subscriptionWalletSchema = new mongoose.Schema(
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, unique: true, index: true },
     walletType: { type: String, default: 'subscription', immutable: true },
     balance: { type: String, default: '0' },        // string-decimal
-    currency: { type: String, default: 'USD' },
+    currency: { type: String, default: BASE_CURRENCY },
 
     // User preferences
     autoRenew: { type: Boolean, default: true },
@@ -62,7 +63,7 @@ const subscriptionTransactionSchema = new mongoose.Schema(
     },
 
     amount: { type: String, required: true },      // unsigned string decimal
-    currency: { type: String, default: 'USD' },
+    currency: { type: String, default: BASE_CURRENCY },
     balanceAfter: { type: String },
     // What this movement belongs to — a Withdrawal id for a WITHDRAWAL /
     // REFUND pair. Mirrors WalletLedger.referenceId, which trading

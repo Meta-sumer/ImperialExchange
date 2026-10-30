@@ -138,9 +138,9 @@ export default function Layout({ children }) {
   // have REAL accounts in mixed currencies this still shows the sum
   // (assumes the accountant view is roughly base-currency normalised).
   // Per-account real balances kept as {currency, free} parts so each is
-  // FX-converted to USD at render time before summing. Raw-summing mixed
-  // INR + USD accounts (and labelling the total with the first account's
-  // currency) was the balance-mismatch bug — a USD account's $89.61 showed
+  // FX-converted to INR at render time before summing. Raw-summing mixed
+  // INR + INR accounts (and labelling the total with the first account's
+  // currency) was the balance-mismatch bug — a INR account's $89.61 showed
   // up as "₹89.61" and then "$0.93".
   const [realParts, setRealParts] = useState(null); // null = loading, [] = no real accounts
   // Ref so the profile-menu poll (below) can re-run the same loader.
@@ -224,23 +224,23 @@ export default function Layout({ children }) {
   }, [user]);
 
   // ── DISPLAY-CURRENCY conversion (presentation only) ──────────────────
-  // The account + wallet stay in USD; the user picks a DISPLAY currency and we
-  // convert at render time. Default USD. `rate` (USD→INR) only normalizes any
-  // legacy INR-denominated wallet row back to USD before re-converting.
+  // The account + wallet stay in INR; the user picks a DISPLAY currency and we
+  // convert at render time. Default INR. `rate` (INR→INR) only normalizes any
+  // legacy INR-denominated wallet row back to INR before re-converting.
   const fxRate = useFxRate();
   const rate = Number(fxRate) > 0 ? Number(fxRate) : 83;
   const displayCode = useDisplayCurrency((s) => s.code);
   const setDisplayCode = useDisplayCurrency((s) => s.setCode);
   const { currencies: displayCurrencies, rateFor, symbolFor } = useDisplayRates();
-  const displayRate = rateFor(displayCode);      // 1 USD = displayRate <displayCode>
+  const displayRate = rateFor(displayCode);      // 1 INR = displayRate <displayCode>
   const displaySymbol = symbolFor(displayCode);
 
-  // Normalize any wallet-row amount → USD (USD as-is; legacy INR ÷ rate; other
-  // currencies 1:1, matching the backend), then convert USD → display currency.
+  // Normalize any wallet-row amount → INR (INR as-is; legacy INR ÷ rate; other
+  // currencies 1:1, matching the backend), then convert INR → display currency.
   const toUsd = (v, ccy) => {
     const n = Number(v) || 0;
-    const c = String(ccy || 'USD').toUpperCase();
-    if (c === 'USD') return n;
+    const c = String(ccy || 'INR').toUpperCase();
+    if (c === 'INR') return n;
     if (c === 'INR') return rate > 0 ? n / rate : n;
     return n;
   };
@@ -252,12 +252,12 @@ export default function Layout({ children }) {
     ? liveSelRows
     : (realParts || []).filter((b) => String(b.accountId) === String(selectedAccountId));
   const balLoading = liveSelRows == null && realParts == null;
-  // FLOATING balance (USD base) = equity; convert to the display currency.
+  // FLOATING balance (INR base) = equity; convert to the display currency.
   const selUsd = selBals.reduce((s, b) => s + toUsd(b.equity ?? b.balance, b.currency), 0);
   const selDisplay = selUsd * (displayRate || 1);
   const balanceLabel = balLoading ? '—' : `${displaySymbol}${fmtNum(selDisplay, 2)}`;
-  // Show the USD base as a subline whenever the display currency isn't USD.
-  const balanceSubLabel = balLoading || displayCode === 'USD' ? '' : `≈ $${fmtNum(selUsd, 2)} USD`;
+  // Show the INR base as a subline whenever the display currency isn't INR.
+  const balanceSubLabel = ''; // INR-only — no secondary currency line
   // Per-account floating balance (display currency) for the switch-account rows.
   const acctDisplay = new Map();
   for (const b of (realParts || [])) {
@@ -462,7 +462,7 @@ export default function Layout({ children }) {
                                     </span>
                                   </div>
                                   <div className="text-[10px] text-text-muted truncate">
-                                    {[a.baseCurrency || 'USD', a.accountNumber, accountTierLabel(a)].filter(Boolean).join(' · ')}
+                                    {[a.baseCurrency || 'INR', a.accountNumber, accountTierLabel(a)].filter(Boolean).join(' · ')}
                                   </div>
                                 </div>
                               </div>
@@ -502,7 +502,7 @@ export default function Layout({ children }) {
                         )}
                       </div>
                       {/* DISPLAY-currency selector — presentation only. The account
-                          + wallet stay in USD; this just re-converts what's shown. */}
+                          + wallet stay in INR; this just re-converts what's shown. */}
                       <select
                         value={displayCode}
                         onChange={(e) => setDisplayCode(e.target.value)}
@@ -510,7 +510,7 @@ export default function Layout({ children }) {
                         aria-label="Display currency"
                         className="text-[11px] font-semibold bg-bg-hover border border-border-subtle rounded px-1.5 py-1 text-text-primary cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary-500"
                       >
-                        {(displayCurrencies && displayCurrencies.length ? displayCurrencies : [{ code: 'USD' }]).map((c) => (
+                        {(displayCurrencies && displayCurrencies.length ? displayCurrencies : [{ code: 'INR' }]).map((c) => (
                           <option key={c.code} value={c.code}>{c.code}</option>
                         ))}
                       </select>

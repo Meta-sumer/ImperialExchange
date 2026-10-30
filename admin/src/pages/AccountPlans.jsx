@@ -289,7 +289,7 @@ function PlanForm({ plan, onClose, onSaved }) {
 
           <Section title="Trading Rules">
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Minimum deposit (USD)">
+              <Field label="Minimum deposit (INR)">
                 <input type="number" step="any" className="input" value={form.minDeposit} onChange={(e) => set('minDeposit', e.target.value)} />
               </Field>
               <Field label="Max leverage (blank = unlimited)">

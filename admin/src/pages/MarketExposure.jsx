@@ -9,7 +9,7 @@ import TradingViewChart from '../components/TradingViewChart';
  * exposure across the platform (SUPER_ADMIN) or an admin's own hierarchy
  * (ADMIN). No trading controls of any kind. Auto-refreshes every 4s.
  */
-const money = (v) => `$${Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const money = (v) => `₹${Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const signedMoney = (v) => `${Number(v) < 0 ? '-' : '+'}${money(Math.abs(Number(v) || 0))}`;
 const pct = (v) => `${Number(v || 0).toFixed(1)}%`;
 const fmtLots = (v) => {
@@ -120,7 +120,7 @@ export default function MarketExposure() {
 
   // ── Exports ──
   const exportRows = () => ([
-    ['Symbol', 'Buy Lots', 'Buy Amount (USD)', 'Sell Lots', 'Sell Amount (USD)', 'Net Difference (USD)', 'Total P&L (USD)', 'Buy %', 'Sell %', 'Status'],
+    ['Symbol', 'Buy Lots', 'Buy Amount (INR)', 'Sell Lots', 'Sell Amount (INR)', 'Net Difference (INR)', 'Total P&L (INR)', 'Buy %', 'Sell %', 'Status'],
     ...sortedRows.map((r) => [r.symbol, r.buyLots, r.buyAmount, r.sellLots, r.sellAmount, r.net, r.pnl, r.buyPct, r.sellPct, r.status]),
   ]);
   const exportCSV = () => {

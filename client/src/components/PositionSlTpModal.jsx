@@ -12,7 +12,7 @@ import { createPortal } from 'react-dom';
 // SL/TP, submitting { takeProfit, stopLoss }.
 //
 // Pip math: pipSize = 10^-precision. So for BTC with precision=2 the pip
-// is 0.01. The pip / USD / % readout below each price field shows the
+// is 0.01. The pip / INR / % readout below each price field shows the
 // delta between the entered price and the reference (position entry, or the
 // order's own trigger price), how MT5 / cTrader render this control.
 export default function PositionSlTpModal({ position, kind = 'position', instrument, free = 0, onClose, onSubmit, onPartialClose }) {
@@ -104,7 +104,7 @@ export default function PositionSlTpModal({ position, kind = 'position', instrum
             <div className="text-right">
               <button onClick={onClose} className="text-text-muted hover:text-text-primary text-xl leading-none">×</button>
               <div className={`mt-1 text-[13px] font-mono font-bold tabular-nums ${livePnl >= 0 ? 'text-bull' : 'text-bear'}`}>
-                {livePnl >= 0 ? '+' : ''}{fmt(livePnl)} USD
+                {livePnl >= 0 ? '+' : ''}{fmt(livePnl)} INR
               </div>
               <div className="text-[11px] text-text-muted font-mono">{stepFmt(lastPx)}</div>
             </div>
@@ -246,7 +246,7 @@ export default function PositionSlTpModal({ position, kind = 'position', instrum
 const PF_MODES = [
   { id: 'price',   label: 'By asset price', short: 'Price' },
   { id: 'pips',    label: 'In pips',        short: 'Pips' },
-  { id: 'money',   label: 'In money',       short: 'USD' },
+  { id: 'money',   label: 'In money',       short: 'INR' },
   { id: 'percent', label: 'In % of equity', short: '%' },
 ];
 function PriceField({
@@ -390,7 +390,7 @@ function PriceField({
             {delta.pips >= 0 ? '+' : ''}{delta.pips.toFixed(1)} pips
           </span>
           <span className="text-text-muted">·</span>
-          <span className="text-text-secondary">{delta.usd.toFixed(2)} USD</span>
+          <span className="text-text-secondary">{delta.usd.toFixed(2)} INR</span>
           <span className="text-text-muted">·</span>
           <span className="text-text-secondary">{delta.pct.toFixed(2)} %</span>
         </div>

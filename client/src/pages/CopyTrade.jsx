@@ -396,7 +396,7 @@ function MyBoxesSection({ boxes, onCreate, onToggle, onEdit, onDelete, onView })
             <div className="mt-2 flex items-center justify-between rounded-lg bg-bg-hover/50 px-2.5 py-1.5">
               <span className="text-[11px] text-text-muted">Total P&L</span>
               <span className={`text-sm font-bold font-mono tabular-nums ${Number(b.cumulativePnl || 0) >= 0 ? 'text-bull' : 'text-bear'}`}>
-                {Number(b.cumulativePnl || 0) >= 0 ? '+' : ''}{Number(b.cumulativePnl || 0).toFixed(2)} USD
+                {Number(b.cumulativePnl || 0) >= 0 ? '+' : ''}{Number(b.cumulativePnl || 0).toFixed(2)} INR
               </span>
             </div>
             <div className="mt-2 text-[11px] text-text-muted">
@@ -1033,7 +1033,7 @@ function FeedRow({ event }) {
           {event.symbol && <span>· {event.symbol}</span>}
           {showPnl && (
             <span className={pnlNum >= 0 ? 'text-bull font-semibold' : 'text-bear font-semibold'}>
-              · {pnlNum >= 0 ? '+' : ''}{pnlNum.toFixed(2)} USD
+              · {pnlNum >= 0 ? '+' : ''}{pnlNum.toFixed(2)} INR
             </span>
           )}
         </div>
@@ -1068,7 +1068,7 @@ function MyCopyRow({ rel, onAction, onEdit, onStop, onAnalytics }) {
         </div>
         <div className="text-right">
           <div className={`text-sm font-extrabold tabular-nums ${running >= 0 ? 'text-bull' : 'text-bear'}`}>
-            {running >= 0 ? '+' : ''}{running.toFixed(2)} USD
+            {running >= 0 ? '+' : ''}{running.toFixed(2)} INR
           </div>
           <div className="text-[10px] text-text-muted">Running PnL</div>
         </div>

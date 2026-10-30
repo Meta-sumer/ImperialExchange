@@ -65,11 +65,11 @@ const txnDisplayId = (raw) => 'TXN-' + String(raw || '').slice(-12).toUpperCase(
 // Every wallet in this product holds ONE balance, denominated in the platform
 // base currency (backend config/constants BASE_CURRENCY). A deposit or
 // withdrawal can be DENOMINATED in something else — ₹31,210.99 over UPI, 200
-// USDT over TRC20 — but the balance it moves is still the USD one. Labelling
-// those balance columns with the transaction's currency printed a real USD
+// USDT over TRC20 — but the balance it moves is still the INR one. Labelling
+// those balance columns with the transaction's currency printed a real INR
 // figure behind a ₹ or USDT symbol, i.e. the number was right and the unit was
 // wrong by a factor of ~96.
-const BASE_CURRENCY = 'USD';
+const BASE_CURRENCY = 'INR';
 // Currency to label a row's before/after balance with. Deliberately NOT
 // row.currency — falling back to the base currency is the whole point.
 const balCcy = (row) => (row && row.balCurrency) || BASE_CURRENCY;
@@ -105,7 +105,7 @@ function movementDescription({ kind, method, amount, currency, base, account, co
   // A note the user or an admin wrote is extra information, not a replacement.
   return note && String(note).trim() ? `${built} · ${String(note).trim()}` : built;
 }
-// The USD equivalent the backend already stored for a deposit/withdrawal
+// The INR equivalent the backend already stored for a deposit/withdrawal
 // (Deposit/Withdrawal.baseAmount + baseCurrency + fxRateUsed). Null when the
 // row is already in base currency or predates the conversion fields.
 function baseEquivalent(doc, signedAmount) {
@@ -163,7 +163,7 @@ function normalizeDeposit(d, ledgerByRef, acctName) {
     kind: 'deposit',
     date: d.createdAt,
     amount: Number(d.amount || 0),
-    currency: d.currency || 'USD',
+    currency: d.currency || 'INR',
     status: d.status || 'PENDING',
     type: 'Deposit',
     typeKey: 'Deposit',
@@ -171,7 +171,7 @@ function normalizeDeposit(d, ledgerByRef, acctName) {
     receivedFrom,
     destination: acct,
     description: movementDescription({
-      kind: 'deposit', method: methodLabel(d.method), amount: d.amount, currency: d.currency || 'USD',
+      kind: 'deposit', method: methodLabel(d.method), amount: d.amount, currency: d.currency || 'INR',
       base: baseEquivalent(d, 1), account: acct, counterparty: flat(receivedFrom), note: d.note,
     }),
     accountId: d.accountId ? String(d.accountId) : null,
@@ -209,7 +209,7 @@ function normalizeWithdrawal(w, ledgerByRef, acctName) {
     kind: 'withdrawal',
     date: w.createdAt,
     amount: -Math.abs(Number(w.amount || 0)),
-    currency: w.currency || 'USD',
+    currency: w.currency || 'INR',
     status: w.status || 'PENDING',
     type: 'Withdrawal',
     typeKey: 'Withdrawal',
@@ -217,7 +217,7 @@ function normalizeWithdrawal(w, ledgerByRef, acctName) {
     receivedFrom: acct,
     destination,
     description: movementDescription({
-      kind: 'withdrawal', method: methodLabel(w.method), amount: w.amount, currency: w.currency || 'USD',
+      kind: 'withdrawal', method: methodLabel(w.method), amount: w.amount, currency: w.currency || 'INR',
       base: baseEquivalent(w, -1), account: acct, counterparty: flat(destination), note: w.note,
     }),
     accountId: w.accountId ? String(w.accountId) : null,
@@ -266,7 +266,7 @@ function normalizeLedger(l, acctName) {
     kind: 'ledger',
     date: l.createdAt,
     amount: amt,
-    currency: l.currency || 'USD',
+    currency: l.currency || 'INR',
     status: 'COMPLETED',
     type,
     typeKey: type,
@@ -323,7 +323,7 @@ function normalizeBonus(t) {
     kind: 'bonus',
     date: t.createdAt,
     amount: amt,
-    currency: t.currency || 'USD',
+    currency: t.currency || 'INR',
     status: ok ? 'COMPLETED' : String(t.status).toUpperCase(),
     type,
     typeKey: 'Bonus',
@@ -349,7 +349,7 @@ function normalizeSubscription(t) {
     kind: 'subscription',
     date: t.createdAt,
     amount: amt,
-    currency: t.currency || 'USD',
+    currency: t.currency || 'INR',
     status: 'COMPLETED',
     type,
     typeKey: 'Subscription',
@@ -780,7 +780,7 @@ function DetailsModal({ row, onClose }) {
     ['Date & Time', fmtDateTime(row.date)],
     ['Type', row.type],
     ['Amount', `${sign}${currencySymbol(row.currency)}${fmtNum(Math.abs(row.amount), 2)}`],
-    // The USD the wallet actually moved, and the rate that got us there.
+    // The INR the wallet actually moved, and the rate that got us there.
     ...(row.baseEq && row.baseEq.currency !== row.currency
       ? [[`Amount (${row.baseEq.currency})`, `${sign}${currencySymbol(row.baseEq.currency)}${fmtNum(Math.abs(row.baseEq.amount), 2)}`]]
       : []),

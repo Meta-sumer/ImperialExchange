@@ -283,19 +283,19 @@ export default function Affiliate() {
       <section className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           label="Total earnings"
-          value={`$${fmt(stats.total)}`}
+          value={`₹${fmt(stats.total)}`}
           accent="primary"
           icon={<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /></svg>}
         />
         <StatCard
           label="Paid to wallet"
-          value={`$${fmt(stats.paid)}`}
+          value={`₹${fmt(stats.paid)}`}
           accent="bull"
           icon={<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>}
         />
         <StatCard
           label="Pending"
-          value={`$${fmt(stats.pending)}`}
+          value={`₹${fmt(stats.pending)}`}
           accent="warn"
           icon={<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>}
         />
@@ -397,7 +397,7 @@ export default function Affiliate() {
                       <div className="text-bull font-mono font-extrabold tabular-nums">
                         +${Number(c.amount).toFixed(2)}
                       </div>
-                      <div className="text-[10px] text-text-muted font-mono">{c.currency || 'USD'}</div>
+                      <div className="text-[10px] text-text-muted font-mono">{c.currency || 'INR'}</div>
                     </div>
                     <span className={`text-[9.5px] font-bold uppercase tracking-wider px-2 py-1 rounded ${
                       c.status === 'PAID'      ? 'bg-bull/15 text-bull' :

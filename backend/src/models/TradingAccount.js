@@ -1,5 +1,5 @@
 const mongoose = require('mongoose');
-const { ACCOUNT_TYPES, TRADING_MODE, BOOK_TYPE, LP_PROVIDER } = require('../config/constants');
+const { BASE_CURRENCY, ACCOUNT_TYPES, TRADING_MODE, BOOK_TYPE, LP_PROVIDER } = require('../config/constants');
 
 const tradingAccountSchema = new mongoose.Schema(
   {
@@ -20,7 +20,7 @@ const tradingAccountSchema = new mongoose.Schema(
     // (so demo detection still works) and keep the chosen tier here so the UI
     // shows the real tier instead of defaulting to Standard.
     tierCode: { type: String, default: null },
-    baseCurrency: { type: String, default: 'USD' },
+    baseCurrency: { type: String, default: BASE_CURRENCY },
     leverage: { type: Number, default: 100 }, // 1:100
     // @deprecated — left in place for backward compatibility with older
     // reports/dashboards. New code MUST NOT branch on `mode`; routing is

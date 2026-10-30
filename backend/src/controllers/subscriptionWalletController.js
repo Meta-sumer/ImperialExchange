@@ -14,7 +14,7 @@ const walletService = require('../services/walletService');
 const fxService = require('../services/fxService');
 const TradingAccount = require('../models/TradingAccount');
 const { Wallet } = require('../models/Wallet');
-const { WALLET_TX_TYPE } = require('../config/constants');
+const { BASE_CURRENCY, WALLET_TX_TYPE } = require('../config/constants');
 const { Plan, Subscription } = require('../models/Subscription');
 const { SubscriptionTransaction } = require('../models/SubscriptionWallet');
 const { Deposit, Withdrawal } = require('../models/index');
@@ -103,7 +103,7 @@ const deposit = asyncHandler(async (req, res) => {
     }
   }
 
-  const ccy = account.baseCurrency || 'USD';
+  const ccy = account.baseCurrency || BASE_CURRENCY;
 
   // Debit the trading wallet FIRST. If balance is short, INSUFFICIENT_FUNDS
   // is thrown and the subscription wallet stays untouched.
@@ -194,7 +194,7 @@ const deposit = asyncHandler(async (req, res) => {
 const manualDeposit = asyncHandler(async (req, res) => {
   const {
     amount,
-    currency = 'USD',
+    currency = BASE_CURRENCY,
     method,
     txReference,
     senderName,
@@ -253,7 +253,7 @@ const manualDeposit = asyncHandler(async (req, res) => {
     accountId: undefined, // not bound to a trading account
     currency: depCur,
     amount: String(amt),
-    baseCurrency: 'USD',
+    baseCurrency: BASE_CURRENCY,
     baseAmount: String(baseAmount.toFixed(2)),
     fxRateUsed,
     method,
@@ -393,7 +393,7 @@ const requestWithdrawal = asyncHandler(async (req, res) => {
       amount: payAmt,
       // The USD that left the wallet. baseAmount stays the figure the user
       // typed, so the debit and the record can never disagree.
-      baseCurrency: 'USD',
+      baseCurrency: BASE_CURRENCY,
       baseAmount: amtStr,
       fxRateUsed: payRate,
       fee: wdFee,        // USD (base)

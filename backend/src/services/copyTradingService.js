@@ -34,7 +34,7 @@ const Position       = require('../models/Position');
 const TradingAccount = require('../models/TradingAccount');
 const Instrument     = require('../models/Instrument');
 const User           = require('../models/User');
-const { ORDER_STATUS, POSITION_STATUS } = require('../config/constants');
+const { BASE_CURRENCY, ORDER_STATUS, POSITION_STATUS } = require('../config/constants');
 
 const RISK_MULTIPLIER = { LOW: 0.5, MEDIUM: 1.0, HIGH: 1.5 };
 const MIN_QTY_FALLBACK = 0.01;
@@ -107,7 +107,7 @@ async function _holdAllocation(rel, amount) {
   if (!(Number(amt) > 0)) return '0';
   const walletService = require('./walletService');
   const fAcc = await TradingAccount.findById(rel.followerAccountId).select('baseCurrency').lean();
-  const currency = fAcc?.baseCurrency || 'USD';
+  const currency = fAcc?.baseCurrency || BASE_CURRENCY;
   await walletService.lockMargin({
     userId: rel.followerId, accountId: rel.followerAccountId, currency,
     amount: amt, orderId: rel._id, note: 'Copy allocation',
@@ -120,7 +120,7 @@ async function _releaseAllocation(rel) {
   if (!(Number(held) > 0)) return;
   const walletService = require('./walletService');
   const fAcc = await TradingAccount.findById(rel.followerAccountId).select('baseCurrency').lean();
-  const currency = fAcc?.baseCurrency || 'USD';
+  const currency = fAcc?.baseCurrency || BASE_CURRENCY;
   try {
     await walletService.releaseMargin({
       userId: rel.followerId, accountId: rel.followerAccountId, currency,
@@ -162,7 +162,7 @@ async function listEligibleAccounts(userId) {
     accountNumber: a.accountNumber,
     accountType: accountTypeLabel(a),
     nickname: a.nickname || '',
-    baseCurrency: a.baseCurrency || 'USD',
+    baseCurrency: a.baseCurrency || BASE_CURRENCY,
     hasBox: boxByAcc.has(String(a._id)),
     isPublic: boxByAcc.get(String(a._id))?.isPublic || false,
     acceptsFollowers: accountAcceptsFollowers(a),
@@ -367,7 +367,7 @@ async function onMasterOrderFilled({ order, position }) {
   const orderRouter = require('./orderRouter.service');
 
   for (const rel of followers) {
-    let currency = 'USD';
+    let currency = BASE_CURRENCY;
     let lockedAmt = 0;
     let mirrorOrder = null;
     try {
@@ -393,7 +393,7 @@ async function onMasterOrderFilled({ order, position }) {
       // Destination account — its currency for the margin lock, and its own
       // leverage, which is what the mirror must be margined at.
       const fAcc = await TradingAccount.findById(rel.followerAccountId).select('baseCurrency leverage').lean();
-      currency = fAcc?.baseCurrency || 'USD';
+      currency = fAcc?.baseCurrency || BASE_CURRENCY;
 
       // Required margin = (newly-opened qty × price) / leverage — mirrors the
       // normal placeOrder math. An existing opposite position reduces the new
@@ -893,7 +893,7 @@ async function getCopyPreview({ followerId, followerAccountId, masterAccountId }
   const acc = await TradingAccount.findOne({ _id: followerAccountId, userId: followerId })
     .select('baseCurrency accountType').lean();
   if (!acc) throw new Error('Account not found');
-  const currency = acc.baseCurrency || 'USD';
+  const currency = acc.baseCurrency || BASE_CURRENCY;
   const { Wallet } = require('../models/Wallet');
   const w = await Wallet.findOne({ userId: followerId, accountId: followerAccountId, currency }).lean();
   const currentBalance = Number(w?.balance || 0);

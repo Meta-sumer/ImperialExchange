@@ -137,9 +137,9 @@ export default function BonusWallets() {
         <>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <Stat label="Visible rows" value={stats.total} />
-            <Stat label="Credits (visible)" value={`$${fmt(stats.credits)}`} accent="emerald" />
-            <Stat label="Debits (visible)" value={`$${fmt(stats.debits)}`} accent="rose" />
-            <Stat label="Net (visible)" value={`$${fmt(stats.net)}`} accent={stats.net >= 0 ? 'emerald' : 'rose'} />
+            <Stat label="Credits (visible)" value={`₹${fmt(stats.credits)}`} accent="emerald" />
+            <Stat label="Debits (visible)" value={`₹${fmt(stats.debits)}`} accent="rose" />
+            <Stat label="Net (visible)" value={`₹${fmt(stats.net)}`} accent={stats.net >= 0 ? 'emerald' : 'rose'} />
           </div>
 
           <div className="card p-3 space-y-2.5">
@@ -184,7 +184,7 @@ export default function BonusWallets() {
                         <td className="py-2 px-3"><span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${isCredit ? 'bg-emerald-500/15 text-emerald-600' : 'bg-rose-500/15 text-rose-600'}`}>{t.transactionType}</span></td>
                         <td className="py-2 px-3 text-text-secondary">{t.reason?.replaceAll('_', ' ')}</td>
                         <td className={`py-2 px-3 text-right font-mono tabular-nums font-bold ${isCredit ? 'text-emerald-600' : 'text-rose-600'}`}>{isCredit ? '+' : '−'}${fmt(t.amount)}</td>
-                        <td className="py-2 px-3 text-right font-mono tabular-nums text-text-secondary">{t.balanceAfter != null ? `$${fmt(t.balanceAfter)}` : '—'}</td>
+                        <td className="py-2 px-3 text-right font-mono tabular-nums text-text-secondary">{t.balanceAfter != null ? `₹${fmt(t.balanceAfter)}` : '—'}</td>
                         <td className="py-2 px-3 text-center"><span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600">{t.status}</span></td>
                       </tr>
                     );
@@ -274,7 +274,7 @@ function ActionModal({ mode, onClose, onSaved }) {
             <input className="input font-mono text-xs" value={userId} onChange={(e) => setUserId(e.target.value)} placeholder="65a..." autoFocus />
           </label>
           <label className="block">
-            <div className="text-[11px] font-semibold text-text-secondary mb-1">Amount (USD)</div>
+            <div className="text-[11px] font-semibold text-text-secondary mb-1">Amount (INR)</div>
             <input type="number" step="0.01" min="0" className="input" value={amount} onChange={(e) => setAmount(e.target.value)} />
           </label>
           <label className="block">

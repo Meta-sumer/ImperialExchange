@@ -8,7 +8,7 @@ import PageHero from '../components/PageHero';
 import DateFilter, { useDateFilter, DASHBOARD_PRESETS, fmtRange } from '../components/DateFilter';
 
 // ── formatters ───────────────────────────────────────────────────────
-const usd = (v) => '$' + Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const usd = (v) => '₹' + Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const signedUsd = (v) => (Number(v) > 0 ? '+' : '') + usd(v);
 const cnt = (v) => fmtNum(Number(v || 0), 0);
 const fmtD = (d) => (d ? new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—');

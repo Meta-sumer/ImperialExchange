@@ -36,8 +36,8 @@ export default function useAccountMetrics(accountId, intervalMs = 5000) {
         const balances = balRes.data.data || [];
         const positions = (posRes.data.data || []).filter((p) => p.accountId === accountId);
 
-        // Pick the base currency wallet (USD by default; use first if missing)
-        const baseWallet = balances.find((b) => b.currency === 'USD') || balances[0];
+        // Pick the base currency wallet (INR by default; use first if missing)
+        const baseWallet = balances.find((b) => b.currency === 'INR') || balances[0];
         const balance = baseWallet ? Number(baseWallet.balance) : 0;
 
         let usedMargin = 0;

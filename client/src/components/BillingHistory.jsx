@@ -18,7 +18,7 @@ import { useEffect, useMemo, useState } from 'react';
 /* ── helpers ─────────────────────────────────────────────────────────── */
 const fmt = (n) => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const fmtDate = (d) => (d ? new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—');
-const symOf = (ccy) => (ccy === 'INR' ? '₹' : ccy === 'USD' ? '$' : `${ccy || 'USD'} `);
+const symOf = (ccy) => (ccy === 'INR' ? '₹' : ccy === 'INR' ? '₹' : '₹');
 const cap = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() : '');
 const isPostpaidTxn = (t) => /postpaid/i.test(t.note || '') || String(t.planCode || '').toUpperCase().includes('POST');
 
@@ -83,7 +83,7 @@ function buildPeriods(txns, currentSub, plans) {
     let end = next;
     if (!end && isLast && curActive && code === curCode && curCycleEnd) end = new Date(curCycleEnd);
     const prevCode = i > 0 ? String(charges[i - 1].planCode || '').toUpperCase() : null;
-    return { t, start, end, code, plan, cycle, pp, prevCode, isLast, amount: Math.abs(Number(t.amount) || 0), currency: t.currency || 'USD', nameOf };
+    return { t, start, end, code, plan, cycle, pp, prevCode, isLast, amount: Math.abs(Number(t.amount) || 0), currency: t.currency || 'INR', nameOf };
   });
 
   const mkRow = (r, isCurrent) => {
@@ -117,7 +117,7 @@ function buildPeriods(txns, currentSub, plans) {
       start: currentSub.startedAt ? new Date(currentSub.startedAt) : new Date(),
       end: curCycleEnd ? new Date(curCycleEnd) : null,
       code: curCode, plan, cycle: pp ? 'MONTHLY' : String(currentSub.billingCycle || 'MONTHLY').toUpperCase(),
-      pp, prevCode: null, amount: Number(currentSub.lastPayment?.amount || 0), currency: currentSub.lastPayment?.currency || 'USD', nameOf,
+      pp, prevCode: null, amount: Number(currentSub.lastPayment?.amount || 0), currency: currentSub.lastPayment?.currency || 'INR', nameOf,
     }, true));
   }
 
@@ -203,7 +203,7 @@ export default function BillingHistory({ txns = [], currentSub = null, plans = [
 
   // Total billing = sum of every charged amount across the (filtered) timeline.
   const total = useMemo(() => filtered.reduce((s, p) => s + (Number(p.amount) || 0), 0), [filtered]);
-  const currency = filtered[0]?.currency || periods[0]?.currency || 'USD';
+  const currency = filtered[0]?.currency || periods[0]?.currency || 'INR';
   const sym = symOf(currency);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / rows));

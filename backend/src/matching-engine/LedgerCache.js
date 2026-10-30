@@ -21,6 +21,7 @@
  * coexist. All decimals use the shared utils/decimal helpers for exactness.
  */
 const { add, sub, mul, div, gt, eq } = require('../utils/decimal');
+const { BASE_CURRENCY } = require('../config/constants');
 
 const posKey = (accountId, symbol, positionSide) => `${accountId}|${symbol}|${positionSide}`;
 const sideToPS = (side) => (side === 'BUY' ? 'LONG' : 'SHORT');
@@ -32,7 +33,7 @@ class LedgerCache {
   }
 
   /** Seed an account's wallet from the DB exactly once (idempotent). */
-  loadBalance(accountId, { balance, locked = '0', currency = 'USD' }) {
+  loadBalance(accountId, { balance, locked = '0', currency = BASE_CURRENCY }) {
     const k = String(accountId);
     if (!this.balances.has(k)) this.balances.set(k, { balance: String(balance), locked: String(locked), currency });
     return this.balances.get(k);

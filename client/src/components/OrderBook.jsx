@@ -4,7 +4,7 @@ import { wsClient } from '../services/ws';
 import { fmtNum, fmtPriceDual } from '../utils/format';
 import { useFxRate } from '../hooks/useFxRate';
 
-export default function OrderBook({ symbol, pricePrecision = 2, quoteCurrency = 'USD' }) {
+export default function OrderBook({ symbol, pricePrecision = 2, quoteCurrency = 'INR' }) {
   const [book, setBook] = useState({ bids: [], asks: [] });
   const fxRate = useFxRate();
 
@@ -74,7 +74,7 @@ function Row({ level, side, maxQty, pricePrecision, quoteCurrency, fxRate }) {
   const pct = (Number(level.quantity) / maxQty) * 100;
   const colorClass = side === 'bid' ? 'text-bull' : 'text-bear';
   const bgClass = side === 'bid' ? 'bg-bull' : 'bg-bear';
-  // INR primary line; USD as a small parenthetical suffix to keep the row
+  // INR primary line; INR as a small parenthetical suffix to keep the row
   // compact (the order book has limited horizontal real estate).
   const px = fmtPriceDual(level.price, quoteCurrency, fxRate, pricePrecision);
   return (

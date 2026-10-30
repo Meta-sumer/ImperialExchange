@@ -31,7 +31,7 @@ import { api, errorMessage } from '../services/api';
  * Props:
  *   endpoint  POST target, e.g. '/subscription-wallet/withdraw' | '/bonus-wallet/withdraw'
  *   title     header label, e.g. 'Withdraw from Main Wallet'
- *   currency  wallet currency (e.g. 'USD')
+ *   currency  wallet currency (e.g. 'INR')
  *   balance   numeric available balance
  *   onClose / onSuccess
  */
@@ -84,12 +84,12 @@ const payoutCurrency = (cfg, walletCcy) => {
   const list = Array.isArray(cfg?.supportedCurrencies)
     ? cfg.supportedCurrencies.map((c) => String(c || '').toUpperCase()).filter(Boolean)
     : [];
-  const base = String(walletCcy || 'USD').toUpperCase();
+  const base = String(walletCcy || 'INR').toUpperCase();
   if (!list.length) return base;
   return list.includes(base) ? base : list[0];
 };
 
-// The admin's payout limits + fee for a rail, in USD — the same fields
+// The admin's payout limits + fee for a rail, in INR — the same fields
 // assertWithinLimits('withdrawal') and computeWithdrawalFee read.
 const railRules = (cfg) => ({
   min: Number(cfg?.minWithdrawal) > 0 ? Number(cfg.minWithdrawal) : 0,
@@ -98,7 +98,7 @@ const railRules = (cfg) => ({
   feeFixed: Number(cfg?.withdrawalFeeFixed) || 0,
 });
 
-export default function WithdrawModal({ endpoint, title = 'Withdraw', currency = 'USD', balance = 0, onClose, onSuccess }) {
+export default function WithdrawModal({ endpoint, title = 'Withdraw', currency = 'INR', balance = 0, onClose, onSuccess }) {
   const [amount, setAmount] = useState('');
   const [method, setMethod] = useState(null);      // the rail: UPI | BANK | CRYPTO
   const [selectedId, setSelectedId] = useState(''); // the saved destination
@@ -183,7 +183,7 @@ export default function WithdrawModal({ endpoint, title = 'Withdraw', currency =
     if (!destinations.some((d) => d.id === selectedId)) setSelectedId(destinations[0].id);
   }, [destIds]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const sym = currency === 'USD' ? '$' : `${currency} `;
+  const sym = currency === 'INR' ? '₹' : currency === 'INR' ? '₹' : `${currency} `;
   const bal = Number(balance || 0);
   const n = Number(amount);
   const active = rails.find((r) => r.id === method)

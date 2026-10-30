@@ -23,7 +23,7 @@ const STATUS_OPTS = [
   ['', 'All'],
 ];
 const SYMBOL = { USD: '$', INR: '₹', EUR: '€', GBP: '£' };
-const money = (v, ccy = 'USD') =>
+const money = (v, ccy = 'INR') =>
   `${SYMBOL[ccy] || `${ccy} `}${Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const statusCls = (s) =>
   s === 'SETTLED' ? 'bg-green-900/30 text-green-400'
@@ -343,7 +343,7 @@ function NewCreditModal({ onClose, onCreated }) {
             <option value="WITHDRAWAL">Withdrawal on credit — debit wallet now, pay user later</option>
           </select>
         </Field>
-        <Field label="Amount (USD)"><input type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} className={inputCls} placeholder="0.00" /></Field>
+        <Field label="Amount (INR)"><input type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} className={inputCls} placeholder="0.00" /></Field>
         <Field label="Due date (optional)"><input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className={inputCls} /></Field>
       </div>
       <Field label="Remarks (required — shown to the user)">

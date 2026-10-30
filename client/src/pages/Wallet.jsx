@@ -12,12 +12,12 @@ import { useDisplayRates } from '../hooks/useDisplayRates';
 import { useMoney } from '../hooks/useMoney';
 
 /**
- * An account's total across all its wallets, normalised to USD — the base
+ * An account's total across all its wallets, normalised to INR — the base
  * every wallet is denominated in. `field` picks gross balance (deposit: how
  * much is in there) or free (withdraw: how much can actually leave, with
  * locked margin excluded).
  *
- * Returning USD rather than the account's own currency is what lets the
+ * Returning INR rather than the account's own currency is what lets the
  * display-currency selector decide how it is shown — see useMoney.
  */
 function accountTotalUsd(balances, accountId, field, usdToInr) {
@@ -26,8 +26,8 @@ function accountTotalUsd(balances, accountId, field, usdToInr) {
     .filter((b) => String(b.accountId) === String(accountId))
     .reduce((sum, b) => {
       const v = Number(b[field]) || 0;
-      const c = String(b.currency || 'USD').toUpperCase();
-      if (c === 'USD') return sum + v;
+      const c = String(b.currency || 'INR').toUpperCase();
+      if (c === 'INR') return sum + v;
       if (c === 'INR') return sum + v / rate;
       return sum + v; // unknown currency — best-effort 1:1
     }, 0);
@@ -41,7 +41,7 @@ import { useAuthStore } from '../store/auth';
 export default function Wallet() {
   const { user } = useAuthStore();
   // `dispCcy` is the currency the user picked in the header selector; `money`
-  // renders a USD figure in it. Named dispCcy rather than `code` because this
+  // renders a INR figure in it. Named dispCcy rather than `code` because this
   // component already has several other things called code-ish names.
   const { money, code: dispCcy } = useMoney();
   const [balances, setBalances] = useState([]);
@@ -247,7 +247,7 @@ export default function Wallet() {
       // Position is denominated in the account's base currency (the
       // platform doesn't do FX yet) — so we attribute pnl there directly.
       const acc = accounts.find((a) => String(a._id) === String(p.accountId));
-      const cur = acc?.baseCurrency || 'USD';
+      const cur = acc?.baseCurrency || 'INR';
       const key = `${p.accountId}|${cur}`;
       out.set(key, (out.get(key) || 0) + pnl);
     }
@@ -260,7 +260,7 @@ export default function Wallet() {
     const out = {};
     for (const b of balances) {
       if (!isReal(b)) continue;
-      const c = b.currency || 'USD';
+      const c = b.currency || 'INR';
       if (!out[c]) out[c] = { balance: 0, locked: 0, free: 0, unrealized: 0 };
       out[c].balance += Number(b.balance || 0);
       out[c].locked += Number(b.locked || 0);
@@ -276,7 +276,7 @@ export default function Wallet() {
     const out = {};
     for (const b of balances) {
       if (!isDemo(b)) continue;
-      const c = b.currency || 'USD';
+      const c = b.currency || 'INR';
       if (!out[c]) out[c] = { balance: 0, locked: 0, free: 0 };
       out[c].balance += Number(b.balance || 0);
       out[c].locked += Number(b.locked || 0);
@@ -288,17 +288,17 @@ export default function Wallet() {
   const realBalances = useMemo(() => balances.filter(isReal), [balances, accountTypeById]);
   const demoBalances = useMemo(() => balances.filter(isDemo), [balances, accountTypeById]);
 
-  // ── Aggregate top-line metrics (USD-normalised) for the hero cards ─
+  // ── Aggregate top-line metrics (INR-normalised) for the hero cards ─
   // Real money only — demo balances are surfaced separately below the
   // primary cards so the headline figures reflect the user's actual
   // financial position.
   const totals = useMemo(() => {
     let balance = 0, locked = 0, free = 0, unrealized = 0;
-    const cur = 'USD';
+    const cur = 'INR';
     const rate = Number(fxRate) > 0 ? Number(fxRate) : 83;
     for (const [c, t] of Object.entries(realTotalsByCurrency)) {
-      // Normalise to USD so the top cards can show one consolidated number.
-      const k = c === 'USD' ? 1 : c === 'INR' ? 1 / rate : 1;
+      // Normalise to INR so the top cards can show one consolidated number.
+      const k = c === 'INR' ? 1 : c === 'INR' ? 1 / rate : 1;
       balance    += (Number(t.balance)    || 0) * k;
       locked     += (Number(t.locked)     || 0) * k;
       free       += (Number(t.free)       || 0) * k;
@@ -321,25 +321,25 @@ export default function Wallet() {
       .slice(0, 12);
   }, [deposits, withdrawals]);
 
-  // Money helpers. `totals.*` values are USD-normalised — which is also what
+  // Money helpers. `totals.*` values are INR-normalised — which is also what
   // the wallets hold — so the primary line is simply that figure rendered in
-  // whichever currency the user selected, defaulting to USD.
+  // whichever currency the user selected, defaulting to INR.
   //
   // These were "India-first": `usd(v)` multiplied into rupees and returned a
-  // rupee string, with USD demoted to a smaller subtitle. The name said one
+  // rupee string, with INR demoted to a smaller subtitle. The name said one
   // thing and the value was another, and the display-currency selector was
   // ignored entirely. The names are kept so the eleven call sites below do not
   // all have to change, but they now mean what they say.
   const inrRate = Number(fxRate) > 0 ? Number(fxRate) : 83;
   const usd = (v) => money(v);
-  // The subtitle is only worth printing when the primary line ISN'T USD;
+  // The subtitle is only worth printing when the primary line ISN'T INR;
   // otherwise it repeats the number directly above it.
-  const usdSub = (v) => (dispCcy === 'USD' ? '' : `≈ $${fmtNum(Number(v) || 0, 2)} USD`);
+  const usdSub = () => ''; // INR-only — no secondary currency line
   const usdSubSigned = (v) => {
-    if (dispCcy === 'USD') return '';
+    return ''; // INR-only — no secondary currency line
     const n = Number(v) || 0;
     const sign = n > 0 ? '+' : n < 0 ? '-' : '';
-    return `≈ ${sign}$${fmtNum(Math.abs(n), 2)} USD`;
+    return `≈ ${sign}$${fmtNum(Math.abs(n), 2)} INR`;
   };
 
   // ── Wizard state for the screenshot-matched deposit flow ───────────
@@ -542,7 +542,7 @@ export default function Wallet() {
                           </span>
                         </td>
                         <td className={`px-5 py-3 text-right font-mono tabular-nums font-bold ${isDeposit ? 'text-bull' : 'text-bear'}`}>
-                          {sign}{currencySymbol(t.currency || 'USD')}{fmtNum(amt, 2)} <span className="text-text-muted font-mono text-[10px]">{t.currency || 'USD'}</span>
+                          {sign}{currencySymbol(t.currency || 'INR')}{fmtNum(amt, 2)} <span className="text-text-muted font-mono text-[10px]">{t.currency || 'INR'}</span>
                         </td>
                         <td className="px-5 py-3"><StatusBadge status={t.status} /></td>
                         <td className="px-5 py-3 text-text-secondary text-xs capitalize">{t.method || t.gateway || t.paymentMethod || '—'}</td>
@@ -639,19 +639,19 @@ function FullHistoryView({ deposits, withdrawals, ledger, loading, tab, setTab }
 }
 
 /**
- * Admin per-transaction limits for a payment method, converted from the USD
+ * Admin per-transaction limits for a payment method, converted from the INR
  * they are stored in into the currency the form is showing.
  *
- * The limits live in USD because one rail serves every currency (see
+ * The limits live in INR because one rail serves every currency (see
  * backend/src/utils/paymentMethods.js). The hard-coded numbers these replace
  * were bare integers compared against whatever was in the amount box — "500"
- * meant ₹500 on an INR withdrawal and $500 on a USD one, and no admin could
+ * meant ₹500 on an INR withdrawal and $500 on a INR one, and no admin could
  * change either. 0 / absent = no limit.
  *
  * @param {object} cfg       the method's entry in deposit.paymentDetails
  * @param {'deposit'|'withdrawal'} kind
  * @param {string} currency  the currency THIS METHOD is priced in
- * @param {number} rate      how many of `currency` one USD buys (1 for USD)
+ * @param {number} rate      how many of `currency` one INR buys (1 for INR)
  */
 // Mirrors the server: FIXED_METHOD_IDS and NATIVE_DESTINATION_RAILS in
 // backend/src/utils/paymentMethods.js. Duplicated because the client cannot
@@ -671,7 +671,7 @@ function methodLimits(cfg, kind, currency, rate) {
   const w = kind === 'withdrawal';
   const rawMin = Number(cfg?.[w ? 'minWithdrawal' : 'minDeposit']) || 0;
   const rawMax = Number(cfg?.[w ? 'maxWithdrawal' : 'maxDeposit']) || 0;
-  // The admin enters these in USD. Converting INR and leaving everything
+  // The admin enters these in INR. Converting INR and leaving everything
   // else at 1:1 meant a $50 minimum on a TRX rail was printed as "50 TRX" —
   // a different amount, and not the one the next step went on to enforce.
   // Every currency converts, or none should.
@@ -1027,7 +1027,7 @@ function Modal({ children, onClose }) {
 }
 
 function InlineDepositFlow({ accounts, balances = [], fxRate, onDone, onCancel }) {
-  // Account figures follow the display-currency selector (default USD).
+  // Account figures follow the display-currency selector (default INR).
   const { money, code: dispCode } = useMoney();
   const onClose = onCancel || (() => {});
   // Prefer a REAL account by default — it's the user's actual money flow.
@@ -1035,23 +1035,23 @@ function InlineDepositFlow({ accounts, balances = [], fxRate, onDone, onCancel }
   const realAccount = accounts.find((a) => a.accountType !== 'DEMO' && a.accountType !== 'VIRTUAL');
   const [accountId, setAccountId] = useState(realAccount?._id || accounts[0]?._id || '');
   // The user enters amounts in INR (Indian payment rails); on submit
-  // we convert into USD via the live `fxRate` so the backend wallet —
-  // which is the canonical USD base — stays as the single source of
+  // we convert into INR via the live `fxRate` so the backend wallet —
+  // which is the canonical INR base — stays as the single source of
   // truth. UI display elsewhere also reads in INR (see Wallet.jsx).
-  // USD is the platform's settlement currency — every deposit lands in USD
+  // INR is the platform's settlement currency — every deposit lands in INR
   // regardless of what is paid in, so it is the correct default. INR was
   // hard-coded here, which made every method open on INR even when the method
   // did not accept INR at all.
   // RAW selection. Never read this directly — read `currency` below.
   //
   // A <select> whose value is not among its <option>s renders option[0] while
-  // the state keeps its old value. So restricting a method to ["USD"] left this
-  // sitting on INR: the dropdown SAID "USD" while the presets, the prefix, the
+  // the state keeps its old value. So restricting a method to ["INR"] left this
+  // sitting on INR: the dropdown SAID "INR" while the presets, the prefix, the
   // conversions and the submitted payload all still said INR. Snapping it in an
   // effect helps but always lags by a render, and a stale value submitted in
   // that window is a real deposit in the wrong currency.
-  const [currencySel, setCurrencySel] = useState('USD');
-  // 1 USD = rateOf(code, leg) <code>, for every configured currency. The
+  const [currencySel, setCurrencySel] = useState('INR');
+  // 1 INR = rateOf(code, leg) <code>, for every configured currency. The
   // DEPOSIT leg is the one the admin's confirm credits at, so it is the only
   // honest number to show on a deposit screen.
   const { rateOf, symbolFor, currencies: rateRows } = useDisplayRates();
@@ -1060,11 +1060,11 @@ function InlineDepositFlow({ accounts, balances = [], fxRate, onDone, onCancel }
   // the import means every call site below picks this up for free — without
   // it, an admin-added USDC rendered as the 5-character string 'USDC '.
   const currencySymbol = symbolFor;
-  // Every currency the admin has configured, not a list baked in here. USD is
+  // Every currency the admin has configured, not a list baked in here. INR is
   // forced in because it is the base and may carry no rate row of its own.
   const allCurrencyCodes = (() => {
     const codes = (rateRows || []).map((r) => String(r.code).toUpperCase()).filter(Boolean);
-    return codes.includes('USD') ? codes : ['USD', ...codes];
+    return codes.includes('INR') ? codes : ['INR', ...codes];
   })();
   const [amount, setAmount] = useState('');
   const [method, setMethod] = useState('UPI');
@@ -1095,13 +1095,13 @@ function InlineDepositFlow({ accounts, balances = [], fxRate, onDone, onCancel }
     // Was a hard-coded four. A currency the admin added — USDC, AED, anything
     // — existed in Exchange Rates and in no picker, so nobody could ever pay
     // in it. The fallback is now whatever the platform actually carries.
-    : (allCurrencyCodes.length ? allCurrencyCodes : ['INR', 'USD', 'USDT', 'BTC']);
+    : (allCurrencyCodes.length ? allCurrencyCodes : ['INR']);
   // THE currency, for display and for submission. Derived, so it is always one
   // the method accepts — there is no render in which the screen and the state
   // can disagree, and no window in which a stale value could be submitted.
   const currency = methodCurrencies.includes(currencySel)
     ? currencySel
-    : (methodCurrencies.includes('USD') ? 'USD' : methodCurrencies[0]);
+    : (methodCurrencies.includes('INR') ? 'INR' : methodCurrencies[0]);
   // Keep the raw state in step so the <select> is controlled as usual.
   const setCurrency = setCurrencySel;
   // WHICH rails exist is an admin decision that arrives over the network, so
@@ -1110,7 +1110,7 @@ function InlineDepositFlow({ accounts, balances = [], fxRate, onDone, onCancel }
   // method the admin had switched off whenever the connection was slow.
   const [payState, setPayState] = useState('loading'); // 'loading' | 'ready' | 'error'
   // Plan catalogue (code → plan) so we can enforce each tier's minimum
-  // deposit (USD) in the UI, mirroring the backend gate. Keyed by account
+  // deposit (INR) in the UI, mirroring the backend gate. Keyed by account
   // type code (FREE / STANDARD / PRO / +IC variants …).
   const [planByCode, setPlanByCode] = useState({});
 
@@ -1150,18 +1150,18 @@ function InlineDepositFlow({ accounts, balances = [], fxRate, onDone, onCancel }
   const isReal = selectedAccount && selectedAccount.accountType !== 'DEMO' && selectedAccount.accountType !== 'VIRTUAL';
   const isDemo = selectedAccount?.accountType === 'DEMO';
 
-  // ── Per-tier minimum-deposit check (USD base, like the backend) ──────
+  // ── Per-tier minimum-deposit check (INR base, like the backend) ──────
   const _fxRate = Number(fxRate) > 0 ? Number(fxRate) : 83;
   const planMinUsd = (() => {
     const p = selectedAccount ? planByCode[String(selectedAccount.accountType).toUpperCase()] : null;
     return p ? Number(p.minDeposit || 0) : 0;
   })();
-  // Convert the typed amount to USD. INR uses the live rate; USD/USDT are
+  // Convert the typed amount to INR. INR uses the live rate; INR/USDT are
   // 1:1; anything else (e.g. BTC) returns null → defer to the backend gate.
   const amountUsd = (() => {
     const amt = Number(amount) || 0;
     if (currency === 'INR') return amt / _fxRate;
-    if (currency === 'USD' || currency === 'USDT') return amt;
+    if (currency === 'INR' || currency === 'USDT') return amt;
     return null;
   })();
   const belowMinDeposit = isReal && planMinUsd > 0 && amountUsd != null && amountUsd < planMinUsd;
@@ -1287,10 +1287,10 @@ function InlineDepositFlow({ accounts, balances = [], fxRate, onDone, onCancel }
     setLoading(true);
     try {
       // Send the deposit as the user actually entered it (INR if the
-      // user used Indian rails, USD if the user typed dollars). This
+      // user used Indian rails, INR if the user typed dollars). This
       // matches the UPI / bank receipt the user attached, so admin
       // verification is one-to-one with what landed in the company
-      // account. The wallet display elsewhere aggregates INR + USD
+      // account. The wallet display elsewhere aggregates INR + INR
       // wallets into INR via fxRate, so the user still sees a single
       // INR figure on the dashboard.
       const payload = {
@@ -1330,18 +1330,18 @@ function InlineDepositFlow({ accounts, balances = [], fxRate, onDone, onCancel }
   const PRESETS = (() => {
     if (currency === 'INR') return [100, 500, 1000, 5000, 10000];
     if (currency === 'BTC') return [0.001, 0.005, 0.01, 0.05, 0.1];
-    return [10, 50, 100, 500, 1000];   // USD, USDT and anything dollar-scaled
+    return [10, 50, 100, 500, 1000];   // INR, USDT and anything dollar-scaled
   })();
 
   // INR-denominated deposits. Mins are INR (₹100 minimum for Indian
-  // rails, ₹500 for crypto). The backend receives the converted USD
+  // rails, ₹500 for crypto). The backend receives the converted INR
   // value at submit time.
   // No hard-coded minimums. These used to carry min: 100 / 500 as bare numbers
   // compared against whatever was in the amount box, so CRYPTO's "500" meant
-  // 500 USD, 500 USDT or 500 INR depending on the dropdown — and an admin who
+  // 500 INR, 500 USDT or 500 INR depending on the dropdown — and an admin who
   // had set nothing anywhere still saw a 500 floor they could not find or
   // change. The minimum now comes from the admin's per-method limit and the
-  // account plan's own minimum, both in USD; neither set = no method floor.
+  // account plan's own minimum, both in INR; neither set = no method floor.
   const FIXED_MANUAL = [
     { id: 'UPI',      label: 'UPI',           sub: 'Instant · Free',         kind: 'manual',  icon: <MUPI /> },
     { id: 'BANK',     label: 'Bank Transfer', sub: 'NEFT / IMPS · 1-3 hrs',  kind: 'manual',  icon: <MBank /> },
@@ -1352,9 +1352,9 @@ function InlineDepositFlow({ accounts, balances = [], fxRate, onDone, onCancel }
   // Visible = enabled fixed methods + enabled custom methods, with Razorpay
   // (the automatic gateway) appended ONLY when the admin has it enabled
   // (deposit.paymentDetails.RAZORPAY.enabled !== false).
-  // The admin's per-method limits (USD) win over the hard-coded fallbacks
+  // The admin's per-method limits (INR) win over the hard-coded fallbacks
   // below, converted into the currency the form is showing.
-  // 1 <currency> = _dispPerUsd USD-equivalents, i.e. multiply a USD figure by
+  // 1 <currency> = _dispPerUsd INR-equivalents, i.e. multiply a INR figure by
   // this to show it in the currency on screen. INR keeps the established
   // useFxRate number so the two INR figures on this screen can't disagree;
   // everything else (USDT, BTC, …) comes from the live display-rate table.
@@ -1363,7 +1363,7 @@ function InlineDepositFlow({ accounts, balances = [], fxRate, onDone, onCancel }
   // one the currently-selected method happens to use. Taking both the symbol
   // and the rate from the shared `currency` made every row redraw in the
   // selected coin: choosing TRX printed the same "Min · 300.00" on the USDT
-  // card too, because all of them were converting one USD figure at one rate.
+  // card too, because all of them were converting one INR figure at one rate.
   //
   // Same resolution rule the selected method already uses, so a card and the
   // form can never disagree once that card is picked.
@@ -1373,14 +1373,14 @@ function InlineDepositFlow({ accounts, balances = [], fxRate, onDone, onCancel }
       : null;
     if (!list) return currency; // unrestricted rail — the form currency genuinely applies
     return list.includes(currencySel) ? currencySel
-      : list.includes('USD') ? 'USD' : list[0];
+      : list.includes('INR') ? 'INR' : list[0];
   };
   const rateForCcy = (ccy) => rateOf(ccy, 'deposit') ?? (ccy === 'INR' ? _fxRate : 1);
   const withLimits = (m, cfg) => {
     const ccy = rowCurrency(cfg);
     const rate = rateForCcy(ccy);
     const lim = methodLimits(cfg, 'deposit', ccy, rate);
-    // The account tier carries its own USD minimum, enforced separately at
+    // The account tier carries its own INR minimum, enforced separately at
     // the gate (belowMinDeposit). Showing whichever is higher keeps the card
     // from promising a minimum the next step rejects — but which of the two
     // is binding has to be visible, or the admin edits the wrong field.
@@ -1543,9 +1543,9 @@ function InlineDepositFlow({ accounts, balances = [], fxRate, onDone, onCancel }
                 {accounts.map((a) => {
                   const sel = a._id === accountId;
                   const isR = a.accountType !== 'DEMO' && a.accountType !== 'VIRTUAL';
-                  // Funds may sit in the native wallet OR the canonical USD
-                  // wallet (every deposit credits USD), so sum ALL of this
-                  // account's wallets. The figure is USD; how it is SHOWN is
+                  // Funds may sit in the native wallet OR the canonical INR
+                  // wallet (every deposit credits INR), so sum ALL of this
+                  // account's wallets. The figure is INR; how it is SHOWN is
                   // the display-currency selector's business, not the
                   // account's own baseCurrency — reading that made an INR
                   // account print rupees whatever the user had chosen.
@@ -1796,24 +1796,24 @@ function InlineDepositFlow({ accounts, balances = [], fxRate, onDone, onCancel }
               </div>
 
               {/* Live summary — primary in the currency being paid, secondary in
-                  USD, which is what actually lands in the account. */}
+                  INR, which is what actually lands in the account. */}
               {(() => {
                 const rate = Number(fxRate) > 0 ? Number(fxRate) : 83;
                 const amt = Number(amount) || 0;
-                // Every deposit settles in USD, whatever it was paid in — so the
-                // secondary line is ALWAYS the USD equivalent. It used to flip to INR
+                // Every deposit settles in INR, whatever it was paid in — so the
+                // secondary line is ALWAYS the INR equivalent. It used to flip to INR
                 // for any non-INR currency, which put "= Rs x" under a USDT amount:
                 // a number the user never receives and cannot act on.
                 // Any configured currency converts, BTC included — the display-rate
                 // table covers all of them. Previously anything that was not INR or
-                // USDT returned null, so a BTC deposit showed no USD figure at all,
+                // USDT returned null, so a BTC deposit showed no INR figure at all,
                 // which is the one number that actually reaches the wallet.
                 // DEPOSIT leg — the rate this deposit will actually be credited
                 // at. Pricing this off the display rate is what let the screen
-                // promise a USD figure the confirm would not honour.
+                // promise a INR figure the confirm would not honour.
                 const usdRate = rateOf(currency, 'deposit') ?? (currency === 'INR' ? rate : 1);
                 const toUsd = (v) => (usdRate > 0 ? v / usdRate : null);
-                const showAlt = currency !== 'USD';
+                const showAlt = false; // INR-only
                 const fmtAlt = (v) => {
                   const u = toUsd(v);
                   return u == null ? null : `$${fmtNum(u, 2)}`;
@@ -1845,7 +1845,7 @@ function InlineDepositFlow({ accounts, balances = [], fxRate, onDone, onCancel }
                         <span className="w-1.5 h-1.5 rounded-full bg-bull animate-pulse" />
                         Live FX rate
                       </span>
-                      <span className="font-mono font-bold text-text-primary">1 USD = ₹{fmtNum(rate, 2)}</span>
+                      <span className="font-mono font-bold text-text-primary">1 INR = ₹{fmtNum(rate, 2)}</span>
                     </div>
                   </>
                 );
@@ -2035,10 +2035,10 @@ const MRazor = () => MIcon('#3B82F618', '#3B82F6',
 function WithdrawModal({ balances, accounts, onClose, onDone }) {
   const realAccounts = accounts.filter((a) => a.accountType !== 'DEMO' && a.accountType !== 'VIRTUAL');
   const [accountId, setAccountId] = useState(realAccounts[0]?._id || accounts[0]?._id || '');
-  const [currency, setCurrency] = useState('USD');
+  const [currency, setCurrency] = useState('INR');
   const [amount, setAmount] = useState('');
   // The method default follows the currency default. UPI and BANK are domestic
-  // INR rails, so they cannot be the starting point for a USD withdrawal — the
+  // INR rails, so they cannot be the starting point for a INR withdrawal — the
   // effect below would immediately flip away from them anyway, which would show
   // the user a method that changes out from under them on open.
   const [method, setMethod] = useState('CRYPTO');
@@ -2192,7 +2192,7 @@ function WithdrawModal({ balances, accounts, onClose, onDone }) {
                 <label className="label">Currency</label>
                 <select className="input" value={currency} onChange={(e) => setCurrency(e.target.value)}>
                   <option>INR</option>
-                  <option>USD</option>
+                  <option>INR</option>
                   <option>USDT</option>
                 </select>
               </div>
@@ -2440,7 +2440,7 @@ function AccountOverviewView({ totals, usd, usdSub, usdSubSigned, realBalances, 
             <ul className="space-y-2.5">
               {realBalances.slice(0, 5).map((b) => {
                 const acc = accounts.find((a) => a._id === b.accountId);
-                const cur = b.currency || 'USD';
+                const cur = b.currency || 'INR';
                 return (
                   <li key={b._id} className="flex items-center justify-between text-sm">
                     <span className="text-text-primary font-semibold truncate">{acc?.nickname || acc?.accountNumber || '—'}</span>
@@ -2476,7 +2476,7 @@ function AccountOverviewView({ totals, usd, usdSub, usdSubSigned, realBalances, 
                     <div className="text-[11px] text-text-muted">{fmtDate(t.createdAt)}</div>
                   </div>
                   <div className={`font-mono tabular-nums font-bold text-sm ${isDeposit ? 'text-bull' : 'text-bear'}`}>
-                    {isDeposit ? '+' : '-'}{currencySymbol(t.currency || 'USD')}{fmtNum(amt, 2)}
+                    {isDeposit ? '+' : '-'}{currencySymbol(t.currency || 'INR')}{fmtNum(amt, 2)}
                   </div>
                   <StatusBadge status={t.status} />
                 </li>
@@ -2490,28 +2490,28 @@ function AccountOverviewView({ totals, usd, usdSub, usdSubSigned, realBalances, 
 }
 
 function WithdrawView({ accounts, balances, withdrawals, fxRate, onDone, onCancel }) {
-  // Account figures follow the display-currency selector (default USD).
+  // Account figures follow the display-currency selector (default INR).
   // Named apart from the payout `currency` below, which is a different
   // thing: what the RAIL pays out in.
   const { money: wMoney, code: wDispCcy } = useMoney();
   const realAccounts = accounts.filter((a) => a.accountType !== 'DEMO' && a.accountType !== 'VIRTUAL');
   const [step, setStep] = useState(0);
   const [accountId, setAccountId] = useState(realAccounts[0]?._id || accounts[0]?._id || '');
-  // USD-first input: the user enters an amount in the selected currency and it
-  // is converted into USD on submit, which is the canonical base currency for
-  // the trading wallet. Starting in USD means the common case needs no
+  // INR-first input: the user enters an amount in the selected currency and it
+  // is converted into INR on submit, which is the canonical base currency for
+  // the trading wallet. Starting in INR means the common case needs no
   // conversion at all — this used to start in INR and convert every time.
   //
   // The method default follows: UPI and BANK are domestic INR rails, so they
-  // cannot pair with a USD default without immediately flipping.
+  // cannot pair with a INR default without immediately flipping.
   // RAW selection — read `currency` below, which is validated against what
   // the chosen rail actually accepts.
-  const [currencySel, setCurrencySel] = useState('USD');
+  const [currencySel, setCurrencySel] = useState('INR');
   const { rateOf, symbolFor, currencies: rateRows } = useDisplayRates();
   const currencySymbol = symbolFor;
   const allCurrencyCodes = (() => {
     const codes = (rateRows || []).map((r) => String(r.code).toUpperCase()).filter(Boolean);
-    return codes.includes('USD') ? codes : ['USD', ...codes];
+    return codes.includes('INR') ? codes : ['INR', ...codes];
   })();
   const [method, setMethod] = useState('CRYPTO');
   const [amount, setAmount] = useState('');
@@ -2519,7 +2519,7 @@ function WithdrawView({ accounts, balances, withdrawals, fxRate, onDone, onCance
   // user is holding so they can flip those funds into INR (or any
   // other supported currency) before withdrawing through Indian rails.
   const [converterOpen, setConverterOpen] = useState(false);
-  const [convertFromCcy, setConvertFromCcy] = useState('USD');
+  const [convertFromCcy, setConvertFromCcy] = useState('INR');
   const [convertAmount, setConvertAmount] = useState('');
   const [converting, setConverting] = useState(false);
   // Payment-method config (for the admin-set WITHDRAWAL fee). Same blob the
@@ -2560,7 +2560,7 @@ function WithdrawView({ accounts, balances, withdrawals, fxRate, onDone, onCance
   };
   const wCurrencies = (() => {
     const allowed = railCurrencies(_wMethodCfg, method);
-    const base = allCurrencyCodes.length ? allCurrencyCodes : ['USD', 'INR', 'USDT'];
+    const base = allCurrencyCodes.length ? allCurrencyCodes : ['INR'];
     if (!allowed) return base;
     const hit = base.filter((c) => allowed.includes(c));
     // Honour the restriction even if the currency has no rate row yet.
@@ -2571,7 +2571,7 @@ function WithdrawView({ accounts, balances, withdrawals, fxRate, onDone, onCance
   // value — the screen and the payload then disagree.
   const currency = wCurrencies.includes(currencySel)
     ? currencySel
-    : (wCurrencies.includes('USD') ? 'USD' : wCurrencies[0]);
+    : (wCurrencies.includes('INR') ? 'INR' : wCurrencies[0]);
   const setCurrency = setCurrencySel;
   useEffect(() => {
     if (currencySel !== currency) setCurrencySel(currency);
@@ -2619,7 +2619,7 @@ function WithdrawView({ accounts, balances, withdrawals, fxRate, onDone, onCance
   // (supportedCurrencies), not a hard-coded "UPI and Bank are INR-only".
   // Picking a rail narrows the currency list — `currency` is derived from
   // the selected rail above. An effect that forced the method to follow the
-  // currency instead pushed the opposite way and won: with the default USD,
+  // currency instead pushed the opposite way and won: with the default INR,
   // clicking UPI or Bank snapped straight back to Crypto and neither card
   // could be selected.
 
@@ -2641,11 +2641,11 @@ function WithdrawView({ accounts, balances, withdrawals, fxRate, onDone, onCance
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [method, savedMethods]);
 
-  // Available balance — the platform stores wallets in USD as the base
+  // Available balance — the platform stores wallets in INR as the base
   // currency. When the user enters in INR we display the available
-  // figure by converting every USD wallet on the selected account
+  // figure by converting every INR wallet on the selected account
   // into INR via the live `fxRate`. The submit handler converts the
-  // user's INR input back into USD before hitting the backend.
+  // user's INR input back into INR before hitting the backend.
   const availableBalance = (() => {
     if (!accountId) return 0;
     const rate = Number(fxRate) > 0 ? Number(fxRate) : 83;
@@ -2655,8 +2655,8 @@ function WithdrawView({ accounts, balances, withdrawals, fxRate, onDone, onCance
       const free = Math.max(0, Number(w.free || 0));
       if (!free) continue;
       if (w.currency === currency) total += free;
-      else if (w.currency === 'USD' && currency === 'INR') total += free * rate;
-      else if (w.currency === 'INR' && currency === 'USD') total += free / rate;
+      else if (w.currency === 'INR' && currency === 'INR') total += free * rate;
+      else if (w.currency === 'INR' && currency === 'INR') total += free / rate;
       else total += free;
     }
     return total;
@@ -2670,8 +2670,8 @@ function WithdrawView({ accounts, balances, withdrawals, fxRate, onDone, onCance
     if (!wallets.length) return null;
     const total = wallets.reduce((s, w) => {
       const free = Number(w.free || 0);
-      if (w.currency === 'USD' && currency === 'INR') return s + free * rate;
-      if (w.currency === 'INR' && currency === 'USD') return s + free / rate;
+      if (w.currency === 'INR' && currency === 'INR') return s + free * rate;
+      if (w.currency === 'INR' && currency === 'INR') return s + free / rate;
       return s + free;
     }, 0);
     return { wallets, totalInTargetCcy: total };
@@ -2679,8 +2679,8 @@ function WithdrawView({ accounts, balances, withdrawals, fxRate, onDone, onCance
   const isOverBudget = Number(amount) > availableBalance;
 
   // Withdrawals are user-entered in the selected currency; the backend
-  // receives the converted USD figure (USD is the canonical wallet currency).
-  // `min`/`max` come from the admin's per-method limits (USD, converted to the
+  // receives the converted INR figure (INR is the canonical wallet currency).
+  // `min`/`max` come from the admin's per-method limits (INR, converted to the
   // selected currency). No admin config → 0 → no limit.
   //
   // Built from the admin config rather than a fixed three. The hard-coded list
@@ -2755,7 +2755,7 @@ function WithdrawView({ accounts, balances, withdrawals, fxRate, onDone, onCance
     setLoading(true);
     try {
       // Send the withdrawal as the user typed it (INR for Indian
-      // rails, USD for crypto). Matches the destination format the
+      // rails, INR for crypto). Matches the destination format the
       // admin actually pays out, and matches what the user expects
       // to see on their UPI / bank statement. The wallet's source
       // wallet (if it's a different currency) is selected by the
@@ -2852,7 +2852,7 @@ function WithdrawView({ accounts, balances, withdrawals, fxRate, onDone, onCance
                   const isR = a.accountType !== 'DEMO' && a.accountType !== 'VIRTUAL';
                   // `free` (not `balance`) because this step is about what can
                   // actually be withdrawn — locked margin is not available.
-                  // USD for the same reason as the deposit card above.
+                  // INR for the same reason as the deposit card above.
                   const accFreeUsd = accountTotalUsd(balances, a._id, 'free', fxRate);
                   // What the deposit card would show, and the part of it that
                   // cannot leave. Surfaced below so the two screens showing
@@ -3064,8 +3064,8 @@ function WithdrawView({ accounts, balances, withdrawals, fxRate, onDone, onCance
                   // the same fxRate the rest of the wallet uses so the
                   // figures are coherent across the page.
                   let converted = 0;
-                  if (convertFromCcy === 'USD' && currency === 'INR') converted = amt * rate;
-                  else if (convertFromCcy === 'INR' && currency === 'USD') converted = amt / rate;
+                  if (convertFromCcy === 'INR' && currency === 'INR') converted = amt * rate;
+                  else if (convertFromCcy === 'INR' && currency === 'INR') converted = amt / rate;
                   else if (convertFromCcy === currency) converted = amt;
                   else converted = amt; // fallback — same magnitude
                   const submitConvert = async () => {
@@ -3125,7 +3125,7 @@ function WithdrawView({ accounts, balances, withdrawals, fxRate, onDone, onCance
                           <span className="ml-1.5 font-mono font-bold text-bull">{currencySymbol(currency)}{fmtNum(converted, 2)}</span>
                         </div>
                       </div>
-                      <div className="text-[10px] text-text-muted font-mono">Rate · 1 USD = ₹{fmtNum(rate, 2)} (live)</div>
+                      <div className="text-[10px] text-text-muted font-mono">Rate · 1 INR = ₹{fmtNum(rate, 2)} (live)</div>
                       <div className="flex items-center gap-2">
                         <button type="button" onClick={() => setConverterOpen(false)} className="flex-1 py-1.5 rounded-lg text-xs font-semibold border border-border-dark text-text-primary hover:bg-bg-hover transition-colors">Cancel</button>
                         <button
@@ -3199,17 +3199,17 @@ function WithdrawView({ accounts, balances, withdrawals, fxRate, onDone, onCance
               </div>
 
               {/* Live summary — dual-currency. Primary line in the
-                  selected currency, sub-line in the converted INR↔USD
+                  selected currency, sub-line in the converted INR↔INR
                   equivalent so the user sees both at a glance. */}
               {(() => {
                 const rate = Number(fxRate) > 0 ? Number(fxRate) : 83;
                 const amt = Number(amount) || 0;
                 const isInr = currency === 'INR';
-                // USD, always. This showed INR whenever the user was withdrawing in
+                // INR, always. This showed INR whenever the user was withdrawing in
                 // anything else, so a USDT payout was priced against a currency that
-                // had nothing to do with it. USD is what the wallet actually holds.
-                const altCcy = 'USD';
-                // 1 USD = usdRate <currency>. INR keeps the established useFxRate
+                // had nothing to do with it. INR is what the wallet actually holds.
+                const altCcy = 'INR';
+                // 1 INR = usdRate <currency>. INR keeps the established useFxRate
                 // figure; every other currency comes from the live display-rate
                 // table, so USDT and BTC convert too instead of silently not.
                 // WITHDRAWAL leg — what the payout is actually debited at.
@@ -3217,8 +3217,8 @@ function WithdrawView({ accounts, balances, withdrawals, fxRate, onDone, onCance
                 const fmtAlt = (v) => (usdRate > 0
                   ? `${currencySymbol(altCcy)}${fmtNum(Number(v) / usdRate, 2)}`
                   : null);
-                // Nothing to add when the user is already in USD.
-                const showAlt = currency !== 'USD';
+                // Nothing to add when the user is already in INR.
+                const showAlt = false; // INR-only
                 // Withdrawal fee → You Receive = amount − fee (account debited full amount).
                 const wFee = withdrawFee(amt);
                 const youReceive = Math.max(0, amt - wFee);
@@ -3246,7 +3246,7 @@ function WithdrawView({ accounts, balances, withdrawals, fxRate, onDone, onCance
                         <span className="w-1.5 h-1.5 rounded-full bg-bull animate-pulse" />
                         Live FX rate
                       </span>
-                      <span className="font-mono font-bold text-text-primary">1 USD = ₹{fmtNum(rate, 2)}</span>
+                      <span className="font-mono font-bold text-text-primary">1 INR = ₹{fmtNum(rate, 2)}</span>
                     </div>
                   </>
                 );
@@ -3425,7 +3425,7 @@ function TransferView({ accounts, balances, onDone }) {
 
   const [from, setFrom] = useState(liveAccounts[0]?._id || '');
   const [to, setTo] = useState(liveAccounts[1]?._id || liveAccounts[0]?._id || '');
-  const [currency, setCurrency] = useState('USD');
+  const [currency, setCurrency] = useState('INR');
   const [amount, setAmount] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [confirm, setConfirm] = useState(false);
@@ -3469,7 +3469,7 @@ function TransferView({ accounts, balances, onDone }) {
     ? Number(bonusWallet?.balance || 0)
     : Number((balances.find((b) => b.accountId === from && b.currency === currency))?.free || 0);
   const overBudget = Number(amount) > free;
-  const subOnlyUsd = (isSpecial(from) || isSpecial(to)) && currency !== 'USD';
+  const subOnlyUsd = (isSpecial(from) || isSpecial(to)) && currency !== 'INR';
 
   const submit = async () => {
     if (!from || !to || from === to || !amount) {
@@ -3477,7 +3477,7 @@ function TransferView({ accounts, balances, onDone }) {
       return;
     }
     if (subOnlyUsd) {
-      toast.error('Main / Bonus Wallet transfers must be in USD');
+      toast.error('Main / Bonus Wallet transfers must be in INR');
       return;
     }
     setSubmitting(true);
@@ -3541,7 +3541,7 @@ function TransferView({ accounts, balances, onDone }) {
             onClick={() => {
               if (from === 'subscription') setFrom(liveAccounts[0]?._id || '');
               setTo('subscription');
-              setCurrency('USD');
+              setCurrency('INR');
             }}
             className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-primary-500/40 bg-primary-500/5 text-primary-600 text-sm font-bold hover:bg-primary-500/10 transition-colors"
           >
@@ -3558,23 +3558,23 @@ function TransferView({ accounts, balances, onDone }) {
               onChange={(e) => {
                 const v = e.target.value;
                 setFrom(v);
-                if (v === 'subscription' || v === 'bonus') setCurrency('USD');
+                if (v === 'subscription' || v === 'bonus') setCurrency('INR');
               }}
               className="w-full mt-1.5 px-3 py-2.5 rounded-xl border border-border-dark bg-white text-sm font-semibold text-text-primary focus:border-primary-500 focus:outline-none"
             >
               {transferOptions.map((a) => (
                 <option key={a._id} value={a._id}>
                   {a._id === 'subscription'
-                    ? 'Main Wallet · USD'
+                    ? 'Main Wallet · INR'
                     : a._id === 'bonus'
-                    ? 'Bonus Wallet · USD'
+                    ? 'Bonus Wallet · INR'
                     : `${a.nickname || a.accountNumber} · ${a.accountType}`}
                 </option>
               ))}
             </select>
             {fromAcc && (
               <div className="mt-1.5 text-[11px] text-text-muted">
-                {(isSubFrom || isBonusFrom) ? 'Balance' : 'Free'}: <span className="font-mono font-semibold text-bull">{fmtMoney(free, (isSubFrom || isBonusFrom) ? 'USD' : currency)}</span>
+                {(isSubFrom || isBonusFrom) ? 'Balance' : 'Free'}: <span className="font-mono font-semibold text-bull">{fmtMoney(free, (isSubFrom || isBonusFrom) ? 'INR' : currency)}</span>
               </div>
             )}
           </div>
@@ -3585,16 +3585,16 @@ function TransferView({ accounts, balances, onDone }) {
               onChange={(e) => {
                 const v = e.target.value;
                 setTo(v);
-                if (v === 'subscription' || v === 'bonus') setCurrency('USD');
+                if (v === 'subscription' || v === 'bonus') setCurrency('INR');
               }}
               className="w-full mt-1.5 px-3 py-2.5 rounded-xl border border-border-dark bg-white text-sm font-semibold text-text-primary focus:border-primary-500 focus:outline-none"
             >
               {transferOptions.map((a) => (
                 <option key={a._id} value={a._id}>
                   {a._id === 'subscription'
-                    ? 'Main Wallet · USD'
+                    ? 'Main Wallet · INR'
                     : a._id === 'bonus'
-                    ? 'Bonus Wallet · USD'
+                    ? 'Bonus Wallet · INR'
                     : `${a.nickname || a.accountNumber} · ${a.accountType}`}
                 </option>
               ))}
@@ -3606,7 +3606,7 @@ function TransferView({ accounts, balances, onDone }) {
           <div>
             <label className="text-[11px] uppercase tracking-wider font-bold text-text-muted">Currency</label>
             <select value={currency} onChange={(e) => setCurrency(e.target.value)} className="w-full mt-1.5 px-3 py-2.5 rounded-xl border border-border-dark bg-white text-sm font-semibold text-text-primary focus:border-primary-500 focus:outline-none">
-              {['USD', 'EUR', 'GBP', 'INR'].map((c) => <option key={c}>{c}</option>)}
+              {['INR'].map((c) => <option key={c}>{c}</option>)}
             </select>
           </div>
           <div className="col-span-2">
@@ -3620,7 +3620,7 @@ function TransferView({ accounts, balances, onDone }) {
           <div className="text-[11px] text-bear font-semibold">Source and destination must be different accounts.</div>
         )}
         {subOnlyUsd && (
-          <div className="text-[11px] text-warn font-semibold">Main / Bonus Wallet only supports USD. Currency switched automatically.</div>
+          <div className="text-[11px] text-warn font-semibold">Main / Bonus Wallet only supports INR. Currency switched automatically.</div>
         )}
 
         <button
@@ -3667,10 +3667,10 @@ function TransferView({ accounts, balances, onDone }) {
  */
 function TransferToUserPanel({ accounts, balances, subWallet, onDone }) {
   // Source options = trading accounts + the user-level Main Wallet
-  // (sentinel 'subscription', USD-only).
+  // (sentinel 'subscription', INR-only).
   const fromOptions = [...accounts, { _id: 'subscription', nickname: 'Main Wallet', accountType: 'MAIN' }];
   const [fromAccountId, setFromAccountId] = useState(accounts[0]?._id || 'subscription');
-  const [currency, setCurrency] = useState(accounts[0]?.baseCurrency || 'USD');
+  const [currency, setCurrency] = useState(accounts[0]?.baseCurrency || 'INR');
   const isMainFrom = fromAccountId === 'subscription';
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
@@ -3774,28 +3774,28 @@ function TransferToUserPanel({ accounts, balances, subWallet, onDone }) {
               onChange={(e) => {
                 const v = e.target.value;
                 setFromAccountId(v);
-                if (v === 'subscription') setCurrency('USD');
+                if (v === 'subscription') setCurrency('INR');
               }}
               className="w-full mt-1.5 px-3 py-2.5 rounded-xl border border-border-dark bg-white text-sm font-semibold text-text-primary focus:border-primary-500 focus:outline-none"
             >
               {fromOptions.map((a) => (
                 <option key={a._id} value={a._id}>
                   {a._id === 'subscription'
-                    ? 'Main Wallet · USD'
+                    ? 'Main Wallet · INR'
                     : `${(a.nickname || a.accountNumber)} · ${a.accountType}`}
                 </option>
               ))}
             </select>
             {acct && (
               <div className="mt-1.5 text-[11px] text-text-muted">
-                {isMainFrom ? 'Balance' : 'Free'}: <span className="font-mono font-semibold text-bull">{fmtMoney(free, isMainFrom ? 'USD' : currency)}</span>
+                {isMainFrom ? 'Balance' : 'Free'}: <span className="font-mono font-semibold text-bull">{fmtMoney(free, isMainFrom ? 'INR' : currency)}</span>
               </div>
             )}
           </div>
           <div>
             <label className="text-[11px] uppercase tracking-wider font-bold text-text-muted">Currency</label>
             <select value={currency} onChange={(e) => setCurrency(e.target.value)} disabled={isMainFrom} className="w-full mt-1.5 px-3 py-2.5 rounded-xl border border-border-dark bg-white text-sm font-semibold text-text-primary focus:border-primary-500 focus:outline-none disabled:opacity-60">
-              {(isMainFrom ? ['USD'] : ['USD', 'EUR', 'GBP', 'INR']).map((c) => <option key={c}>{c}</option>)}
+              {['INR'].map((c) => <option key={c}>{c}</option>)}
             </select>
           </div>
         </div>
@@ -4012,16 +4012,16 @@ function MethodsView({ onAdd }) {
 }
 
 function AccountDetailsView({ user, accounts, balances, fxRate, onRefresh, setView }) {
-  // Which currency to show BESIDE the USD figure. The card used to be wired
+  // Which currency to show BESIDE the INR figure. The card used to be wired
   // to INR — label, symbol and rate — which reads as a local product. It now
   // follows the display-currency menu, so picking GBP shows GBP.
   //
   // EUR is the fallback for the one case with no answer: when the selection IS
-  // USD a "USD | USD" pair says nothing, so the secondary column falls back to
+  // INR a "INR | INR" pair says nothing, so the secondary column falls back to
   // EUR rather than INR.
   const { code: _dispCode } = useMoney();
   const { rateFor: _rateFor, symbolFor: _symbolFor } = useDisplayRates();
-  const altCcy = (_dispCode && _dispCode !== 'USD') ? _dispCode : 'EUR';
+  const altCcy = (_dispCode && _dispCode !== 'INR') ? _dispCode : 'EUR';
   const altSym = _symbolFor(altCcy);
   const fullName = [user?.firstName, user?.lastName].filter(Boolean).join(' ') || 'Trader';
   const kyc = user?.kycStatus || 'NOT_STARTED';
@@ -4119,12 +4119,12 @@ function AccountDetailsView({ user, accounts, balances, fxRate, onRefresh, setVi
               const rate = Number(fxRate) > 0 ? Number(fxRate) : 83;
               const isSuspended = !!a.planSuspendedAt;
               // Sum ALL of this account's wallets (funds may sit in the native
-              // wallet OR the canonical USD wallet — every deposit credits USD).
+              // wallet OR the canonical INR wallet — every deposit credits INR).
               // Reading only the base-currency wallet missed money parked in the
-              // USD wallet, so this card showed 0 while the Deposit selector —
+              // INR wallet, so this card showed 0 while the Deposit selector —
               // which sums all wallets — showed the real balance.
               //
-              // Totalled in USD, the canonical wallet currency, then converted
+              // Totalled in INR, the canonical wallet currency, then converted
               // once into whichever currency the user selected, at that
               // currency's own live rate.
               let usd = 0;
@@ -4132,7 +4132,7 @@ function AccountDetailsView({ user, accounts, balances, fxRate, onRefresh, setVi
                 if (b.accountId !== a._id) continue;
                 const v = Number(b.balance) || 0;
                 if (b.currency === 'INR') usd += v / rate;
-                else usd += v; // USD and USD-pegged alike
+                else usd += v; // INR and INR-pegged alike
               }
               const altRate = Number(_rateFor(altCcy)) || 1;
               const alt = usd * altRate;
@@ -4188,15 +4188,15 @@ function AccountDetailsView({ user, accounts, balances, fxRate, onRefresh, setVi
                     </div>
                   )}
 
-                  {/* Two columns: the currency the user chose (EUR when that is USD,
-                      since USD|USD says nothing) and the canonical USD figure. */}
+                  {/* Two columns: the currency the user chose (EUR when that is INR,
+                      since INR|INR says nothing) and the canonical INR figure. */}
                   <div className="mt-3 grid grid-cols-2 gap-2 bg-bg-hover rounded-xl p-2.5">
                     <div>
                       <div className="text-[9px] text-text-muted uppercase tracking-wider font-semibold">{altCcy}</div>
                       <div className="text-sm font-mono font-bold text-text-primary tabular-nums mt-0.5">{altSym}{fmtNum(alt, 2)}</div>
                     </div>
                     <div>
-                      <div className="text-[9px] text-text-muted uppercase tracking-wider font-semibold">USD</div>
+                      <div className="text-[9px] text-text-muted uppercase tracking-wider font-semibold">INR</div>
                       <div className="text-sm font-mono font-bold text-text-primary tabular-nums mt-0.5">${fmtNum(usd, 2)}</div>
                     </div>
                   </div>
@@ -4315,7 +4315,7 @@ function AccountDetailsView({ user, accounts, balances, fxRate, onRefresh, setVi
 function CreateAccountInlineModal({ onClose, onCreated }) {
   const [form, setForm] = useState({
     accountType: 'DEMO',
-    baseCurrency: 'USD',
+    baseCurrency: 'INR',
     leverage: 100,
     mode: 'HYBRID',
     nickname: '',
@@ -4366,7 +4366,7 @@ function CreateAccountInlineModal({ onClose, onCreated }) {
             <div>
               <label className="text-[11px] uppercase tracking-wider font-bold text-text-muted">Base Currency</label>
               <select className="w-full mt-1.5 px-3 py-2.5 rounded-xl border border-border-dark bg-white text-sm font-semibold text-text-primary focus:border-primary-500 focus:outline-none" value={form.baseCurrency} onChange={(e) => setForm({ ...form, baseCurrency: e.target.value })}>
-                <option>INR</option><option>USD</option><option>EUR</option><option>GBP</option>
+                <option>INR</option>
               </select>
             </div>
             <div>

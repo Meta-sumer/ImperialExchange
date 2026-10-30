@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { BASE_CURRENCY } = require('../config/constants');
 
 /**
  * CopyTradeEarnings — immutable audit record of ONE performance-fee charge.
@@ -29,7 +30,7 @@ const copyTradeEarningsSchema = new mongoose.Schema(
 
     symbol: { type: String, default: '' },
 
-    currency:       { type: String, default: 'USD' }, // follower account currency
+    currency:       { type: String, default: BASE_CURRENCY }, // follower account currency
     realizedProfit: { type: String, default: '0' },   // follower realized profit (account ccy)
     feePercent:     { type: Number, default: 0 },
     feeAmount:      { type: String, default: '0' },    // master fee (account ccy)

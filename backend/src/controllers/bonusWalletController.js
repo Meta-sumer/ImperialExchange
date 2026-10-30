@@ -33,7 +33,7 @@ const _assertWithdrawOnly = () => {
 };
 const TradingAccount = require('../models/TradingAccount');
 const { Wallet } = require('../models/Wallet');
-const { WALLET_TX_TYPE } = require('../config/constants');
+const { BASE_CURRENCY, WALLET_TX_TYPE } = require('../config/constants');
 const { Deposit, Withdrawal } = require('../models/index');
 const { BonusWallet, BonusTransaction } = require('../models/BonusWallet');
 const User = require('../models/User');
@@ -145,7 +145,7 @@ const requestWithdrawal = asyncHandler(async (req, res) => {
       amount: payAmt,
       // The USD that left the wallet. baseAmount stays the figure the user
       // typed, so the debit and the record can never disagree.
-      baseCurrency: 'USD',
+      baseCurrency: BASE_CURRENCY,
       baseAmount: amtStr,
       fxRateUsed: payRate,
       fee: wdFee,        // USD (base)
@@ -237,7 +237,7 @@ const deposit = asyncHandler(async (req, res) => {
     }).sort({ createdAt: 1 });
     if (!account) throw new AppError('You need a real trading account to fund the Bonus Wallet.', 400, 'NO_REAL_ACCOUNT');
   }
-  const ccy = account.baseCurrency || 'USD';
+  const ccy = account.baseCurrency || BASE_CURRENCY;
 
   // Debit trading wallet first. If short, INSUFFICIENT and bonus untouched.
   let ledger;
@@ -299,7 +299,7 @@ const deposit = asyncHandler(async (req, res) => {
 const manualDeposit = asyncHandler(async (req, res) => {
   _assertWithdrawOnly();
   const {
-    amount, currency = 'USD', method, txReference,
+    amount, currency = BASE_CURRENCY, method, txReference,
     senderName, senderUpiId, senderBankAccount, screenshot, screenshotMimeType, note,
   } = req.body;
   const amt = Number(amount);
@@ -314,7 +314,7 @@ const manualDeposit = asyncHandler(async (req, res) => {
     accountId: undefined,
     currency: String(currency).toUpperCase(),
     amount: String(amt),
-    baseCurrency: 'USD',
+    baseCurrency: BASE_CURRENCY,
     baseAmount: String(amt.toFixed(2)),
     fxRateUsed: 1,
     method,

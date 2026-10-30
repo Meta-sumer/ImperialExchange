@@ -1,5 +1,5 @@
 const mongoose = require('mongoose');
-const { ROLES, KYC_STATUS } = require('../config/constants');
+const { BASE_CURRENCY, ROLES, KYC_STATUS } = require('../config/constants');
 
 const userSchema = new mongoose.Schema(
   {
@@ -25,7 +25,7 @@ const userSchema = new mongoose.Schema(
     // (profile-dropdown balance, notional, etc.). Never affects the account: the
     // wallet + all trading/margin/P&L math stay in USD. Conversion is applied at
     // render time via the ExchangeRate display rate.
-    preferredDisplayCurrency: { type: String, default: 'USD', uppercase: true, trim: true },
+    preferredDisplayCurrency: { type: String, default: BASE_CURRENCY, uppercase: true, trim: true },
 
     // ─── Permanent public User ID (additive, immutable) ────────────────
     // Human-readable, platform-unique handle shown in the user's profile

@@ -11,7 +11,7 @@ import { useAuthStore } from '../store/auth';
  * staff-activity audit, reports. Allowed writes: flag a user, submit a freeze
  * request (Super Admin actions the freeze).
  */
-const money = (v) => `$${Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const money = (v) => `₹${Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const signed = (v) => `${Number(v) < 0 ? '-' : '+'}${money(Math.abs(Number(v) || 0))}`;
 
 const TABS = [
@@ -108,7 +108,7 @@ function Overview({ onInspect }) {
     if (!report) return;
     const rows = [
       ['Audit Report', report.period], ['From', fmtDate(report.from)], ['To', fmtDate(report.to)], [],
-      ['Metric', 'Count', 'Amount (USD)'],
+      ['Metric', 'Count', 'Amount (INR)'],
       ['Deposits (confirmed)', report.deposits.count, report.deposits.amount],
       ['Withdrawals (completed)', report.withdrawals.count, report.withdrawals.amount],
       ['Balance adjustments', report.balanceAdjustments.count, report.balanceAdjustments.amount],

@@ -5,7 +5,7 @@ const bonusWalletService = require('../services/bonusWalletService');
 const walletService = require('../services/walletService');
 const TradingAccount = require('../models/TradingAccount');
 const { Wallet } = require('../models/Wallet');
-const { WALLET_TX_TYPE } = require('../config/constants');
+const { BASE_CURRENCY, WALLET_TX_TYPE } = require('../config/constants');
 const { sendSuccess, asyncHandler, AppError } = require('../utils/errors');
 
 const listPlans = asyncHandler(async (req, res) => {
@@ -36,7 +36,7 @@ const mySubscription = asyncHandler(async (req, res) => {
     }).lean();
     wallet = {
       accountId: account._id,
-      currency:  account.baseCurrency || 'USD',
+      currency:  account.baseCurrency || BASE_CURRENCY,
       balance:   w?.balance || '0',
       free:      w?.free    || w?.balance || '0',
     };

@@ -101,7 +101,7 @@ export default function Plans() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <StatCard label="Total Plans" value={stats.plans} />
         <StatCard label="Active Users" value={stats.activeUsers} />
-        <StatCard label="Est. Monthly Revenue" value={`$${stats.revenue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} accent="emerald" />
+        <StatCard label="Est. Monthly Revenue" value={`₹${stats.revenue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} accent="emerald" />
         <StatCard label="Active Plans" value={plans.filter((p) => p.isActive).length} />
       </div>
 
@@ -266,7 +266,7 @@ function PlanForm({ plan, onClose, onSaved }) {
     perDevicePerMonth:     plan.postPaidRates?.perDevicePerMonth || '0',
     perAccountPerMonth:    plan.postPaidRates?.perAccountPerMonth || '0',
     minimumMonthlyFee:     plan.postPaidRates?.minimumMonthlyFee || '0',
-    postPaidCurrency:      plan.postPaidRates?.currency || 'USD',
+    postPaidCurrency:      plan.postPaidRates?.currency || 'INR',
     // highlights as multiline text
     highlightsText:        (plan.highlights || []).join('\n'),
   });
@@ -325,7 +325,7 @@ function PlanForm({ plan, onClose, onSaved }) {
         perDevicePerMonth:  String(form.perDevicePerMonth || 0),
         perAccountPerMonth: String(form.perAccountPerMonth || 0),
         minimumMonthlyFee:  String(form.minimumMonthlyFee || 0),
-        currency:           (form.postPaidCurrency || 'USD').toUpperCase(),
+        currency:           (form.postPaidCurrency || 'INR').toUpperCase(),
       },
       highlights: form.highlightsText.split('\n').map((s) => s.trim()).filter(Boolean),
     };

@@ -31,7 +31,7 @@ const toLocalInput = (d) => {
 };
 const toIso = (local) => (local ? new Date(local).toISOString() : null);
 const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
-const money = (n) => `${n < 0 ? '-' : ''}$${fmtNum(Math.abs(n), 2)}`;
+const money = (n) => `${n < 0 ? '-' : ''}₹${fmtNum(Math.abs(n), 2)}`;
 const str = (v) => (v == null ? '' : String(v));
 
 function Shell({ title, subtitle, onClose, children, footer }) {

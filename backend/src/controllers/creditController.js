@@ -23,7 +23,7 @@ const { AuditLog } = require('../models/index');
 const walletService = require('../services/walletService');
 const { outstandingOf, applySettlement, canCancel } = require('../services/creditMath');
 const { sendSuccess, asyncHandler, AppError } = require('../utils/errors');
-const { WALLET_TX_TYPE } = require('../config/constants');
+const { BASE_CURRENCY, WALLET_TX_TYPE } = require('../config/constants');
 const { gt, round } = require('../utils/decimal');
 
 // ── helpers ─────────────────────────────────────────────────────────────
@@ -159,7 +159,7 @@ const create = asyncHandler(async (req, res) => {
   await assertInScope(req.user, userId);
   const account = await TradingAccount.findOne({ _id: accountId, userId }).lean();
   if (!account) throw new AppError('Trading account not found for this user', 404);
-  const currency = account.baseCurrency || 'USD';
+  const currency = account.baseCurrency || BASE_CURRENCY;
 
   // Create the row first so the ledger entry can reference it; roll it back
   // if the wallet movement is refused (e.g. a withdrawal exceeding balance).

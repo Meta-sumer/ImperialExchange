@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { BASE_CURRENCY } = require('../config/constants');
 
 /**
  * Whitelisted withdrawal addresses (per doc §12.3).
@@ -57,7 +58,7 @@ const commissionSchema = new mongoose.Schema(
     // Pending Volume from still-open positions.
     positionId: { type: mongoose.Schema.Types.ObjectId, ref: 'Position', index: true },
     volume: { type: String, default: '0' }, // one-side notional = entryPrice × closedQty
-    currency: { type: String, default: 'USD' },
+    currency: { type: String, default: BASE_CURRENCY },
     amount: { type: String, required: true }, // commission amount (positive)
     rate: { type: String }, // % rate applied (informational)
     status: { type: String, enum: ['PENDING', 'PAID', 'REVERSED'], default: 'PENDING', index: true },

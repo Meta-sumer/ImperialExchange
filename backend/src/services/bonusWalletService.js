@@ -11,10 +11,11 @@
  * which satisfies the "prevent duplicate transactions" requirement.
  */
 const { BonusWallet, BonusTransaction } = require('../models/BonusWallet');
+const { BASE_CURRENCY } = require('../config/constants');
 const { add, sub, gte, gt } = require('../utils/decimal');
 const { AppError } = require('../utils/errors');
 
-const DEFAULT_CURRENCY = 'USD';
+const DEFAULT_CURRENCY = BASE_CURRENCY;
 
 // Reasons that represent EARNINGS (vs. transfers / admin moves). Used by
 // the summary rollup so the dashboard can show per-source totals.

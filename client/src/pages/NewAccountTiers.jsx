@@ -239,7 +239,7 @@ function TierRow({ plan, selected, onSelect, ownedCount }) {
 
         {/* Fixed-width spec cells aligning with column headers */}
         <div className="w-[120px] shrink-0">
-          <Cell value={minDep > 0 ? `${minDep} USD` : 'No min'} />
+          <Cell value={minDep > 0 ? `${minDep} INR` : 'No min'} />
         </div>
         <div className="w-[140px] shrink-0">
           <Cell value={lev} />
@@ -277,7 +277,7 @@ function TierRow({ plan, selected, onSelect, ownedCount }) {
           </div>
         </div>
         <div className="mt-3 grid grid-cols-3 gap-2 text-[11px]">
-          <SpecLite label="Min deposit"  value={minDep > 0 ? `${minDep} USD` : 'No min'} />
+          <SpecLite label="Min deposit"  value={minDep > 0 ? `${minDep} INR` : 'No min'} />
           <SpecLite label="Max leverage" value={lev} />
           <SpecLite label="Commission"   value={commission} />
         </div>

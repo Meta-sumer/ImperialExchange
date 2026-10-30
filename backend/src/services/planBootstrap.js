@@ -7,6 +7,7 @@
  * but historical subscriptions keep a foreign-key target.
  */
 const { Plan } = require('../models/Subscription');
+const { BASE_CURRENCY } = require('../config/constants');
 
 const DEFAULT_PLANS = [
   {
@@ -146,7 +147,7 @@ const DEFAULT_PLANS = [
       perDevicePerMonth: '2',
       perAccountPerMonth: '4',
       minimumMonthlyFee: '50',
-      currency: 'USD',
+      currency: BASE_CURRENCY,
     },
     highlights: [
       '$2 per device / month',

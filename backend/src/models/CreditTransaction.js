@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { BASE_CURRENCY } = require('../config/constants');
 const { sub } = require('../utils/decimal');
 
 /**
@@ -36,7 +37,7 @@ const creditTransactionSchema = new mongoose.Schema(
     walletId: { type: mongoose.Schema.Types.ObjectId, ref: 'Wallet', default: null },
     kind: { type: String, enum: Object.values(CREDIT_KIND), required: true },
     amount: { type: String, required: true },
-    currency: { type: String, default: 'USD' },
+    currency: { type: String, default: BASE_CURRENCY },
     settledAmount: { type: String, default: '0' },
     status: { type: String, enum: Object.values(CREDIT_STATUS), default: CREDIT_STATUS.PENDING, index: true },
     // Admin remark written when the credit was granted (shown to the user).
