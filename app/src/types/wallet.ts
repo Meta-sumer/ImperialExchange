@@ -393,6 +393,12 @@ export interface DepositDetails {
   BANK: BankRail;
   RAZORPAY: RazorpayRail;
   custom: CustomRail[];
+  /**
+   * The company bank account the Super Admin assigned to THIS user (the BANK
+   * rail above already carries its details). Absent when the pool is empty
+   * or the caller is staff — then the rail is the global config.
+   */
+  assignedBank?: { label: string; bankName: string | null } | null;
 }
 
 const positive = (v: unknown): number => {
@@ -454,6 +460,9 @@ export const toDepositDetails = (body: unknown): DepositDetails => {
       bankName: strOrNull(bank.bankName),
     },
     RAZORPAY: railBase(razorpay, has('RAZORPAY')),
+    ...(raw.assignedBank && typeof raw.assignedBank === 'object'
+      ? { assignedBank: { label: str(asRecord(raw.assignedBank).label), bankName: strOrNull(asRecord(raw.assignedBank).bankName) } }
+      : {}),
     custom: custom
       .map((c) => {
         const r = asRecord(c);
@@ -1070,3 +1079,87 @@ export interface InsufficientTradingBalance {
   currency: string;
   available: Decimal;
 }
+
+/* ══ Credit transactions (/wallet/credit) ═════════════════════════════ */
+
+export type CreditKind = 'DEPOSIT' | 'WITHDRAWAL';
+/** PENDING → PARTIALLY_SETTLED → SETTLED, or CANCELLED before any payment. */
+export type CreditStatus = 'PENDING' | 'PARTIALLY_SETTLED' | 'SETTLED' | 'CANCELLED' | (string & {});
+
+export interface CreditSettlement {
+  amount: Decimal;
+  at: string | null;
+  remarks: string | null;
+}
+
+/**
+ * A deposit or withdrawal the desk processed ON CREDIT (admin → Credit
+ * Ledger). The trading wallet moved when it was granted; the row tracks what
+ * is still owed in the real world until the admin records the payment(s).
+ * A DEPOSIT credit is money the user owes; a WITHDRAWAL credit is money due
+ * to the user.
+ */
+export interface CreditTransaction {
+  id: string;
+  accountId: string | null;
+  kind: CreditKind;
+  amount: Decimal;
+  currency: string;
+  settledAmount: Decimal;
+  /** amount − settledAmount, as the server computes it. */
+  outstanding: Decimal;
+  status: CreditStatus;
+  remarks: string | null;
+  dueDate: string | null;
+  settlements: CreditSettlement[];
+  createdAt: string | null;
+  settledAt: string | null;
+}
+
+export const toCreditTransaction = (body: unknown): CreditTransaction => {
+  const raw = asRecord(body);
+  const kind = String(raw.kind || 'DEPOSIT').toUpperCase() === 'WITHDRAWAL' ? 'WITHDRAWAL' : 'DEPOSIT';
+  const amount = dec(raw.amount);
+  const settledAmount = dec(raw.settledAmount);
+  const outstanding = raw.outstanding !== undefined && raw.outstanding !== null
+    ? dec(raw.outstanding)
+    : dec(Math.max(0, Number(amount) - Number(settledAmount)));
+  const settlements = Array.isArray(raw.settlements) ? raw.settlements : [];
+  return {
+    id: id(raw),
+    accountId: idOf(raw.accountId),
+    kind,
+    amount,
+    currency: str(raw.currency) || BASE_CURRENCY,
+    settledAmount,
+    outstanding,
+    status: String(raw.status || 'PENDING').toUpperCase(),
+    remarks: strOrNull(raw.remarks),
+    dueDate: strOrNull(raw.dueDate),
+    settlements: settlements.map((x) => {
+      const r = asRecord(x);
+      return { amount: dec(r.amount), at: strOrNull(r.at), remarks: strOrNull(r.remarks) };
+    }),
+    createdAt: strOrNull(raw.createdAt),
+    settledAt: strOrNull(raw.settledAt),
+  };
+};
+
+/** The totals /wallet/credit returns beside the rows. */
+export interface CreditSummary {
+  /** Unsettled DEPOSIT credits — what the user still owes. */
+  outstandingReceivable: Decimal;
+  /** Unsettled WITHDRAWAL credits — what is due to the user. */
+  outstandingPayable: Decimal;
+  pendingCount: number;
+}
+
+export const toCreditSummary = (body: unknown): CreditSummary => {
+  const raw = asRecord(body);
+  const n = Number(raw.pendingCount);
+  return {
+    outstandingReceivable: dec(raw.outstandingReceivable),
+    outstandingPayable: dec(raw.outstandingPayable),
+    pendingCount: Number.isFinite(n) ? n : 0,
+  };
+};

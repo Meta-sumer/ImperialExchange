@@ -24,6 +24,8 @@ export interface ChartPositionRow {
   takeProfit?: string | number | null;
   /** The live P&L the entry pill shows (the row's, as the book computes it). */
   pnl: number;
+  /** When it was opened — the entry marker's time (null = no marker). */
+  openedAt?: string | null;
 }
 
 export interface ChartOrderRow {
@@ -296,4 +298,99 @@ export const nextCalendarEvent = (
     if (!best || e.ts < best.ts) best = e;
   }
   return best ? { ts: best.ts, currency: best.currency, impact: best.impact, event: best.event } : null;
+};
+
+/* ── Trade markers (PriceChart.jsx trade markers) ─────────────────────── */
+
+/**
+ * One time-anchored marker on the price series: an entry arrow (BUY below
+ * the bar, SELL above) or an exit square coloured by the P&L sign. `ts` is
+ * epoch MILLISECONDS; the runtime snaps it to the nearest loaded candle and
+ * drops anything older than the loaded range rather than stacking it on
+ * the first bar.
+ */
+export interface TradeMarkerInput {
+  ts: number;
+  position: 'aboveBar' | 'belowBar';
+  color: string;
+  shape: 'arrowUp' | 'arrowDown' | 'square';
+  text: string;
+}
+
+/** A closed position (types/trading Position fits) as the exit marker reads it. */
+export interface ClosedTradeMarkerRow {
+  id: string;
+  side: OrderSide;
+  quantity: string | number | null;
+  closedQuantity?: string | number | null;
+  entryPrice: string | number | null;
+  closePrice?: string | number | null;
+  openedAt: string | null;
+  closedAt?: string | null;
+  realizedPnl?: string | number | null;
+}
+
+const TRADE_BUY = '#10B981';
+const TRADE_SELL = '#EF4444';
+
+const tsOf = (iso: string | null | undefined): number | null => {
+  const t = Date.parse(iso ?? '');
+  return Number.isFinite(t) ? t : null;
+};
+const pxText = (v: string | number | null | undefined, precision: number): string => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n.toFixed(precision) : '—';
+};
+const qtyText = (v: string | number | null | undefined): string => {
+  const n = Number(v);
+  return Number.isFinite(n) ? String(n) : '';
+};
+
+/**
+ * Entry markers for the OPEN positions and entry + exit markers for the
+ * CLOSED trades of the chart's symbol — the web's trade markers (BUY entry
+ * = green arrowUp below the bar "B 10 @ 2948.40", SELL = red arrowDown
+ * above, exit = square coloured by the P&L sign "X @ 2970.10 (+21.70)"),
+ * oldest first and capped to the most recent `cap`.
+ */
+export const buildTradeMarkers = (
+  open: readonly ChartPositionRow[],
+  closed: readonly ClosedTradeMarkerRow[],
+  precision = 2,
+  cap = 500,
+): TradeMarkerInput[] => {
+  const out: TradeMarkerInput[] = [];
+  const entry = (side: OrderSide, qty: string | number | null | undefined, price: string | number | null | undefined, ts: number): void => {
+    const buy = side === 'BUY';
+    out.push({
+      ts,
+      position: buy ? 'belowBar' : 'aboveBar',
+      color: buy ? TRADE_BUY : TRADE_SELL,
+      shape: buy ? 'arrowUp' : 'arrowDown',
+      text: `${buy ? 'B' : 'S'} ${qtyText(qty)} @ ${pxText(price, precision)}`.replace(/\s+/g, ' '),
+    });
+  };
+  for (const p of open) {
+    const ts = tsOf(p.openedAt);
+    if (ts !== null) entry(p.side, p.quantity, p.entryPrice, ts);
+  }
+  for (const c of closed) {
+    const qty = Number(c.closedQuantity) > 0 ? c.closedQuantity : c.quantity;
+    const opened = tsOf(c.openedAt);
+    if (opened !== null) entry(c.side, qty, c.entryPrice, opened);
+    const exited = tsOf(c.closedAt);
+    if (exited !== null && c.closePrice !== null && c.closePrice !== undefined) {
+      const pnl = Number(c.realizedPnl);
+      const hasPnl = Number.isFinite(pnl);
+      out.push({
+        ts: exited,
+        position: c.side === 'BUY' ? 'aboveBar' : 'belowBar',
+        color: hasPnl && pnl < 0 ? TRADE_SELL : TRADE_BUY,
+        shape: 'square',
+        text: `X @ ${pxText(c.closePrice, precision)}${hasPnl ? ` (${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)})` : ''}`,
+      });
+    }
+  }
+  out.sort((a, b) => a.ts - b.ts);
+  return out.length > cap ? out.slice(out.length - cap) : out;
 };

@@ -19,15 +19,16 @@ export interface TickerRow {
  * only while the live feed loads or when it cannot be reached.
  */
 export const TICKER: readonly TickerRow[] = [
-  { s: 'NIFTY', p: '25,870.50', c: +0.62 },
-  { s: 'BANKNIFTY', p: '58,214.35', c: +0.48 },
-  { s: 'SENSEX', p: '84,562.78', c: +0.57 },
-  { s: 'RELIANCE', p: '1,482.60', c: +1.12 },
-  { s: 'HDFCBANK', p: '986.45', c: -0.34 },
-  { s: 'TCS', p: '3,128.90', c: -0.71 },
-  { s: 'INFY', p: '1,548.20', c: +0.86 },
-  { s: 'CRUDEOIL', p: '5,342.00', c: -0.45 },
-  { s: 'GOLD', p: '1,21,850.00', c: +0.64 },
+  { s: 'NIFTY 50', p: '24,118.50', c: +0.64 },
+  { s: 'BANK NIFTY', p: '51,420.30', c: +0.82 },
+  { s: 'SENSEX', p: '79,476.20', c: +0.58 },
+  { s: 'RELIANCE', p: '2,948.40', c: +1.12 },
+  { s: 'TCS', p: '4,125.60', c: -0.35 },
+  { s: 'HDFCBANK', p: '1,672.80', c: +0.44 },
+  { s: 'INFY', p: '1,842.10', c: +0.91 },
+  { s: 'ICICIBANK', p: '1,214.30', c: +0.27 },
+  { s: 'SBIN', p: '812.45', c: -0.52 },
+  { s: 'TATAMOTORS', p: '1,036.70', c: +1.48 },
 ];
 
 /** How often the page re-reads the feed (Landing.jsx: `setInterval(load, 10000)`). */
@@ -58,7 +59,7 @@ const catOf = (x: FeedRow): string => String(x.category || '').toUpperCase();
 const isMcx = (x: FeedRow): boolean => String(x.exchange || '').toUpperCase() === 'MCX' || catOf(x) === 'COMMODITY';
 
 export interface MarketCard {
-  name: 'Stocks' | 'Index F&O' | 'Stock Options' | 'Commodities';
+  name: string;
   desc: string;
   /** The static fallback % while the feed loads or when a card has no live data. */
   c: number;
@@ -66,16 +67,23 @@ export interface MarketCard {
   match: (x: FeedRow) => boolean;
 }
 
+const isSpotStock = (x: FeedRow): boolean => catOf(x) === 'STOCK' && segOf(x) !== 'FUT' && segOf(x) !== 'OPT';
+const isSpotIndex = (x: FeedRow): boolean => catOf(x) === 'INDEX' && segOf(x) !== 'FUT' && segOf(x) !== 'OPT';
+
 /**
- * Landing.jsx MARKETS. Options are not in the public feed, so Stock Options
- * averages the stock futures, as the web does, as a proxy for the F&O
- * stock universe.
+ * Landing.jsx MARKETS — the web's six Indian-market cards (name, desc and
+ * static fallback verbatim). The web maps each card to one instrument
+ * category for its live average (MARKET_CATEGORY): Stocks, Large Caps,
+ * Banking and IT & Tech all read the STOCK feed; Indices the INDEX feed;
+ * Commodities the MCX rows.
  */
 export const MARKETS: readonly MarketCard[] = [
-  { name: 'Stocks', desc: 'NSE & BSE equities', c: +0.62, match: (x) => catOf(x) === 'STOCK' && segOf(x) !== 'FUT' && segOf(x) !== 'OPT' },
-  { name: 'Index F&O', desc: 'NIFTY, BANKNIFTY, SENSEX', c: +0.42, match: (x) => catOf(x) === 'INDEX' },
-  { name: 'Stock Options', desc: 'Option chains on F&O stocks', c: +0.38, match: (x) => catOf(x) === 'STOCK' && segOf(x) === 'FUT' },
-  { name: 'Commodities', desc: 'Crude oil, gold, silver, natural gas', c: +0.42, match: isMcx },
+  { name: 'Stocks', desc: 'NSE & BSE Equities', c: +0.62, match: isSpotStock },
+  { name: 'Indices', desc: 'NIFTY · BANKNIFTY · SENSEX', c: +0.42, match: isSpotIndex },
+  { name: 'Commodities', desc: 'MCX Gold · Silver · Crude', c: +0.38, match: isMcx },
+  { name: 'Large Caps', desc: 'NIFTY 50 leaders', c: +0.48, match: isSpotStock },
+  { name: 'Banking', desc: 'BANK NIFTY names', c: +0.35, match: isSpotStock },
+  { name: 'IT & Tech', desc: 'NIFTY IT names', c: +0.71, match: isSpotStock },
 ];
 
 /**
@@ -110,16 +118,16 @@ export const FEATURES = [
   { icon: 'chart', title: 'Pro charting', body: '100+ indicators, full TradingView-style drawing tools and multi-chart layouts.' },
   { icon: 'copy', title: 'Copy trading', body: 'Mirror top traders automatically — set your allocation and let it run.' },
   { icon: 'shield', title: 'Bank-grade security', body: '2FA, encrypted sessions and segregated funds keep your capital protected.' },
-  { icon: 'coins', title: 'Low brokerage', body: 'Transparent, low charges across stocks, F&O and commodities.' },
+  { icon: 'coins', title: 'Tight spreads', body: 'Institutional pricing with transparent, low commissions across every market.' },
   { icon: 'support', title: '24/7 support', body: 'Real humans, round the clock, in chat and helpdesk whenever you need them.' },
   { icon: 'risk', title: 'Risk management', body: 'Built-in stop-loss, take-profit and margin alerts to protect your capital.' },
   { icon: 'phone', title: 'Mobile trading', body: 'Full-featured apps on iOS and Android — trade and monitor on the go.' },
 ] as const;
 
 export const BADGES = [
-  { icon: 'shield', color: '#3B82F6', title: 'Bank-level Security', body: 'Your funds and data are always protected with top-tier security.', tag: 'Across all markets' },
-  { icon: 'bolt', color: '#22C55E', title: 'Indian Market Access', body: 'NSE & BSE stocks, F&O and MCX commodities from one account.', tag: 'NSE · BSE · MCX' },
-  { icon: 'percent', color: '#F59E0B', title: 'Low Trading Fees', body: 'Enjoy ultra-low fees and keep more of what you earn.', tag: 'Transparent pricing' },
+  { icon: 'shield', color: '#3B82F6', title: 'Bank-level Security', body: 'Your funds and data are always protected with top-tier security.', tag: 'Across NSE & BSE' },
+  { icon: 'bolt', color: '#22C55E', title: 'NSE & BSE Access', body: 'Trade Indian stocks and indices live through every market session.', tag: 'Indian markets' },
+  { icon: 'percent', color: '#F59E0B', title: 'Low Trading Fees', body: 'Enjoy ultra-low fees and keep more of what you earn.', tag: 'Market hours' },
   { icon: 'support', color: '#8B5CF6', title: '24/7 Live Support', body: 'Our support team is always here to help you succeed.', tag: 'Reliable & secure' },
 ] as const;
 
@@ -132,13 +140,13 @@ export const AVATARS = [
 ] as const;
 
 export const WHY = [
-  { icon: 'globe', title: 'Indian Market Access', body: 'Trade NSE & BSE stocks, index and stock F&O, and MCX commodities — all from one account.' },
+  { icon: 'globe', title: 'Indian Market Access', body: 'Trade NSE and BSE stocks plus NIFTY 50, BANK NIFTY and SENSEX — all from one account.' },
   { icon: 'bolt', title: 'Lightning-Fast Execution', body: 'Orders filled in milliseconds by a low-latency engine, even during peak volume.' },
   { icon: 'coins', title: 'Zero Hidden Fees', body: 'Transparent pricing with no surprise charges. What you see is what you pay.' },
   { icon: 'lock', title: '256-bit Encryption', body: 'Bank-grade encryption and 2FA keep your account and funds fully protected.' },
   { icon: 'rupee', title: '₹0 Free to Start', body: 'No signup fees and a free demo balance to practice risk-free before going live.' },
   { icon: 'clock', title: 'Always-On Platform', body: 'Charts, watchlists and your account available any time — trade live during exchange hours.' },
-  { icon: 'grid', title: 'Live Option Chains', body: 'Option chains for NIFTY, BANKNIFTY, SENSEX, F&O stocks and MCX commodities.' },
+  { icon: 'grid', title: 'Live Market Data', body: 'Real-time NSE, BSE and MCX prices with pro charts on every instrument.' },
   { icon: 'deposit', title: 'Instant Deposits & Withdrawals', body: 'Fund and cash out quickly with multiple secure payment methods.' },
 ] as const;
 
@@ -153,7 +161,7 @@ export const STEPS = [
   { n: '1', title: 'Create Account', body: 'Sign up in under two minutes — instant demo balance, no paperwork.' },
   { n: '2', title: 'Verify Identity', body: 'Quick KYC unlocks real-money trading and fast withdrawals.' },
   { n: '3', title: 'Deposit Funds', body: 'Top up securely with your preferred payment method.' },
-  { n: '4', title: 'Start Trading', body: 'Trade NSE & BSE stocks, F&O and MCX commodities with pro tools, copy trading and live analytics.' },
+  { n: '4', title: 'Start Trading', body: 'Trade NSE & BSE stocks, indices and MCX commodities with pro tools, copy trading and live analytics.' },
 ] as const;
 
 /** Landing.jsx Steps STEP_STYLES — each step's own gradient, shadow and accent. */
@@ -165,8 +173,8 @@ export const STEP_STYLES = [
 ] as const;
 
 export const TESTIMONIALS = [
-  { name: 'Rahul Sharma', role: 'Professional Trader', init: 'RS', img: 'https://i.pravatar.cc/96?img=13', quote: 'EquityHub is by far the best platform I have used. The execution speed and low fees are unmatched — I have moved all my trading here.' },
-  { name: 'Sarah Williams', role: 'Options Trader', init: 'SW', img: 'https://i.pravatar.cc/96?img=47', quote: 'I trade NIFTY and BANKNIFTY options every week and this is the fastest, most reliable terminal I have come across. Highly recommended.' },
+  { name: 'Rahul Sharma', role: 'Professional Trader', init: 'RS', img: 'https://i.pravatar.cc/96?img=13', quote: 'Imperial Exchange is by far the best platform I have used. The execution speed and low fees are unmatched — I have moved all my trading here.' },
+  { name: 'Sarah Williams', role: 'Equity Investor', init: 'SW', img: 'https://i.pravatar.cc/96?img=47', quote: 'I have been trading Indian equities for years and this is the fastest, most reliable terminal I have come across. Highly recommended.' },
   { name: 'Michael Chen', role: 'Day Trader', init: 'MC', img: 'https://i.pravatar.cc/96?img=33', quote: 'The platform is super fast and reliable. I can trade anywhere, anytime, on any device, without any interruptions.' },
 ] as const;
 
@@ -177,7 +185,7 @@ export const BENEFITS = [
     g: [[0, '#F472B6'], [0.45, '#FB7185'], [1, '#F59E0B']], sh: 'rgba(251,113,133,0.40)', tint: 'rgba(251,113,133,0.08)',
   },
   {
-    icon: 'clock', title: '24/7 Access', body: 'Charts, your account and live support available round the clock.',
+    icon: 'clock', title: '24/7 Access', body: 'Markets, charts and live support available round the clock.',
     g: [[0, '#22D3EE'], [0.5, '#3B82F6'], [1, '#6366F1']], sh: 'rgba(59,130,246,0.40)', tint: 'rgba(59,130,246,0.08)',
   },
   {
@@ -200,8 +208,8 @@ export const PLATFORM_POINTS = ['Real-time market data', 'One-click trading', 'A
 /** The terminal mockup's open positions (Landing.jsx Platform). */
 export const TERMINAL_POSITIONS = [
   ['RELIANCE', 'BUY', '#22C55E', '+1.12%', '10'],
-  ['HDFCBANK', 'BUY', '#22C55E', '+0.86%', '15'],
-  ['CRUDEOIL', 'SELL', '#EF4444', '-0.80%', '1 lot'],
+  ['TCS', 'SELL', '#EF4444', '-0.35%', '5'],
+  ['GOLD', 'BUY', '#22C55E', '+0.64%', '1 lot'],
 ] as const;
 
 /** LandingHeader NAV, in its order. */

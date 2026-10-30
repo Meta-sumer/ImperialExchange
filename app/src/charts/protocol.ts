@@ -1,7 +1,7 @@
 import type { Candle } from '@/types/trading';
 
 import type { ChartPrefs, ChartType, IndicatorMap, LegendRow } from './chartCatalog';
-import type { CalendarMarkerInput, NextEventChip, PillSpec, PriceLineSpec } from './chartOverlays';
+import type { CalendarMarkerInput, NextEventChip, PillSpec, PriceLineSpec, TradeMarkerInput } from './chartOverlays';
 import type { ChartDrawing, ToolItem } from './chartTools';
 
 /**
@@ -45,7 +45,7 @@ export type ToChart =
   | { type: 'lines'; lines: PriceLineSpec[] }
   | { type: 'pills'; pills: PillSpec[]; colors: PillColors }
   | { type: 'quote'; bid: number | null; ask: number | null; last: number | null }
-  | { type: 'overlays'; signals: boolean; hmr: boolean; calendar: CalendarMarkerInput[]; nextEvent: NextEventChip | null }
+  | { type: 'overlays'; signals: boolean; hmr: boolean; calendar: CalendarMarkerInput[]; nextEvent: NextEventChip | null; trades?: TradeMarkerInput[] }
   | { type: 'drawings'; drawings: ChartDrawing[] }
   | { type: 'draw'; cmd: DrawCommand; arg?: Record<string, unknown> }
   | { type: 'scale'; cmd: ScaleCommand }

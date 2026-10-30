@@ -7,6 +7,7 @@ import {
   marketNewsTimeAgo,
   useMarketNews,
   type MarketNewsTab,
+  useMarketNewsStore,
 } from '@/api/news.api';
 import { AppText, Button, toast } from '@/components/ui';
 import { useAppNavigation } from '@/navigation/types';
@@ -133,14 +134,16 @@ export function MarketNewsSection({
   instruments: readonly Instrument[] | null | undefined;
   pageSize?: number;
   refreshKey?: number;
-}): React.JSX.Element {
+}): React.JSX.Element | null {
   const t = useTheme();
   const items = useMarketNews(refreshKey);
+  const unavailable = useMarketNewsStore((st) => st.unavailable);
   const bySymbol = useBySymbol(instruments);
   const [tab, setTab] = useState<MarketNewsTab>('all');
   const [shown, setShown] = useState(pageSize);
   const list = useMemo(() => marketNewsForTab(items, tab), [items, tab]);
   const visible = list.slice(0, shown);
+  if (unavailable) return null; // no market-news route on this backend
 
   return (
     <View testID="market-news">
@@ -213,12 +216,14 @@ export function MarketNewsCard({
   instruments: readonly Instrument[] | null | undefined;
   max?: number;
   refreshKey?: number;
-}): React.JSX.Element {
+}): React.JSX.Element | null {
   const t = useTheme();
   const nav = useAppNavigation();
   const items = useMarketNews(refreshKey);
+  const unavailable = useMarketNewsStore((st) => st.unavailable);
   const bySymbol = useBySymbol(instruments);
   const top = (items ?? []).slice(0, max);
+  if (unavailable) return null; // no market-news route on this backend
   return (
     <View style={[styles.sideCard, { backgroundColor: t.colors.surface, borderColor: t.colors.borderDark }]} testID="market-news-card">
       <AppText variant="bodyStrong">Market News</AppText>

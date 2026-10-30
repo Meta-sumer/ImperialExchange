@@ -1,22 +1,23 @@
 /**
- * Sign Android release builds with the EquityHub upload key.
+ * Sign Android release builds with the Imperial Exchange upload key.
  *
  * `expo prebuild` regenerates android/ from a template whose release build
  * is signed with the DEBUG key. This plugin adds a `release` signing config
  * that reads four Gradle project properties and makes the release build use
  * it whenever they are set:
  *
- *   EQUITYHUB_UPLOAD_STORE_FILE, EQUITYHUB_UPLOAD_STORE_PASSWORD,
- *   EQUITYHUB_UPLOAD_KEY_ALIAS, EQUITYHUB_UPLOAD_KEY_PASSWORD
+ *   IMPERIALEXCHANGE_UPLOAD_STORE_FILE, IMPERIALEXCHANGE_UPLOAD_STORE_PASSWORD,
+ *   IMPERIALEXCHANGE_UPLOAD_KEY_ALIAS, IMPERIALEXCHANGE_UPLOAD_KEY_PASSWORD
  *
  * scripts/build-android-release.mjs passes them as ORG_GRADLE_PROJECT_*
  * environment variables, read from a signing.properties file kept OUTSIDE
- * the repo. Without them the build falls back to the debug key (fine for a
- * local test build, never for a published APK — the script refuses that).
+ * the repo (~/imperialexchange-app-signing/). Without them the build falls
+ * back to the debug key (fine for a local test build, never for a published
+ * APK — the script refuses that).
  */
 const { withAppBuildGradle } = require('expo/config-plugins');
 
-const MARK = 'EQUITYHUB_UPLOAD_STORE_FILE';
+const MARK = 'IMPERIALEXCHANGE_UPLOAD_STORE_FILE';
 
 function addReleaseSigning(src) {
   if (src.includes(MARK)) return src;
@@ -28,9 +29,9 @@ function addReleaseSigning(src) {
         release {
             if (project.hasProperty('${MARK}')) {
                 storeFile file(project.property('${MARK}'))
-                storePassword project.property('EQUITYHUB_UPLOAD_STORE_PASSWORD')
-                keyAlias project.property('EQUITYHUB_UPLOAD_KEY_ALIAS')
-                keyPassword project.property('EQUITYHUB_UPLOAD_KEY_PASSWORD')
+                storePassword project.property('IMPERIALEXCHANGE_UPLOAD_STORE_PASSWORD')
+                keyAlias project.property('IMPERIALEXCHANGE_UPLOAD_KEY_ALIAS')
+                keyPassword project.property('IMPERIALEXCHANGE_UPLOAD_KEY_PASSWORD')
             }
         }`;
   let out = src.slice(0, insertAt) + block + src.slice(insertAt);

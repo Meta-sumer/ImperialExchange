@@ -16,7 +16,8 @@ import {
 import { AppText, Card, LoadingView, PageHero, Screen, Select } from '@/components/ui';
 import type { AppScreenProps } from '@/navigation/types';
 import { useTheme } from '@/theme';
-import type { FnoKind, FnoUnderlyings, OptionChain } from '@/types/market';
+import { isNotFound, markFnoUnavailable } from '@/store/features';
+import { adaptFnoUnderlyings, type FnoKind, type FnoUnderlyings, type OptionChain } from '@/types/market';
 import {
   GREEKS_STORAGE_KEY,
   OPTION_CHAIN_EMPTY_BODY,
@@ -109,6 +110,15 @@ export function OptionChainScreen({ route, navigation }: AppScreenProps<'Options
       setMeta(m);
       setMetaError('');
     } catch (e) {
+      if (isNotFound(e)) {
+        // This backend has no F&O route at all: an empty picker shows the
+        // "not available" card below, never a red error, and the rest of the
+        // app hides its option-chain entry points (store/features).
+        markFnoUnavailable();
+        setMeta(adaptFnoUnderlyings({}));
+        setMetaError('');
+        return;
+      }
       setMetaError(errorMessage(e));
     }
   }, []);

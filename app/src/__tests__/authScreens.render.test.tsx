@@ -52,7 +52,7 @@ jest.mock('@/navigation/chromeSlots', () => ({ PageFooter: null }));
 
 jest.mock('@/navigation/linking', () => ({
   navigateToPath: jest.fn(() => true),
-  LINK_PREFIXES: ['equityhub://'],
+  LINK_PREFIXES: ['imperialexchange://'],
 }));
 
 jest.mock('@/services/tokenStore', () => ({ getAccessToken: jest.fn(() => null) }));
@@ -218,7 +218,7 @@ describe('LoginScreen', () => {
     expect(inputs(r)[0]?.props.placeholder).toBe('you@example.com');
     // BrandMark: the stacked lockup (icon over the wordmark), as the web's auth pages.
     const art = r.root.findAll((n) => n.type === 'Image').map((n) => JSON.stringify(n.props.source ?? ''));
-    expect(art.some((s) => s.includes('equityhub-logo-stacked'))).toBe(true);
+    expect(art.some((s) => s.includes('imperialexchange-logo-stacked'))).toBe(true);
     await press(signInButton(r));
     const after = textOf(r.toJSON());
     expect(after).toContain('Email is required');
@@ -444,21 +444,21 @@ describe('LandingScreen', () => {
     const r = await mount('Landing', LandingScreen as ComponentType<never>);
     const text = textOf(r.toJSON());
     for (const s of [
-      'NIFTY', 'BANKNIFTY', 'SENSEX', 'RELIANCE', '25,870.50',
+      'NIFTY 50', 'BANK NIFTY', 'SENSEX', 'RELIANCE', '24,118.50',
       'Forever', 'Trusted by traders across India',
-      'Bank-level Security', 'Indian Market Access', 'NSE · BSE · MCX',
-      'Why Choose EquityHub?', 'Live Option Chains',
-      'Everything a Trader Needs', 'Low brokerage',
+      'Bank-level Security', 'NSE & BSE Access', 'Indian markets',
+      'Why Choose Imperial Exchange?', 'Live Market Data',
+      'Everything a Trader Needs', 'Tight spreads',
       'Built for Every Trader',
-      'Stocks', 'Index F&O', 'Stock Options', 'Commodities', 'NSE & BSE equities',
-      'EquityHub Terminal', 'Open Positions', 'Place Order',
+      'Stocks', 'Indices', 'Commodities', 'Large Caps', 'Banking', 'IT & Tech', 'NSE & BSE Equities',
+      'Imperial Exchange Terminal', 'Open Positions', 'Place Order',
       'Secure Payments', 'Two-Factor Auth',
       'How It Works', 'Verify Identity',
-      'Why Traders Love EquityHub', 'Options Trader', 'Forever Trustable',
-      'Ready To Start Your Trading Journey?', 'Trade Smart. Invest Better. Grow with EquityHub.',
+      'Why Traders Love Imperial Exchange', 'Equity Investor', 'Forever Trustable',
+      'Ready To Start Your Trading Journey?', 'Trade. Invest. Grow. Imperial Exchange.',
     ]) expect({ s, shown: text.includes(s) }).toEqual({ s, shown: true });
     expect(text).not.toMatch(/BTC|ETH\/USD|Crypto|Forex|Advance AI/);
-    expect(r.root.findAll((n) => n.props.testID === 'market-card' && typeof n.type === 'string')).toHaveLength(4);
+    expect(r.root.findAll((n) => n.props.testID === 'market-card' && typeof n.type === 'string')).toHaveLength(6);
     // The feed was asked for, once, on arrival.
     expect(fetchMarketWatch).toHaveBeenCalledTimes(1);
   });
@@ -500,17 +500,17 @@ describe('LandingScreen', () => {
   it('a feed that cannot be reached leaves the showcase up', async () => {
     (fetchMarketWatch as jest.Mock).mockRejectedValue(new Error('offline'));
     const r = await mount('Landing', LandingScreen as ComponentType<never>);
-    expect(textOf(r.toJSON())).toContain('58,214.35');
+    expect(textOf(r.toJSON())).toContain('51,420.30');
     expect(textOf(r.toJSON())).toContain('+0.62%');
   });
 
-  it('the header is the EquityHub one: the horizontal logo, the theme toggle and Get Started', async () => {
+  it('the header is the Imperial Exchange one: the horizontal logo, the theme toggle and Get Started', async () => {
     const r = await mount('Landing', LandingScreen as ComponentType<never>);
     const header = r.root.findAll((n) => n.props.testID === 'landing-header' && typeof n.type === 'string')[0];
     expect(header).toBeDefined();
     const art = (header?.findAll((n) => n.type === 'Image') ?? []).map((n) => JSON.stringify(n.props.source ?? ''));
-    expect(art.some((s) => s.includes('equityhub-logo'))).toBe(true);
-    expect(r.root.findAll((n) => n.props.accessibilityLabel === 'EquityHub home' && typeof n.props.onPress === 'function')).toHaveLength(1);
+    expect(art.some((s) => s.includes('imperialexchange-logo'))).toBe(true);
+    expect(r.root.findAll((n) => n.props.accessibilityLabel === 'Imperial Exchange home' && typeof n.props.onPress === 'function')).toHaveLength(1);
     await press(byText(r, 'Get Started'));
     expect(textOf(r.toJSON())).toContain('route:Register');
   });

@@ -45,6 +45,10 @@ import {
   type WalletWithdrawalResult,
   type Withdrawal,
   type WithdrawalMethod,
+  toCreditSummary,
+  toCreditTransaction,
+  type CreditSummary,
+  type CreditTransaction,
 } from '@/types/wallet';
 import { CURRENCY_SYMBOL } from '@/utils/money';
 
@@ -268,6 +272,23 @@ export const walletApi = {
   usdInr: async (): Promise<FxRate> => {
     const { data } = await api.get('/fx/usdinr', { timeout: 8_000 });
     return toFxRate(data);
+  },
+
+  /* ── Credit transactions (/wallet/credit) ──────────────────────────── */
+
+  /**
+   * GET /wallet/credit — the deposits and withdrawals the desk processed on
+   * credit for this user (newest first, up to 100) and what is still
+   * outstanding either way. Transaction History lists the rows; the wallet
+   * page shows the outstanding card while anything is open.
+   */
+  credit: async (): Promise<{ items: CreditTransaction[]; summary: CreditSummary }> => {
+    const { data } = await api.get('/wallet/credit');
+    const body = (payload(data) ?? {}) as { items?: unknown; summary?: unknown };
+    return {
+      items: rows<unknown>(body.items).map(toCreditTransaction),
+      summary: toCreditSummary(body.summary),
+    };
   },
 
   /* ── Bonus Wallet (/bonus-wallet) ──────────────────────────────────── */

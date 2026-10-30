@@ -4,6 +4,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { brand } from '@/constants/theme';
+import { probeFeatures } from '@/store/features';
 import { AppNavigation } from '@/navigation';
 import { hydrate } from '@/services/tokenStore';
 import { useAuthStore } from '@/store/auth';
@@ -48,7 +49,10 @@ export default function App(): React.JSX.Element {
 
   useEffect(() => {
     let cancelled = false;
-    void Promise.all([hydrate(), hydrateAppearance()]).finally(() => {
+    // The F&O probe rides in the same gate so the tab bar's first frame is
+    // already right; it is capped at 3 s so a slow network cannot hold launch.
+    const probe = Promise.race([probeFeatures(), new Promise<void>((r) => { setTimeout(r, 3000); })]);
+    void Promise.all([hydrate(), hydrateAppearance(), probe]).finally(() => {
       if (cancelled) return;
       setReady(true);
       void useAuthStore.getState().bootstrap();

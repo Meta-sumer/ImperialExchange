@@ -22,7 +22,7 @@ export function PublicHeader({ navigation, back }: NativeStackHeaderProps): Reac
         ) : null}
         <Pressable
           accessibilityRole="link"
-          accessibilityLabel="EquityHub — home"
+          accessibilityLabel="Imperial Exchange — home"
           onPress={() => navigation.navigate('Landing', undefined, { pop: true })}
         >
           <BrandLogo variant="full" height={28} tile />

@@ -84,7 +84,7 @@ export function AppHeader({ navigation, route, back }: NativeStackHeaderProps): 
         ) : null}
         <Pressable
           accessibilityRole="link"
-          accessibilityLabel="EquityHub"
+          accessibilityLabel="Imperial Exchange"
           onPress={() => navigation.dispatch(CommonActions.navigate('Explore', undefined, { pop: true }))}
         >
           <BrandLogo variant="icon" height={38} tile={t.isDark} />

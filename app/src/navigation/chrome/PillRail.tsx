@@ -4,6 +4,7 @@ import { Pressable, ScrollView, StyleSheet, View, type LayoutRectangle } from 'r
 
 import { AppText, Badge } from '@/components/ui';
 import { useTheme } from '@/theme';
+import { useFnoAvailable } from '@/store/features';
 
 import { navigationRef } from '../navigationRef';
 import { isNavActive, RAIL_NAV, type NavItem } from './primaryNav';
@@ -21,7 +22,8 @@ import { isNavActive, RAIL_NAV, type NavItem } from './primaryNav';
  */
 export function PillRail({ current }: { current: { name: string; params?: object } }): React.JSX.Element {
   const t = useTheme();
-  const items = RAIL_NAV;
+  const fno = useFnoAvailable();
+  const items = fno ? RAIL_NAV : RAIL_NAV.filter((i) => i.route.name !== 'Options');
   const scroller = useRef<ScrollView>(null);
   const frames = useRef<Partial<Record<string, LayoutRectangle>>>({});
   const activeKey = items.find((i) => isNavActive(i, current))?.key ?? null;

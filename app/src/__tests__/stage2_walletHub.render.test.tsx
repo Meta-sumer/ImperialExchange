@@ -214,6 +214,8 @@ const forAccount = <T extends { accountId: string }>(c: InternalAxiosRequestConf
 };
 
 const SERVER: Record<string, (c: InternalAxiosRequestConfig) => unknown> = {
+  // Credit transactions (deposits / withdrawals on credit): none in these fixtures.
+  '/wallet/credit': () => ({ items: [], summary: { outstandingReceivable: '0', outstandingPayable: '0', pendingCount: 0 } }),
   // Per-account reads (`?accountId=`) feed the account figures (fetchAccountMetrics).
   '/wallet/balances': (c) => forAccount(c, [
     { _id: 'w1', accountId: 'acc1', currency: 'INR', balance: '1000', locked: '200', free: '800' },
@@ -665,7 +667,7 @@ describe('Transaction History', () => {
     await press(byLabel(r, 'Accounts: Swing'));
     await press(byText(r, 'All Accounts'));
 
-    await press(byLabel(r, 'Status: All Selected (7)'));
+    await press(byLabel(r, 'Status: All Selected (9)'));
     await press(byLabel(r, 'Select All'));
     expect(text(r)).toContain('No transactions match your filters');
     await press(byLabel(r, 'PENDING'));

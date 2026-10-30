@@ -153,7 +153,7 @@ function PushPreference(): React.JSX.Element {
   } else if (status === 'unavailable') {
     detail = 'Not available in this build of the app.';
   } else if (status === 'denied' || !canAskAgain) {
-    detail = 'Off. Allow notifications for EquityHub in your phone’s Settings.';
+    detail = 'Off. Allow notifications for Imperial Exchange in your phone’s Settings.';
     action = <Button title="Open Settings" variant="secondary" size="sm" onPress={() => { void openPushSettings(); }} />;
   } else if (status === 'undetermined') {
     detail = 'Off.';

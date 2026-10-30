@@ -189,7 +189,7 @@ export function LandingScreen({ navigation }: AppScreenProps<'Landing'>): React.
         <Hero layout={layout} onRegister={register} onLogin={login} />
         <TrustBadges layout={layout} />
         <View onLayout={anchor('why')}>
-          <Section layout={layout} eyebrow="Why Choose Us" title="Why Choose EquityHub?" sub="Everything you need to trade with confidence — speed, security and total transparency.">
+          <Section layout={layout} eyebrow="Why Choose Us" title="Why Choose Imperial Exchange?" sub="Everything you need to trade with confidence — speed, security and total transparency.">
             {WHY.map((w) => (
               <Card key={w.title} layout={layout} padding={20}>
                 <View style={styles.mb12}><GradTile icon={w.icon} id={`why-${w.icon}`} /></View>
@@ -210,7 +210,7 @@ export function LandingScreen({ navigation }: AppScreenProps<'Landing'>): React.
             ))}
           </Section>
         </View>
-        <Section layout={layout} eyebrow="For Everyone" title="Built for Every Trader" sub="Whether you're just starting or a pro, EquityHub gives you the tools, flexibility and freedom to trade your way.">
+        <Section layout={layout} eyebrow="For Everyone" title="Built for Every Trader" sub="Whether you're just starting or a pro, Imperial Exchange gives you the tools, flexibility and freedom to trade your way.">
           {BUILT.map((b) => (
             <Card key={b.title} layout={layout} padding={24} centered>
               <View style={styles.mb16}><GradTile icon={b.icon} size={56} radius={16} id={`built-${b.icon}`} /></View>
@@ -374,25 +374,25 @@ function Hero({ layout, onRegister, onLogin }: { layout: Layout; onRegister: () 
     <View style={layout.lg ? styles.half : null}>
       <View style={[styles.badge, { backgroundColor: 'rgba(29,78,216,0.10)', borderColor: 'rgba(29,78,216,0.25)' }]}>
         <AppText variant="smallStrong" color={dark ? t.colors.primaryText : '#1E40AF'}>
-          ● Secure &amp; safe · NSE · BSE · MCX · Low fees on trades
+          ● Secure &amp; safe · NSE &amp; BSE markets · Low fees on trades
         </AppText>
       </View>
       <AppText style={[styles.h1, layout.sm ? styles.h1Sm : null]} accessibilityRole="header">
-        {'Trade '}
-        <GradientText text="Free" from={BLUE_GRAD[0]} to={BLUE_GRAD[1]} />
-        {' Forever'}
+        {'Trade. '}
+        <GradientText text="Invest." from={BLUE_GRAD[0]} to={BLUE_GRAD[1]} />
+        {' Grow.'}
       </AppText>
       <View style={[styles.subline, styles.mt8]}>
         <AppText style={[styles.sublineText, layout.sm ? styles.sublineSm : null]}>
-          <GradientText text="Always Secure" from={BLUE_GRAD[0]} to={BLUE_GRAD[1]} />
+          <GradientText text="Indian Markets" from={BLUE_GRAD[0]} to={BLUE_GRAD[1]} />
         </AppText>
         <View style={[styles.heroShield, layout.sm ? styles.heroShieldSm : null]}><FeatureIcon name="shield" color="#FFFFFF" /></View>
         <AppText style={[styles.sublineText, layout.sm ? styles.sublineSm : null]}>
-          <GradientText text="Always Free" from="#10B981" to="#14B8A6" />
+          <GradientText text="Always Secure" from="#10B981" to="#14B8A6" />
         </AppText>
       </View>
       <AppText style={styles.lead} tone="secondary">
-        Your gateway to Indian markets — NSE &amp; BSE stocks, index and stock F&amp;O, and MCX commodities with ultra-low commissions. With live prices, option chains and round-the-clock support, you can learn, practice and trade — simple, secure and built for traders of all levels.
+        Your gateway to NSE and BSE stocks and indices at ultra-low commissions. Trade live through market hours, practice on a demo account and manage everything from one secure platform built for traders of all levels.
       </AppText>
       <View style={[styles.ctaRow, styles.mt32]}>
         <Pressable accessibilityRole="button" onPress={onRegister} style={({ pressed }) => [styles.ctaPrimary, t.shadow.elevated, { opacity: pressed ? 0.92 : 1 }]}>
@@ -459,11 +459,11 @@ function HeroVisual({ wide }: { wide: boolean }): React.JSX.Element {
             </View>
             <View>
               <AppText variant="bodyStrong" weight="700">NIFTY 50</AppText>
-              <AppText variant="caption" tone="muted">NSE Index</AppText>
+              <AppText variant="caption" tone="muted">NSE benchmark index</AppText>
             </View>
           </View>
           <View style={styles.alignEnd}>
-            <AppText style={styles.heroPrice} mono>25,870.50</AppText>
+            <AppText style={styles.heroPrice} mono>24,118.50</AppText>
             <AppText variant="caption" weight="700" color={t.colors.bull}>+0.62%</AppText>
           </View>
         </View>
@@ -478,7 +478,7 @@ function HeroVisual({ wide }: { wide: boolean }): React.JSX.Element {
           <Animated.View style={[styles.floatPnl, { transform: [{ translateY: floatA }] }]}>
             <View style={[styles.card, styles.floatCard, t.shadow.elevated, { backgroundColor: t.colors.bgCard, borderColor: t.colors.borderDark }]}>
               <AppText variant="micro" weight="600" tone="muted" style={styles.upper}>Today&apos;s P&amp;L</AppText>
-              <AppText style={styles.floatPnlValue} color={t.colors.bull}>+₹12,847.20</AppText>
+              <AppText style={styles.floatPnlValue} color={t.colors.bull}>+₹12,840.00</AppText>
             </View>
           </Animated.View>
           <Animated.View style={[styles.floatFill, { transform: [{ translateY: floatB }] }]}>
@@ -486,7 +486,7 @@ function HeroVisual({ wide }: { wide: boolean }): React.JSX.Element {
               <View style={[styles.fillCheck, { backgroundColor: t.alpha(t.colors.bull, 0.15) }]}><CheckDot color={t.colors.bull} /></View>
               <View>
                 <AppText variant="small" weight="700">Order filled</AppText>
-                <AppText variant="micro" tone="muted">NIFTY FUT · 2 lots · market</AppText>
+                <AppText variant="micro" tone="muted">10 × RELIANCE · market</AppText>
               </View>
             </View>
           </Animated.View>
@@ -662,14 +662,14 @@ function Platform({ layout, onRegister }: { layout: Layout; onRegister: () => vo
         <View style={[styles.laptop, t.shadow.elevated]}>
           <View style={styles.chrome}>
             {['#FF5F57', '#FEBC2E', '#28C840'].map((c) => <View key={c} style={[styles.termDot, { backgroundColor: c }]} />)}
-            <Text style={styles.chromeLabel}>EquityHub Terminal</Text>
+            <Text style={styles.chromeLabel}>Imperial Exchange Terminal</Text>
           </View>
           <View style={styles.termBody}>
             <View style={[styles.termPanel, styles.flex]}>
               <View style={[styles.row, styles.between, styles.gap4]}>
                 <View style={styles.termQuote}>
                   <Text style={styles.termSym}>NIFTY</Text>
-                  <Text style={styles.termPx}>25,870.50</Text>
+                  <Text style={styles.termPx}>24,118.50</Text>
                   <Text style={styles.termChg}>+0.62%</Text>
                 </View>
                 {layout.sm ? (
@@ -807,7 +807,7 @@ function Steps({ layout }: { layout: Layout }): React.JSX.Element {
   );
 }
 
-/* ── Why Traders Love EquityHub ──────────────────────────────────────── */
+/* ── Why Traders Love Imperial Exchange ──────────────────────────────────────── */
 
 function Testimonials({ layout }: { layout: Layout }): React.JSX.Element {
   const t = useTheme();
@@ -820,8 +820,8 @@ function Testimonials({ layout }: { layout: Layout }): React.JSX.Element {
           <Heart color="#4F46E5" />
           <AppText variant="smallStrong" weight="700" color="#4F46E5">Loved by thousands of traders</AppText>
         </View>
-        <AppText style={[styles.h2Big, layout.sm ? styles.h2BigSm : null]} align="center" accessibilityRole="header">Why Traders Love EquityHub</AppText>
-        <AppText style={styles.sub} tone="secondary" align="center">Join thousands of traders who trust EquityHub every day.</AppText>
+        <AppText style={[styles.h2Big, layout.sm ? styles.h2BigSm : null]} align="center" accessibilityRole="header">Why Traders Love Imperial Exchange</AppText>
+        <AppText style={styles.sub} tone="secondary" align="center">Join thousands of traders who trust Imperial Exchange every day.</AppText>
       </View>
       <View style={[styles.grid, styles.gridTestimonials]}>
         {TESTIMONIALS.map((p, i) => {
@@ -875,7 +875,7 @@ function FinalCta({ layout, onRegister }: { layout: Layout; onRegister: () => vo
             Ready To Start Your Trading Journey?
           </AppText>
           <AppText style={[styles.finalSub, layout.sm ? styles.finalSubSm : null]} color="rgba(255,255,255,0.88)" align={layout.md ? 'left' : 'center'}>
-            Trade Smart. Invest Better. Grow with EquityHub.
+            Trade. Invest. Grow. Imperial Exchange.
           </AppText>
         </View>
         <Pressable accessibilityRole="button" onPress={onRegister} style={({ pressed }) => [styles.finalBtn, { opacity: pressed ? 0.92 : 1 }]}>

@@ -11,6 +11,7 @@ import {
   closeAllPositions,
   closePosition as apiClosePosition,
   fetchOrderHistory,
+  fetchPositionHistory,
   isBenignOrderModifyError,
   modifyOrder,
   modifyPosition,
@@ -21,7 +22,7 @@ import {
 import { walletApi } from '@/api/wallet.api';
 import { INDICATOR_LIST, activeIndicatorKeys, type ChartTimeframe, type ChartType, type IndicatorMap } from '@/charts/chartCatalog';
 import { cellFrame, getLayout, type SyncKey } from '@/charts/chartLayouts';
-import { PREVIEW_ID, type OrderPreviewInput, type PendingPreviewInput } from '@/charts/chartOverlays';
+import { buildTradeMarkers, PREVIEW_ID, type OrderPreviewInput, type PendingPreviewInput } from '@/charts/chartOverlays';
 import { PriceChart, type PillAction } from '@/charts/PriceChart';
 import { ChartToolbar } from '@/charts/components/ChartToolbar';
 import { IndicatorsSheet } from '@/charts/components/IndicatorSheets';
@@ -273,6 +274,17 @@ function TradeTerminal({ navigation, route }: AppScreenProps<'Trade'>): React.JS
   const figures = useMemo(() => equityFigures(walletFree, positionsLive), [walletFree, positionsLive]);
   const chartPositions = useMemo(() => chartPositionRows(positionsLive), [positionsLive]);
   const chartOrders = useMemo(() => chartOrderRows(book.openOrders), [book.openOrders]);
+  // The symbol's closed trades, for the chart's entry / exit markers (the web's
+  // Trade.jsx closedTrades fetch by symbol). Re-read when a position closes.
+  const [closedForChart, setClosedForChart] = useState<Awaited<ReturnType<typeof fetchPositionHistory>>['items']>([]);
+  const openCount = book.positions.length;
+  useEffect(() => {
+    let on = true;
+    fetchPositionHistory({ symbol, accountId: account?.id, limit: 200 })
+      .then((r) => { if (on) setClosedForChart(r.items); })
+      .catch(() => { if (on) setClosedForChart([]); });
+    return () => { on = false; };
+  }, [symbol, account?.id, openCount]);
 
   /* ── the active symbol's chart view, remembered per instrument ── */
   const maps = useTradeViewStore((s) => s.maps);
@@ -572,6 +584,11 @@ function TradeTerminal({ navigation, route }: AppScreenProps<'Trade'>): React.JS
 
   /* ── the chart area ── */
   const show = useMemo(() => ({ positions: showOnChart.positions, tpsl: showOnChart.tpsl, stopLimit: showOnChart.stopLimit, orderPreview: showOnChart.orderPreview }), [showOnChart]);
+  // Trade markers follow the Positions toggle, as the web's do.
+  const tradeMarkers = useMemo(
+    () => (show.positions ? buildTradeMarkers(chartPositions, closedForChart, instrument?.pricePrecision ?? 2) : []),
+    [show.positions, chartPositions, closedForChart, instrument?.pricePrecision],
+  );
   const markers = useMemo(() => ({ signals: showOnChart.signals, hmr: showOnChart.hmr, calendar: showOnChart.calendar, calendarFilters }), [showOnChart, calendarFilters]);
   const pendingPreviewIn: PendingPreviewInput | null = pendingPreview ? { side: pendingPreview.side, price: pendingPreview.price } : null;
   const orderPreviewIn: OrderPreviewInput | null = orderPreview ? { side: orderPreview.side, mode: orderPreview.mode, entry: orderPreview.entry, tp: orderPreview.tp, sl: orderPreview.sl } : null;
@@ -601,6 +618,7 @@ function TradeTerminal({ navigation, route }: AppScreenProps<'Trade'>): React.JS
       indicators={view.indicators}
       onIndicatorsChange={(next) => updateView({ indicators: next })}
       positions={chartPositions}
+      tradeMarkers={tradeMarkers}
       orders={chartOrders}
       pendingPreview={show.stopLimit ? pendingPreviewIn : null}
       orderPreview={orderPreviewIn}

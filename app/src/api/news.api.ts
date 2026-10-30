@@ -84,10 +84,12 @@ interface MarketNewsState {
   /** null until the first answer — the web's "Loading news…". */
   items: MarketNewsItem[] | null;
   at: number;
+  /** The backend has no market-news route (404): the sections render nothing. */
+  unavailable: boolean;
 }
 
 /** One feed for the whole app, as MarketNews.jsx keeps one module cache. */
-export const useMarketNewsStore = create<MarketNewsState>(() => ({ items: null, at: 0 }));
+export const useMarketNewsStore = create<MarketNewsState>(() => ({ items: null, at: 0, unavailable: false }));
 
 let newsInflight: Promise<MarketNewsItem[]> | null = null;
 
@@ -98,6 +100,7 @@ let newsInflight: Promise<MarketNewsItem[]> | null = null;
  */
 export const loadMarketNews = (force = false): Promise<MarketNewsItem[]> => {
   const s = useMarketNewsStore.getState();
+  if (s.unavailable) return Promise.resolve([]);
   if (!force && s.items && Date.now() - s.at < MARKET_NEWS_REFRESH_MS) return Promise.resolve(s.items);
   if (newsInflight) return newsInflight;
   newsInflight = fetchMarketNews()
@@ -105,7 +108,14 @@ export const loadMarketNews = (force = false): Promise<MarketNewsItem[]> => {
       useMarketNewsStore.setState({ items, at: Date.now() });
       return items;
     })
-    .catch(() => {
+    .catch((err: unknown) => {
+      const status = (err as { response?: { status?: number } } | null)?.response?.status;
+      if (status === 404) {
+        // Not a feed outage — this backend never had the route. Remember it
+        // for the session so the sections hide and nothing re-polls.
+        useMarketNewsStore.setState({ items: [], at: Date.now(), unavailable: true });
+        return [];
+      }
       const held = useMarketNewsStore.getState().items ?? [];
       useMarketNewsStore.setState({ items: held });
       return held;

@@ -216,7 +216,7 @@ export const decodeWatchlist = (code: string): SharedWatchlist =>
  */
 export const watchlistShareBase = (): string => {
   if (WEB_ORIGIN) return `${WEB_ORIGIN}/watchlist`;
-  const scheme = typeof Constants.expoConfig?.scheme === 'string' ? Constants.expoConfig.scheme : 'equityhub';
+  const scheme = typeof Constants.expoConfig?.scheme === 'string' ? Constants.expoConfig.scheme : 'imperialexchange';
   return `${scheme}://watchlist`;
 };
 

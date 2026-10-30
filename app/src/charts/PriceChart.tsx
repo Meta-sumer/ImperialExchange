@@ -33,6 +33,7 @@ import {
   type OverlayInput,
   type PendingPreviewInput,
   type PillKind,
+  type TradeMarkerInput,
 } from './chartOverlays';
 import {
   hydrateChartPrefs,
@@ -97,6 +98,8 @@ export interface PriceChartProps {
   orderPreview?: OrderPreviewInput | null;
   show?: OverlayInput['show'];
   markers?: ChartMarkersConfig;
+  /** Entry / exit markers for the symbol's trades (buildTradeMarkers). */
+  tradeMarkers?: readonly TradeMarkerInput[];
   timeZone?: string;
   quote?: { bid: number | null; ask: number | null; last: number | null } | null;
   onPillAction?: (a: PillAction) => void;
@@ -123,6 +126,7 @@ export interface PriceChartProps {
 }
 
 const NO_SHOW: OverlayInput['show'] = { positions: false, tpsl: false, stopLimit: false, orderPreview: false };
+const NO_TRADES: readonly TradeMarkerInput[] = [];
 const NO_MARKERS: ChartMarkersConfig = { signals: false, hmr: false, calendar: false, calendarFilters: { high: true, medium: true, low: false, lowest: false } };
 
 const useAppActive = (): boolean => {
@@ -141,7 +145,7 @@ const pillSignature = (pills: ReturnType<typeof buildPills>): string =>
 export function PriceChart(props: PriceChartProps): React.JSX.Element {
   const {
     symbol, timeframe, onTimeframeChange, instrument, chartType, onChartTypeChange, indicators, onIndicatorsChange,
-    positions = [], orders = [], pendingPreview = null, orderPreview = null, show = NO_SHOW, markers = NO_MARKERS,
+    positions = [], orders = [], pendingPreview = null, orderPreview = null, show = NO_SHOW, markers = NO_MARKERS, tradeMarkers = NO_TRADES,
     timeZone = 'local', quote = null, onPillAction, onPickSymbol, hideHeader = false, hideDrawingToolbar = false,
     sync, onCrosshair, onRange, crosshairIn, rangeIn, paused = false, style, testID,
   } = props;
@@ -384,8 +388,8 @@ export function PriceChart(props: PriceChartProps): React.JSX.Element {
     [markers.calendar, instrument, calEvents, ccys, markers.calendarFilters, calClock],
   );
   useEffect(() => {
-    if (ready) send({ type: 'overlays', signals: markers.signals, hmr: markers.hmr, calendar: calMarkers, nextEvent });
-  }, [ready, markers.signals, markers.hmr, calMarkers, nextEvent, send]);
+    if (ready) send({ type: 'overlays', signals: markers.signals, hmr: markers.hmr, calendar: calMarkers, nextEvent, trades: [...tradeMarkers] });
+  }, [ready, markers.signals, markers.hmr, calMarkers, nextEvent, tradeMarkers, send]);
 
   /* ── multi-chart sync in ── */
   useEffect(() => { if (ready && crosshairIn) send({ type: 'crosshair', time: crosshairIn.time, price: crosshairIn.price }); }, [ready, crosshairIn, send]);

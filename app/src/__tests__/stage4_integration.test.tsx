@@ -310,7 +310,7 @@ describe('Landing', () => {
     const text = textOf(r.toJSON());
     expect(text).toContain('Forever');
     expect(text).toContain('Start trading free →');
-    expect(text).toContain('Why Choose EquityHub?');
+    expect(text).toContain('Why Choose Imperial Exchange?');
     expect(text).toContain('How It Works');
     await pressText(r, 'Start trading free →');
     expect(textOf(r.toJSON())).toContain('route:Register');

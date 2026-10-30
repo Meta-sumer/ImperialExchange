@@ -498,11 +498,25 @@ export function MarketCluster({ name }: { name: string }): React.JSX.Element {
           <View style={styles.neg12}><Coin from="#FB7185" to="#E11D48" label="BSE" fontSize={11} id="bse" /></View>
         </View>
       );
-    case 'Stock Options':
+    case 'Large Caps':
       return (
         <View style={styles.overlap}>
-          <Coin from="#34D399" to="#059669" label="CE" fontSize={13} id="ce" />
-          <View style={styles.neg12}><Coin from="#F87171" to="#DC2626" label="PE" fontSize={13} id="pe" /></View>
+          <Coin from="#34D399" to="#059669" label="₹" fontSize={14} id="lc1" />
+          <View style={styles.neg12}><Coin from="#60A5FA" to="#2563EB" label="50" fontSize={12} id="lc2" /></View>
+        </View>
+      );
+    case 'Banking':
+      return (
+        <View style={styles.overlap}>
+          <Coin from="#60A5FA" to="#1E40AF" label="HDFC" fontSize={9} id="bk1" />
+          <View style={styles.neg12}><Coin from="#FDBA74" to="#EA580C" label="ICICI" fontSize={9} id="bk2" /></View>
+        </View>
+      );
+    case 'IT & Tech':
+      return (
+        <View style={styles.overlap}>
+          <Coin from="#94A3B8" to="#111827" label="TCS" fontSize={10} id="it1" />
+          <View style={styles.neg12}><Coin from="#7DD3FC" to="#0284C7" label="INFY" fontSize={9} id="it2" /></View>
         </View>
       );
     case 'Commodities':
@@ -512,7 +526,7 @@ export function MarketCluster({ name }: { name: string }): React.JSX.Element {
           <OilBarrel />
         </View>
       );
-    case 'Index F&O':
+    case 'Indices':
     default:
       return <IndexChart />;
   }

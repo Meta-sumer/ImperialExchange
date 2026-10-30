@@ -57,7 +57,7 @@ export interface HtmlContentProps {
 
 /** Origin for a `/uploads/…` image: the web app's, else the API host's. */
 const MEDIA_ORIGIN = WEB_ORIGIN ?? API_URL.replace(/\/api\/?$/, '');
-const APP_SCHEME = typeof Constants.expoConfig?.scheme === 'string' ? Constants.expoConfig.scheme : 'equityhub';
+const APP_SCHEME = typeof Constants.expoConfig?.scheme === 'string' ? Constants.expoConfig.scheme : 'imperialexchange';
 
 interface Ctx {
   t: AppTheme;

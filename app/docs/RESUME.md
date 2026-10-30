@@ -1,4 +1,4 @@
-# EquityHub — mobile port, resume notes
+# Imperial Exchange (was EquityHub) — mobile port, resume notes
 
 Stage 1 finished and verified 2026-09-29. Stages 2–5 finished 2026-09-30:
 **all 35 routes are ported.** Nothing here is committed. Nothing has run on
@@ -10,10 +10,10 @@ A **new React Native app** that is a feature-for-feature mobile port of the
 existing web client at `client/`. It is a separate app from `mobile/`, which
 is untouched and stays untouched.
 
-- **App name:** EquityHub (from `client/index.html` `<title>`)
-- **Directory:** `advance-ai-trader/`
-- **Bundle id / package:** `com.equityhub.app`
-- **Expo slug:** `advance-ai-trader`, scheme `equityhub://`
+- **App name:** Imperial Exchange (rebranded from EquityHub on 2026-10-30; API https://imperialexchange.in)
+- **Directory:** `app/` (in the ImperialExchange repo)
+- **Bundle id / package:** `com.imperialexchange.app`
+- **Expo slug:** `imperialexchange`, scheme `imperialexchange://`; release key in `~/imperialexchange-app-signing/`
 
 Read before touching anything: `docs/PORT-RULINGS.md` (one answer per
 contested number) and `docs/CONTRACT.md` (how a screen is ported: where files

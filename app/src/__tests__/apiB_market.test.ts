@@ -384,20 +384,20 @@ describe('search sheet — EquityHub SearchModal.jsx', () => {
     expect(isOptionLikeQuery('')).toBe(false);
   });
 
-  it('tabs are Indian market segments, and an MCX future is under Futures AND Commodities', () => {
+  it('tabs are Stocks / Indices / MCX (no Futures tab — F&O is not offered); an unknown tab key matches everything', () => {
     const fut = rowsIn[3]!;
-    expect(inSearchCategory(fut, 'FUT')).toBe(true);
+    expect(inSearchCategory(fut, 'FUT')).toBe(true); // no such tab: nothing to exclude
     expect(inSearchCategory(fut, 'COMMODITY')).toBe(true);
     expect(inSearchCategory(fut, 'STOCK')).toBe(false);
     expect(inSearchCategory(rowsIn[2]!, 'INDEX')).toBe(true);
     expect(inSearchCategory(rowsIn[2]!, 'ALL')).toBe(true);
-    expect(catalogCounts(rowsIn, ['TCS', 'GONE'])).toEqual({ ALL: 4, INDEX: 1, STOCK: 2, FUT: 1, COMMODITY: 1, RECOMMENDED: 1 });
+    expect(catalogCounts(rowsIn, ['TCS', 'GONE'])).toEqual({ ALL: 4, INDEX: 1, STOCK: 2, COMMODITY: 1, RECOMMENDED: 1 });
   });
 
   it('recommended keeps the admin order; other tabs are alphabetical by name', () => {
     expect(filterCatalog(rowsIn, { category: 'RECOMMENDED', recommended: ['TCS', 'AAPL'] }).map((r) => r.symbol)).toEqual(['TCS', 'AAPL']);
     expect(filterCatalog(rowsIn, { category: 'ALL' }).map((r) => r.symbol)).toEqual(['AAPL', 'CRUDEOIL19NOV26FUT', 'NIFTY', 'TCS']);
-    expect(filterCatalog(rowsIn, { category: 'FUT' }).map((r) => r.symbol)).toEqual(['CRUDEOIL19NOV26FUT']);
+    expect(filterCatalog(rowsIn, { category: 'COMMODITY' }).map((r) => r.symbol)).toEqual(['CRUDEOIL19NOV26FUT']);
     expect(filterCatalog(rowsIn, { category: 'ALL', query: 'tata' }).map((r) => r.symbol)).toEqual(['TCS']);
   });
 

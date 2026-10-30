@@ -97,6 +97,7 @@
     quote: { bid: null, ask: null, last: null },
     flags: { signals: false, hmr: false },
     calEvents: [],
+    tradeMarkers: [],
     nextEvent: null,
     measure: null,
     logoUrl: '',
@@ -731,6 +732,25 @@
         }
         var tint = ev.impact === 'high' ? '#DC2626' : ev.impact === 'medium' ? '#3B82F6' : '#9CA3AF';
         out.push({ time: nearest, position: 'aboveBar', color: tint, shape: 'square', text: ev.code || 'EVT' });
+      });
+    }
+    /* trade markers — entries / exits at their own time (PriceChart.jsx trade
+       markers). Snapped to the nearest loaded candle; a trade older than the
+       loaded range is dropped, never stacked on the first bar. */
+    if (S.tradeMarkers && S.tradeMarkers.length) {
+      var ft = Number(cs[0].time);
+      var lt = Number(cs[cs.length - 1].time);
+      var tfSec = cs.length > 1 ? Math.max(1, Number(cs[1].time) - Number(cs[0].time)) : 60;
+      S.tradeMarkers.forEach(function (tm) {
+        var sec = Math.floor(Number(tm.ts) / 1000);
+        if (!Number.isFinite(sec) || sec < ft - tfSec || sec > lt + tfSec) return;
+        var near = cs[0].time;
+        var bestD = Math.abs(Number(cs[0].time) - sec);
+        for (var q = 1; q < cs.length; q++) {
+          var dd = Math.abs(Number(cs[q].time) - sec);
+          if (dd < bestD) { bestD = dd; near = cs[q].time; }
+        }
+        out.push({ time: near, position: tm.position, color: tm.color, shape: tm.shape, text: tm.text });
       });
     }
     return out;
@@ -1400,6 +1420,7 @@
     overlays: function (m) {
       S.flags = { signals: !!m.signals, hmr: !!m.hmr };
       S.calEvents = Array.isArray(m.calendar) ? m.calendar : [];
+      S.tradeMarkers = Array.isArray(m.trades) ? m.trades : [];
       S.nextEvent = m.nextEvent || null;
       applyMarkers();
       renderNextEvent();

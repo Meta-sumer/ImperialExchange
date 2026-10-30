@@ -26,6 +26,7 @@ import { OrderSheet } from '@/components/trade/OrderSheet';
 import { AppText, AssetIcon, EmptyState, ErrorView, Screen, Tabs } from '@/components/ui';
 import type { AppScreenProps } from '@/navigation/types';
 import { makeStyles, useTheme } from '@/theme';
+import { useFnoAvailable } from '@/store/features';
 import {
   STOCK_TABS,
   changeLabel,
@@ -62,6 +63,7 @@ import {
  */
 export function StockDetailScreen({ navigation, route }: AppScreenProps<'StockDetail'>): React.JSX.Element {
   const t = useTheme();
+  const fno = useFnoAvailable();
   const s = useStyles();
   const insets = useSafeAreaInsets();
   const focused = useIsFocused();
@@ -138,9 +140,11 @@ export function StockDetailScreen({ navigation, route }: AppScreenProps<'StockDe
             </View>
           </View>
           <View style={s.headActions}>
-            <RoundIconButton accessibilityLabel="Options chain" onPress={() => navigation.navigate('Options', { underlying: symbol })}>
-              <StockIcon name="link" color={t.colors.textSecondary} />
-            </RoundIconButton>
+            {fno ? (
+              <RoundIconButton accessibilityLabel="Options chain" onPress={() => navigation.navigate('Options', { underlying: symbol })}>
+                <StockIcon name="link" color={t.colors.textSecondary} />
+              </RoundIconButton>
+            ) : null}
             <RoundIconButton accessibilityLabel="Set a price alert" onPress={() => navigation.navigate('Alerts', { symbol })}>
               <StockIcon name="bell" color={t.colors.textSecondary} />
             </RoundIconButton>

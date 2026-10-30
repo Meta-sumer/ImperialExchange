@@ -113,10 +113,9 @@ export interface MarketSegment {
  * under Futures, and MCX contracts also show under Commodities.
  */
 export const MARKET_SEGMENTS: readonly MarketSegment[] = [
-  { key: 'INDEX', label: 'Indices', match: (r) => catOf(r) === 'INDEX' && !isDerivativeRow(r) },
   { key: 'STOCK', label: 'Stocks', match: (r) => catOf(r) === 'STOCK' && !isDerivativeRow(r) },
-  { key: 'FUT', label: 'Futures', match: (r) => segOf(r) === 'FUT' },
-  { key: 'COMMODITY', label: 'Commodities', match: (r) => String(r.exchange || '').toUpperCase() === 'MCX' || catOf(r) === 'COMMODITY' },
+  { key: 'INDEX', label: 'Indices', match: (r) => catOf(r) === 'INDEX' && !isDerivativeRow(r) },
+  { key: 'COMMODITY', label: 'MCX', match: (r) => String(r.exchange || '').toUpperCase() === 'MCX' || catOf(r) === 'COMMODITY' },
 ];
 
 export const SEGMENT_BY_KEY: ReadonlyMap<string, MarketSegment> = new Map(MARKET_SEGMENTS.map((s) => [s.key, s]));
@@ -240,7 +239,7 @@ export const livePositionRow = (
 export const chartPositionRows = (rows: readonly LivePositionRow[]): ChartPositionRow[] =>
   rows.map((p) => ({
     id: p.id, symbol: p.symbol, side: p.side, quantity: p.quantity, entryPrice: p.entryPrice,
-    stopLoss: p.stopLoss ?? null, takeProfit: p.takeProfit ?? null, pnl: p.pnlLive,
+    stopLoss: p.stopLoss ?? null, takeProfit: p.takeProfit ?? null, pnl: p.pnlLive, openedAt: p.openedAt ?? null,
   }));
 
 export const chartOrderRows = (orders: readonly Order[]): ChartOrderRow[] =>

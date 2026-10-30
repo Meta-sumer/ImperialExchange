@@ -155,6 +155,11 @@ export function PayToCard({ rail, label }: { rail: PaymentRail | null; label: st
           </View>
         ) : null}
       </View>
+      {rail.assignedBank ? (
+        <AppText variant="caption" tone="secondary" style={{ marginBottom: 8 }} testID="pay-to-assigned">
+          {`Your assigned bank account: ${rail.assignedBank.label}${rail.assignedBank.bankName ? ` · ${rail.assignedBank.bankName}` : ''}`}
+        </AppText>
+      ) : null}
       {rail.rows.map((r) => (
         <View key={`${r.label}:${r.value}`} style={styles.payRow}>
           <AppText variant="small" tone="muted">{r.label}</AppText>

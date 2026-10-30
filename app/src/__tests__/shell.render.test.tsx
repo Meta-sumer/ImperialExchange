@@ -263,7 +263,7 @@ describe('AppNavigation', () => {
 
   it('Trade owns the viewport: no header, no rail, no tabs', async () => {
     signIn();
-    (Linking.getInitialURL as jest.Mock).mockResolvedValue('equityhub://trade');
+    (Linking.getInitialURL as jest.Mock).mockResolvedValue('imperialexchange://trade');
     const r = await mount();
     expect(textOf(r.toJSON())).toContain('/trade');
     // Explore is mounted under it (a deep link opens with home underneath):
@@ -296,7 +296,7 @@ describe('AppNavigation', () => {
 
   it('opens a deep link on its screen, with home underneath', async () => {
     signIn();
-    (Linking.getInitialURL as jest.Mock).mockResolvedValue('equityhub://stock/RELIANCE');
+    (Linking.getInitialURL as jest.Mock).mockResolvedValue('imperialexchange://stock/RELIANCE');
     const r = await mount();
     const text = textOf(r.toJSON());
     expect(text).toContain('Stock Detail');
@@ -306,7 +306,7 @@ describe('AppNavigation', () => {
 
   it('parks a protected link behind Login, then takes it after sign-in', async () => {
     useAuthStore.setState({ status: 'unauthenticated' } as never);
-    (Linking.getInitialURL as jest.Mock).mockResolvedValue('equityhub://wallet?action=deposit');
+    (Linking.getInitialURL as jest.Mock).mockResolvedValue('imperialexchange://wallet?action=deposit');
     const r = await mount();
     expect(textOf(r.toJSON())).toContain('/login');
     await act(async () => { signIn(); });

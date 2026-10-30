@@ -11,7 +11,7 @@ import { WalletGlyph, categoryGlyph, type WalletGlyphName } from '@/components/w
 import { useAuthStore } from '@/store/auth';
 import { useTheme } from '@/theme';
 import type { UserAccount } from '@/types/user';
-import type { Deposit, LedgerEntry, WalletTransaction, Withdrawal } from '@/types/wallet';
+import type { CreditTransaction, Deposit, LedgerEntry, WalletTransaction, Withdrawal } from '@/types/wallet';
 import {
   DATE_PRESETS,
   PAGE_SIZES,
@@ -71,6 +71,7 @@ export function HistoryView({
   ledger,
   subscriptions = [],
   bonusTx = [],
+  creditTx = [],
   accounts,
   loading,
 }: {
@@ -81,6 +82,8 @@ export function HistoryView({
   subscriptions?: readonly WalletTransaction[];
   /** The Bonus Wallet's transactions (/bonus-wallet/history). */
   bonusTx?: readonly WalletTransaction[];
+  /** Deposits / withdrawals processed on credit (/wallet/credit). */
+  creditTx?: readonly CreditTransaction[];
   accounts: readonly UserAccount[];
   loading: boolean;
 }): React.JSX.Element {
@@ -140,8 +143,8 @@ export function HistoryView({
   const [pageSize, setPageSize] = useState(15);
 
   const allRows = useMemo(
-    () => buildHistoryRows(deposits, withdrawals, ledger, subscriptions, bonusTx, accounts),
-    [deposits, withdrawals, ledger, subscriptions, bonusTx, accounts],
+    () => buildHistoryRows(deposits, withdrawals, ledger, subscriptions, bonusTx, accounts, creditTx),
+    [deposits, withdrawals, ledger, subscriptions, bonusTx, accounts, creditTx],
   );
   const statusOptions = useMemo(() => statusOptionsOf(allRows), [allRows]);
   const effTypeSel = typeSel ?? TYPE_CATEGORIES;

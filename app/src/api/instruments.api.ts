@@ -280,8 +280,7 @@ export const SEARCH_CATEGORIES: readonly SearchCategory[] = [
   { key: 'ALL', label: 'All' },
   { key: 'INDEX', label: 'Indices', match: (r) => catOf(r) === 'INDEX' && !isDerivativeRow(r) },
   { key: 'STOCK', label: 'Stocks', match: (r) => catOf(r) === 'STOCK' && !isDerivativeRow(r) },
-  { key: 'FUT', label: 'Futures', match: (r) => segOf(r) === 'FUT' },
-  { key: 'COMMODITY', label: 'Commodities', match: (r) => String(r.exchange ?? '').toUpperCase() === 'MCX' || catOf(r) === 'COMMODITY' },
+  { key: 'COMMODITY', label: 'MCX', match: (r) => String(r.exchange ?? '').toUpperCase() === 'MCX' || catOf(r) === 'COMMODITY' },
 ];
 
 const CATEGORY_BY_KEY = new Map(SEARCH_CATEGORIES.map((c) => [c.key, c]));

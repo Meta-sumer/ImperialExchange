@@ -241,7 +241,7 @@ export const classifyLink = (
 ): LinkTarget => {
   const href = String(hrefIn ?? '').trim();
   if (!href || href.startsWith('#')) return { kind: 'ignore' };
-  const scheme = (opts.appScheme ?? 'equityhub').toLowerCase();
+  const scheme = (opts.appScheme ?? 'imperialexchange').toLowerCase();
   if (href.toLowerCase().startsWith(`${scheme}://`)) return { kind: 'internal', path: href };
   if (href.startsWith('//')) return classifyLink(`https:${href}`, opts);
   if (href.startsWith('/')) return { kind: 'internal', path: href };

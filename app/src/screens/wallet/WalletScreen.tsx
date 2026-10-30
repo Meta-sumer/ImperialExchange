@@ -5,6 +5,7 @@ import { errorMessage } from '@/api/client';
 import { subscriptionApi } from '@/api/subscription.api';
 import { fetchPositions } from '@/api/trading.api';
 import { walletApi } from '@/api/wallet.api';
+import { CreditOutstandingCard } from '@/components/wallet/CreditOutstandingCard';
 import { AppText, Button, Screen } from '@/components/ui';
 import { WalletNav } from '@/components/wallet/WalletNav';
 import { WithdrawalMethodsModal } from '@/components/wallet/WithdrawalMethods';
@@ -13,7 +14,7 @@ import { useAuthStore } from '@/store/auth';
 import { useSelectedAccountStore } from '@/store/selectedAccount';
 import { useTheme } from '@/theme';
 import type { Position } from '@/types/trading';
-import type { Deposit, LedgerEntry, WalletBalance, WalletTransaction, Withdrawal } from '@/types/wallet';
+import type { CreditSummary, CreditTransaction, Deposit, LedgerEntry, WalletBalance, WalletTransaction, Withdrawal } from '@/types/wallet';
 import {
   subscribePositions,
   subscribeTickers,
@@ -68,6 +69,9 @@ interface WalletData {
   subscriptions: WalletTransaction[];
   /** The Bonus Wallet's transactions — likewise. */
   bonusTx: WalletTransaction[];
+  /** Deposits / withdrawals processed on credit (/wallet/credit) and what is still owed. */
+  creditTx: CreditTransaction[];
+  creditSummary: CreditSummary | null;
   /** The page's first load has not finished (Wallet.jsx `loading`). */
   loading: boolean;
   /**
@@ -100,6 +104,8 @@ function useWalletData(): WalletData {
   const [positions, setPositions] = useState<Position[]>([]);
   const [subscriptions, setSubscriptions] = useState<WalletTransaction[]>([]);
   const [bonusTx, setBonusTx] = useState<WalletTransaction[]>([]);
+  const [creditTx, setCreditTx] = useState<CreditTransaction[]>([]);
+  const [creditSummary, setCreditSummary] = useState<CreditSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [ready, setReady] = useState<SourceReady>({});
   const [errors, setErrors] = useState<SourceErrors>({});
@@ -150,6 +156,8 @@ function useWalletData(): WalletData {
       // for Transaction History.
       fetchInto('subscriptions', () => subscriptionApi.history({ limit: 100 }), setSubscriptions),
       fetchInto('bonusTx', () => walletApi.bonusHistory(100), setBonusTx),
+      // Credit transactions — rows for Transaction History, totals for the outstanding card.
+      fetchInto('credit', () => walletApi.credit(), (v) => { setCreditTx(v.items); setCreditSummary(v.summary); }),
     ];
     // The accounts live in the app-wide store; it keeps its own error and
     // loading state, which Account Details reads.
@@ -165,7 +173,7 @@ function useWalletData(): WalletData {
     [fetchInto],
   );
 
-  return { balances, deposits, withdrawals, ledger, positions, subscriptions, bonusTx, loading, ready, errors, load, refreshPositions };
+  return { balances, deposits, withdrawals, ledger, positions, subscriptions, bonusTx, creditTx, creditSummary, loading, ready, errors, load, refreshPositions };
 }
 
 /**
@@ -332,6 +340,7 @@ export function WalletScreen({ navigation, route }: AppScreenProps<'Wallet'>): R
             ledger={data.ledger}
             subscriptions={data.subscriptions}
             bonusTx={data.bonusTx}
+            creditTx={data.creditTx}
             accounts={accounts}
             loading={data.loading}
           />
@@ -352,17 +361,20 @@ export function WalletScreen({ navigation, route }: AppScreenProps<'Wallet'>): R
       case 'overview':
       default:
         return (
-          <OverviewView
-            accounts={accounts}
-            accountsState={accountsState}
-            deposits={data.deposits}
-            withdrawals={data.withdrawals}
-            positions={data.positions}
-            ready={data.ready}
-            refreshKey={refreshKey}
-            setView={setView}
-            onRetryAccounts={reload}
-          />
+          <>
+            <CreditOutstandingCard summary={data.creditSummary} />
+            <OverviewView
+              accounts={accounts}
+              accountsState={accountsState}
+              deposits={data.deposits}
+              withdrawals={data.withdrawals}
+              positions={data.positions}
+              ready={data.ready}
+              refreshKey={refreshKey}
+              setView={setView}
+              onRetryAccounts={reload}
+            />
+          </>
         );
     }
   })();

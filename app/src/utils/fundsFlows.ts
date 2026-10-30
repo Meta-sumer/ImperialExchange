@@ -195,6 +195,8 @@ export interface PaymentRail {
   emoji: string | null;
   /** Payee rows, blanks dropped. */
   rows: RailRow[];
+  /** BANK only: the company account assigned to this user, when the pool is in use. */
+  assignedBank?: { label: string; bankName: string | null } | null;
   note: string | null;
   qr: string | null;
 }
@@ -214,6 +216,7 @@ const manualRail = (details: DepositDetails, id: ManualRailId): PaymentRail => {
     custom: false,
     emoji: null,
     rows: depositRailRows(details, id),
+    assignedBank: id === 'BANK' ? (details.assignedBank ?? null) : null,
     note: extras.note,
     qr: extras.qr,
   };

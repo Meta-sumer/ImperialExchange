@@ -663,7 +663,7 @@ export const OPTION_CHAIN_EMPTY_TITLE = 'Option chains aren’t available right 
 export const OPTION_CHAIN_EMPTY_BODY =
   'F&O trading is switched off or today’s contracts haven’t been listed yet. Please check back shortly.';
 export const noOptionsText = (underlying: string): string =>
-  `${underlying} has no options listed on EquityHub. Pick an underlying above.`;
+  `${underlying} has no options listed on Imperial Exchange. Pick an underlying above.`;
 
 /**
  * The session badge on the summary card: MCX commodity F&O trades 09:00–23:30

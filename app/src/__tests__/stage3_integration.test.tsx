@@ -518,7 +518,7 @@ describe('Option Chain', () => {
 
   it('an underlying with no options says so; nothing listed at all says chains are unavailable', async () => {
     const r = await mount('Options', OptionChainScreen as ComponentType<never>, { underlying: 'XYZ' });
-    expect(textOf(r.toJSON())).toContain('XYZ has no options listed on EquityHub. Pick an underlying above.');
+    expect(textOf(r.toJSON())).toContain('XYZ has no options listed on Imperial Exchange. Pick an underlying above.');
     expect(chainFn).not.toHaveBeenCalled();
     await act(async () => { r.unmount(); });
     renderer = null;

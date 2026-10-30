@@ -30,7 +30,7 @@ import { isImpersonationUrl, pathForRoute, resolveWebPath, type AnyRoute } from 
  *   …/#imp=…&info=…                       here, never navigated
  */
 
-const scheme = typeof Constants.expoConfig?.scheme === 'string' ? Constants.expoConfig.scheme : 'equityhub';
+const scheme = typeof Constants.expoConfig?.scheme === 'string' ? Constants.expoConfig.scheme : 'imperialexchange';
 
 // WEB_ORIGIN is the one web-origin setting; api/partner builds referral
 // links on the same value, so a link the app hands out opens the app again.

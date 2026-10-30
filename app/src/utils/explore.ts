@@ -64,7 +64,7 @@ export const SECTOR_DEFS: readonly SectorDef[] = [
   { key: 'stocks', label: 'Stocks', icon: 'bank', tint: '#8B5CF6', match: isStock },
   { key: 'futures', label: 'Futures', icon: 'layers', tint: '#0EA5E9', match: isFuture },
   { key: 'idxfut', label: 'Index Futures', icon: 'bolt', tint: '#10B981', match: (r) => isFuture(r) && cat(r) === 'INDEX' },
-  { key: 'comm', label: 'Commodities', icon: 'barrel', tint: '#A16207', match: isCommodity },
+  { key: 'comm', label: 'MCX Commodities', icon: 'barrel', tint: '#A16207', match: isCommodity },
   {
     key: 'gold',
     label: 'Precious Metals',
@@ -84,8 +84,7 @@ export interface MoverSegment {
 export const MOVER_SEGMENTS: readonly MoverSegment[] = [
   { key: 'INDEX', label: 'Indices', match: isIndex },
   { key: 'STOCK', label: 'Stocks', match: isStock },
-  { key: 'FUT', label: 'Futures', match: isFuture },
-  { key: 'COMMODITY', label: 'Commodities', match: isCommodity },
+  { key: 'COMMODITY', label: 'MCX', match: isCommodity },
 ];
 
 export interface SectorRow extends SectorDef {

@@ -7,7 +7,7 @@ import type {
   SeriesBucket,
 } from '@/types/trading';
 import type { UserAccount } from '@/types/user';
-import type { Deposit, LedgerEntry, WalletBalance, WalletTransaction, Withdrawal } from '@/types/wallet';
+import type { Deposit, LedgerEntry, WalletBalance, WalletTransaction, Withdrawal, CreditTransaction } from '@/types/wallet';
 import { isRealMoney } from '@/utils/accountType';
 import { fmtMoney, fmtNum } from '@/utils/money';
 
@@ -132,7 +132,7 @@ export const showsViewAll = (view: WalletHubView): boolean => view !== 'history'
 
 /** The hub's own loads (Wallet.jsx load(), the account list aside). */
 export type WalletSource =
-  | 'balances' | 'deposits' | 'withdrawals' | 'ledger' | 'positions' | 'subscriptions' | 'bonusTx';
+  | 'balances' | 'deposits' | 'withdrawals' | 'ledger' | 'positions' | 'subscriptions' | 'bonusTx' | 'credit';
 
 /**
  * The sources that have answered at least once. A figure is shown once its
@@ -483,6 +483,9 @@ const STATUS_COLORS: Readonly<Record<string, StatusColors>> = {
   APPROVED: { dot: '#16A34A', fg: '#15803D' },
   PROCESSING: { dot: '#2563EB', fg: '#1D4ED8' },
   PENDING: { dot: '#D97706', fg: '#B45309' },
+  // Credit transactions (TransactionHistory.jsx StatusPill): part-paid is in progress, settled is done.
+  PARTIALLY_SETTLED: { dot: '#2563EB', fg: '#1D4ED8' },
+  SETTLED: { dot: '#16A34A', fg: '#15803D' },
   REJECTED: { dot: '#DC2626', fg: '#B91C1C' },
   CANCELLED: SLATE,
 };
@@ -498,6 +501,8 @@ const STATUS_DOT: Readonly<Record<string, string>> = {
   DONE: '#16A34A',
   PROCESSING: '#2563EB',
   PENDING: '#D97706',
+  PARTIALLY_SETTLED: '#2563EB',
+  SETTLED: '#16A34A',
   REJECTED: '#DC2626',
   CANCELLED: '#94A3B8',
 };
@@ -512,6 +517,8 @@ const STRIP_STATUS: Readonly<Record<string, StatusColors>> = {
   PROCESSING: { dot: '#3B82F6', fg: '#1D4ED8' },
   CONFIRMED: { dot: '#10B981', fg: '#047857' },
   COMPLETED: { dot: '#10B981', fg: '#047857' },
+  SETTLED: { dot: '#10B981', fg: '#047857' },
+  PARTIALLY_SETTLED: { dot: '#3B82F6', fg: '#1D4ED8' },
   REJECTED: { dot: '#EF4444', fg: '#B91C1C' },
   CANCELLED: { dot: '#6B7280', fg: '#4B5563' },
 };
@@ -687,7 +694,7 @@ export const txnDisplayId = (raw: string | null | undefined): string =>
 export const ticketShort = (id: string | null | undefined, fallback = '—'): string =>
   (id ? `#${String(id).slice(-6).toUpperCase()}` : fallback);
 
-export type HistoryKind = 'deposit' | 'withdrawal' | 'ledger' | 'subscription' | 'bonus';
+export type HistoryKind = 'deposit' | 'withdrawal' | 'ledger' | 'subscription' | 'bonus' | 'credit';
 /** Which wallet a row belongs to — the Accounts filter's `wallet:` choices. */
 export type WalletScope = 'trading' | 'subscription' | 'bonus' | (string & {});
 
@@ -1006,10 +1013,56 @@ export const normalizeBonus = (t: WalletTransaction): RowSansCategory => {
   };
 };
 
+/**
+ * A deposit or withdrawal the desk processed ON CREDIT (admin → Credit
+ * Ledger) — TransactionHistory.jsx normalizeCredit. The wallet moved when
+ * the credit was granted (that ledger leg is the row's balance snapshot); the
+ * row carries the status and what is still owed until the admin records the
+ * payment(s). A deposit credit is money in (the user owes the desk); a
+ * withdrawal credit is money out (the desk owes the user).
+ */
+export const normalizeCredit = (
+  c: CreditTransaction,
+  snaps: ReadonlyMap<string, BalanceSnap> = new Map(),
+  names: ReadonlyMap<string, string> = new Map(),
+): RowSansCategory => {
+  const isDeposit = c.kind === 'DEPOSIT';
+  const gross = Math.abs(numOf(c.amount));
+  const amt = isDeposit ? gross : -gross;
+  const acct = (c.accountId && names.get(String(c.accountId))) || 'Trading Account';
+  const cancelled = String(c.status).toUpperCase() === 'CANCELLED';
+  const parts = cancelled
+    ? ['Cancelled — wallet movement reversed']
+    : [`Settled ${fmtMoney(numOf(c.settledAmount))} of ${fmtMoney(gross)}`, `Outstanding ${fmtMoney(numOf(c.outstanding))}`];
+  const remarks = String(c.remarks ?? '').trim();
+  if (remarks) parts.push(remarks);
+  const snap = snaps.get(c.id);
+  return {
+    id: c.id,
+    kind: 'credit',
+    date: c.createdAt,
+    amount: amt,
+    currency: c.currency || 'INR',
+    status: String(c.status || 'PENDING').toUpperCase(),
+    type: isDeposit ? 'Credit Deposit' : 'Credit Withdrawal',
+    method: 'Credit',
+    receivedFrom: isDeposit ? 'Desk (on credit)' : acct,
+    destination: isDeposit ? acct : 'Payout (on credit)',
+    description: parts.join(' · '),
+    accountId: c.accountId,
+    ledgerType: null,
+    referenceId: null,
+    beforeBal: snap ? snap.before : null,
+    afterBal: snap ? snap.after : null,
+    walletScope: 'trading',
+  };
+};
+
 /** The full set the Type filter always offers. */
 export const TYPE_CATEGORIES: readonly string[] = [
   'Deposit',
   'Withdrawal',
+  'Credit',
   'Transfer - Internal',
   'Transfer - External',
   'Transfer - Wallet to Account',
@@ -1029,11 +1082,12 @@ export const TYPE_CATEGORIES: readonly string[] = [
 ];
 
 /** Every status a row can carry. */
-export const ALL_STATUSES: readonly string[] = ['PENDING', 'PROCESSING', 'CONFIRMED', 'APPROVED', 'COMPLETED', 'REJECTED', 'CANCELLED'];
+export const ALL_STATUSES: readonly string[] = ['PENDING', 'PROCESSING', 'CONFIRMED', 'APPROVED', 'COMPLETED', 'PARTIALLY_SETTLED', 'SETTLED', 'REJECTED', 'CANCELLED'];
 
 /** Exactly one category per row. */
 export const categoryOf = (row: RowSansCategory): string => {
   if (row.kind === 'subscription') return 'Subscription';
+  if (row.kind === 'credit') return 'Credit';
   if (row.kind === 'bonus' && PLAN_REASONS.includes(String(row.reason || '').toUpperCase())) return 'Subscription';
   if (row.kind === 'deposit') return 'Deposit';
   if (row.kind === 'withdrawal') return 'Withdrawal';
@@ -1090,6 +1144,7 @@ export const buildHistoryRows = (
   subscriptions: readonly WalletTransaction[] = [],
   bonusTx: readonly WalletTransaction[] = [],
   accounts: readonly Pick<UserAccount, 'id' | 'nickname' | 'accountNumber' | 'accountType'>[] = [],
+  creditTx: readonly CreditTransaction[] = [],
 ): HistoryRow[] => {
   const names = accountNames(accounts);
   const snaps = balanceSnapshots(ledger, [...subscriptions, ...bonusTx]);
@@ -1108,6 +1163,7 @@ export const buildHistoryRows = (
     ...[...bonusTx, ...subscriptions.filter((t) => t.wallet === 'BONUS' && !bonusIds.has(String(t.id)))]
       .filter((t) => !isWithdrawalLeg(t) && !isDepositLeg(t))
       .map(normalizeBonus),
+    ...creditTx.map((c) => normalizeCredit(c, snaps, names)),
   ]
     .map((r) => ({ ...r, category: categoryOf(r) }))
     .sort((a, b) => ts(b.date) - ts(a.date));
@@ -1379,7 +1435,7 @@ export const historyCsvFilename = (now: Date = new Date()): string =>
  * so whoever signs in next on that machine reads them. On a phone that can
  * change hands they are kept per USER.
  */
-export const notesStorageKey = (userId: string): string => `equityhub:txnNotes:${userId}`;
+export const notesStorageKey = (userId: string): string => `imperialexchange:txnNotes:${userId}`;
 
 /** Tolerant: anything but a flat string map reads as no notes. */
 export const parseNotes = (raw: string | null | undefined): Record<string, string> => {

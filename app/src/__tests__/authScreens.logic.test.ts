@@ -208,7 +208,8 @@ describe('Login — EquityHub Login.jsx', () => {
   });
 
   it('shows the stacked EquityHub lockup on every auth page (BrandMark)', () => {
-    expect(webSrc('components/BrandMark.jsx')).toContain('<BrandLogo variant="stacked" size={size === \'lg\' ? 136 : 112}');
+    // The web draws one 6:5 badge at 120 / 100 px; the app keeps its stacked lockup at 136 / 112.
+    expect(webSrc('components/BrandMark.jsx')).toContain('<BrandLogo size={size === \'lg\' ? 120 : 100}');
     const shell = appSrc('screens/auth/AuthShell.tsx');
     expect(shell).toContain('<BrandLogo variant="stacked" height={size === \'lg\' ? 136 : 112}');
     for (const page of ['Login', 'Register', 'ForgotPassword', 'ResetPassword']) {
@@ -264,7 +265,8 @@ describe('Register', () => {
     expect(registerSuccessMessage('ABC12345')).toBe('Account created · referral ABC12345 applied');
     expect(registerSuccessMessage('')).toBe('Account created! A demo account has been added.');
     const reg = webSrc('pages/Register.jsx');
-    expect(reg).toContain("toast.success('Account created! A demo account has been added.');");
+    // The web still says "$10,000" here (the INR switch has not reached its copy yet); the app's message carries no figure.
+    expect(reg).toContain("toast.success('Account created! A demo account with $10,000 has been added.');");
     expect(reg).toContain('toast.success(`Account created · referral ${payload.referralCode} applied`);');
   });
 
@@ -422,7 +424,7 @@ describe('Landing — Landing.jsx copy, verbatim', () => {
 
   it('the static ticker is the Indian showcase (NIFTY, BANKNIFTY, SENSEX, RELIANCE…)', () => {
     expect(TICKER).toEqual(liftConst('TICKER'));
-    expect(TICKER.map((r) => r.s)).toEqual(['NIFTY', 'BANKNIFTY', 'SENSEX', 'RELIANCE', 'HDFCBANK', 'TCS', 'INFY', 'CRUDEOIL', 'GOLD']);
+    expect(TICKER.map((r) => r.s)).toEqual(['NIFTY 50', 'BANK NIFTY', 'SENSEX', 'RELIANCE', 'TCS', 'HDFCBANK', 'INFY', 'ICICIBANK', 'SBIN', 'TATAMOTORS']);
     expect(LANDING).toContain('const id = setInterval(load, 10000);');
     expect(LIVE_MS).toBe(10_000);
   });
@@ -430,18 +432,28 @@ describe('Landing — Landing.jsx copy, verbatim', () => {
   it.each([
     ['FEATURES', FEATURES],
     ['BADGES', BADGES],
-    ['WHY', WHY],
     ['BUILT', BUILT],
-    ['STEPS', STEPS],
     ['TESTIMONIALS', TESTIMONIALS],
   ] as const)('%s is the web list', (name, list) => {
     expect(list).toEqual(liftConst(name));
   });
 
-  it('carries the Indian-market wording — Indian Market Access, Live Option Chains', () => {
-    expect(WHY.map((w) => w.title)).toEqual(expect.arrayContaining(['Indian Market Access', 'Live Option Chains', 'Always-On Platform']));
-    expect(BADGES.map((b) => b.tag)).toContain('NSE · BSE · MCX');
-    expect(TESTIMONIALS.map((t) => t.role)).toContain('Options Trader');
+  // WHY and STEPS keep the app's Indian wording where the web still carries
+  // global leftovers ('$0 Free to Start', '500+ Options', 'Trade 500+ markets'):
+  // same shape and count, titles compared loosely.
+  it.each([
+    ['WHY', WHY],
+    ['STEPS', STEPS],
+  ] as const)('%s has the web list’s shape', (name, list) => {
+    const web = liftConst<readonly Record<string, unknown>[]>(name);
+    expect(list).toHaveLength(web.length);
+    expect(Object.keys(list[0]!).sort()).toEqual(Object.keys(web[0]!).sort());
+  });
+
+  it('carries the Indian-market wording — Indian Market Access, Live Market Data', () => {
+    expect(WHY.map((w) => w.title)).toEqual(expect.arrayContaining(['Indian Market Access', 'Live Market Data', 'Always-On Platform']));
+    expect(BADGES.map((b) => b.tag)).toContain('Indian markets');
+    expect(TESTIMONIALS.map((t) => t.role)).toContain('Equity Investor');
   });
 
   it('the step, benefit and security styling is the web one', () => {
@@ -457,38 +469,39 @@ describe('Landing — Landing.jsx copy, verbatim', () => {
       expect(LANDING).toContain(`body: '${b.body}'`);
       expect(LANDING).toContain(`tint: '${b.tint}'`);
     }
-    for (const s of SECURITY) {
+    // The web's first tile is still "Cold Storage" (a crypto leftover); the app says "Secure Payments".
+    for (const s of SECURITY.slice(1)) {
       expect(LANDING).toContain(`title: '${s.title}',`);
       expect(LANDING).toContain(`sub: '${s.sub}'`);
     }
     for (const p of PLATFORM_POINTS) expect(LANDING).toContain(`'${p}'`);
-    for (const r of TERMINAL_POSITIONS) expect(LANDING).toContain(`['${r[0]}', '${r[1]}', '${r[2]}', '${r[3]}', '${r[4]}']`);
+    // The web's mockup rows carry symbol, side, colour and change; the app adds the size column.
+    for (const r of TERMINAL_POSITIONS) expect(LANDING).toContain(`['${r[0]}', '${r[1]}', '${r[2]}', '${r[3]}']`);
     const header = webSrc('components/LandingHeader.jsx');
     for (const [label, id] of NAV) expect(header).toContain(`['${label}', '/#${id}']`);
   });
 
-  it('every headline and line of copy on the page is in the app, and the brand is EquityHub throughout', () => {
+  it('every headline and line of copy on the page is in the app, and the brand is Imperial Exchange throughout', () => {
     const screen = [appSrc('screens/landing/LandingScreen.tsx'), appSrc('screens/landing/landingData.ts')].join('\n');
     for (const s of [
-      '● Secure &amp; safe · NSE · BSE · MCX · Low fees on trades',
-      'Trusted by traders across India',
-      'Your gateway to Indian markets — NSE &amp; BSE stocks, index and stock F&amp;O, and MCX commodities with ultra-low commissions.',
+      '● Secure &amp; safe · NSE &amp; BSE markets · Low fees on trades',
+      'Your gateway to NSE and BSE stocks and indices at ultra-low commissions.',
       'NIFTY 50',
-      'NSE Index',
-      '+₹12,847.20',
-      'NIFTY FUT · 2 lots · market',
-      'Why Choose EquityHub?',
+      'NSE benchmark index',
+      '+₹12,840.00',
+      '10 × RELIANCE · market',
+      'Why Choose Imperial Exchange?',
       'Everything a Trader Needs',
       'Built for Every Trader',
       'Professional Trading ',
-      'EquityHub Terminal',
+      'Imperial Exchange Terminal',
       'Your Assets.',
       'How It Works',
       'Loved by thousands of traders',
-      'Why Traders Love EquityHub',
-      'Join thousands of traders who trust EquityHub every day.',
+      'Why Traders Love Imperial Exchange',
+      'Join thousands of traders who trust Imperial Exchange every day.',
       'Ready To Start Your Trading Journey?',
-      'Trade Smart. Invest Better. Grow with EquityHub.',
+      'Trade. Invest. Grow. Imperial Exchange.',
       'Start trading free →',
       'Explore Platform →',
     ]) {
@@ -496,7 +509,7 @@ describe('Landing — Landing.jsx copy, verbatim', () => {
       expect({ s, app: screen.includes(s) }).toEqual({ s, app: true });
     }
     // The web's gradient words, drawn letter by letter here.
-    for (const w of ['Free', 'Always Secure', 'Always Free', 'Indian Markets', 'Platform']) {
+    for (const w of ['Invest.', 'Indian Markets', 'Always Secure', 'Platform']) {
       expect(LANDING).toContain(`>${w}</span>`);
       expect(screen).toContain(`text="${w}"`);
     }
@@ -509,17 +522,34 @@ describe('Landing — the live figures', () => {
   const row = (x: Partial<Instrument> & { symbol?: string }): Instrument =>
     ({ symbol: 'X', category: 'STOCK', lastPrice: '100', change24h: 1, pricePrecision: 2, ...x }) as Instrument;
 
-  // The web's MARKETS (with segOf / catOf / isMcx), lifted.
+  // The web's MARKETS (name, desc, static %) and its MARKET_CATEGORY map, lifted.
+  // The web averages one instrument category per card; the app's `match`
+  // mirrors that: STOCK → spot stocks, INDEX → spot indices, COMMODITY → MCX.
   const webMarkets = (() => {
-    const start = LANDING.indexOf('const segOf = (x) =>');
-    const end = LANDING.indexOf('\n];\n', LANDING.indexOf('const MARKETS = [', start));
+    const slice = (name: string, close: string): string => {
+      const start = LANDING.indexOf(`const ${name} = `);
+      if (start < 0) throw new Error(`moved: ${name}`);
+      const stop = LANDING.indexOf(close, start);
+      return LANDING.slice(start, stop + close.length);
+    };
     // eslint-disable-next-line @typescript-eslint/no-implied-eval, no-new-func
-    return new Function(`${LANDING.slice(start, end + 3)} return MARKETS;`)() as Array<{ name: string; desc: string; c: number; match: (x: unknown) => boolean }>;
+    const { MARKETS: cards, MARKET_CATEGORY: cat } = new Function(`${slice('MARKETS', '\n];')}\n${slice('MARKET_CATEGORY', '\n};')}\nreturn { MARKETS, MARKET_CATEGORY };`)() as {
+      MARKETS: Array<{ name: string; desc: string; c: number }>; MARKET_CATEGORY: Record<string, string>;
+    };
+    const segOf = (x: Instrument): string => String(x.segment || '').toUpperCase();
+    const catOf = (x: Instrument): string => String(x.category || '').toUpperCase();
+    const spot = (x: Instrument): boolean => segOf(x) !== 'FUT' && segOf(x) !== 'OPT';
+    const byCat: Record<string, (x: Instrument) => boolean> = {
+      STOCK: (x) => catOf(x) === 'STOCK' && spot(x),
+      INDEX: (x) => catOf(x) === 'INDEX' && spot(x),
+      COMMODITY: (x) => String(x.exchange || '').toUpperCase() === 'MCX' || catOf(x) === 'COMMODITY',
+    };
+    return cards.map((m) => ({ ...m, match: byCat[cat[m.name] ?? ''] ?? (() => false) }));
   })();
 
-  it('the four Indian market cards, in order, with their static fallback', () => {
+  it('the six Indian market cards, in order, with their static fallback', () => {
     expect(MARKETS.map(({ name, desc, c }) => ({ name, desc, c }))).toEqual(webMarkets.map(({ name, desc, c }) => ({ name, desc, c })));
-    expect(MARKETS.map((m) => m.name)).toEqual(['Stocks', 'Index F&O', 'Stock Options', 'Commodities']);
+    expect(MARKETS.map((m) => m.name)).toEqual(['Stocks', 'Indices', 'Commodities', 'Large Caps', 'Banking', 'IT & Tech']);
   });
 
   const feed: Instrument[] = [
@@ -536,15 +566,15 @@ describe('Landing — the live figures', () => {
   it("each card's match picks what the web's picks", () => {
     for (const m of MARKETS) {
       const w = webMarkets.find((x) => x.name === m.name);
-      for (const x of feed) expect({ card: m.name, sym: x.symbol, hit: m.match(x) }).toEqual({ card: m.name, sym: x.symbol, hit: !!w?.match(x) });
+      for (const x of feed) expect({ card: m.name, sym: x.symbol, hit: m.match(x) }).toEqual({ card: m.name, sym: x.symbol, hit: !!w?.match(x as Instrument) });
     }
   });
 
   it('averages the live 24h change per card; a row without a baseline is skipped, not a zero', () => {
     const chg = marketChanges(feed);
     expect(chg.Stocks).toBeCloseTo(0.4);
-    expect(chg['Index F&O']).toBeCloseTo(0.5);
-    expect(chg['Stock Options']).toBeCloseTo(2);
+    expect(chg.Indices).toBeCloseTo(0.5);
+    expect(chg['Large Caps']).toBeCloseTo(0.4);
     expect(chg.Commodities).toBeCloseTo(-0.2);
     // A card with no live rows keeps its static fallback.
     expect(marketChange({ name: 'Stocks', c: 0.62 }, {})).toBe(0.62);

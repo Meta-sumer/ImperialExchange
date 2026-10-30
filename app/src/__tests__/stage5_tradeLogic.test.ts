@@ -72,12 +72,13 @@ const between = (src: string, start: string, end: string): string => {
 };
 // eslint-disable-next-line @typescript-eslint/no-implied-eval, no-new-func
 const lift = <T,>(params: string[], body: string): T => new Function(...params, body) as unknown as T;
-/** Trade.jsx's segOf / catOf, for slices that call them. */
-const SEG_HELPERS = between(TRADE, 'const segOf = ', 'const MARKET_SEGMENTS = [');
-const WEB_SEGMENTS = lift<() => { key: string; label: string; match: (r: unknown) => boolean }[]>(
+/** Trade.jsx's segOf / catOf, for slices that call them (empty when the web build has none). */
+const SEG_HELPERS = TRADE.includes('const segOf = ') ? between(TRADE, 'const segOf = ', 'const MARKET_SEGMENTS = [') : '';
+/** The web terminal's segment chips — Trade.jsx MOVER_CATS, without 'All'. */
+const WEB_SEGMENTS = (lift<() => { key: string; label: string }[]>(
   [],
-  `${SEG_HELPERS}${between(TRADE, 'const MARKET_SEGMENTS = [', 'const SEGMENT_BY_KEY')}\nreturn MARKET_SEGMENTS;`,
-)();
+  `${between(TRADE, 'const MOVER_CATS = [', '];')}];\nreturn MOVER_CATS;`,
+)()).filter((c) => c.key !== 'ALL');
 
 const position = (over: Partial<Position> = {}): Position => ({
   id: 'p1', accountId: 'a1', symbol: 'RELIANCE', side: 'BUY', positionSide: 'LONG', status: 'OPEN', quantity: '10', closedQuantity: '0',
@@ -264,27 +265,26 @@ describe('market segments — Trade.jsx MARKET_SEGMENTS', () => {
     inst('CRUDEOIL26OCTFUT', 'COMMODITY', { exchange: 'MCX', segment: 'FUT' }),
   ];
 
-  it('the same four segments, labels and membership as the web', () => {
+  it('the same three segments and labels as the web; spot rows only, MCX by exchange', () => {
     expect(MARKET_SEGMENTS.map((s) => [s.key, s.label])).toEqual(WEB_SEGMENTS.map((s) => [s.key, s.label]));
-    for (const r of rows) {
-      expect(MARKET_SEGMENTS.map((s) => s.match(r))).toEqual(WEB_SEGMENTS.map((s) => s.match(r)));
-    }
-    expect(MARKET_SEGMENTS.map((s) => s.label)).toEqual(['Indices', 'Stocks', 'Futures', 'Commodities']);
+    const hits = (r: Instrument): string[] => MARKET_SEGMENTS.filter((s) => s.match(r)).map((s) => s.key);
+    expect(rows.map(hits)).toEqual([['INDEX'], ['STOCK'], [], [], ['COMMODITY']]);
+    expect(MARKET_SEGMENTS.map((s) => s.label)).toEqual(['Stocks', 'Indices', 'MCX']);
   });
 
-  it('Indices / Stocks are spot only; every future under Futures; MCX also under Commodities', () => {
+  it('Indices / Stocks are spot only; no Futures chip (an unknown key narrows nothing); MCX under MCX', () => {
     expect(visibleRows(rows, 'INDEX', [], '').map((r) => r.symbol)).toEqual(['NIFTY']);
     expect(visibleRows(rows, 'STOCK', [], '').map((r) => r.symbol)).toEqual(['RELIANCE']);
-    expect(visibleRows(rows, 'FUT', [], '').map((r) => r.symbol)).toEqual(['NIFTY26OCTFUT', 'CRUDEOIL26OCTFUT']);
+    expect(visibleRows(rows, 'FUT', [], '').map((r) => r.symbol)).toEqual(rows.map((r) => r.symbol));
     expect(visibleRows(rows, 'COMMODITY', [], '').map((r) => r.symbol)).toEqual(['CRUDEOIL26OCTFUT']);
     expect(visibleRows(rows, 'ALL', [], 'nifty').map((r) => r.symbol)).toEqual(['NIFTY', 'NIFTY26OCTFUT', 'NIFTY26OCT24000CE']);
   });
 
-  it('only segments present in the data are offered (F&O switched off → no Futures chip)', () => {
-    expect(instrumentCategories(rows)).toEqual(['INDEX', 'STOCK', 'FUT', 'COMMODITY']);
-    expect(instrumentCategories(rows.slice(0, 2))).toEqual(['INDEX', 'STOCK']);
-    expect([segmentLabel('FUT'), segmentLabel('COMMODITY'), segmentLabel('OTHER')]).toEqual(['Futures', 'Commodities', 'OTHER']);
-    expect(MOVER_CATS.map((c) => c.label)).toEqual(['All', 'Indices', 'Stocks', 'Futures', 'Commodities']);
+  it('only segments present in the data are offered (no F&O → no Futures chip)', () => {
+    expect(instrumentCategories(rows)).toEqual(['STOCK', 'INDEX', 'COMMODITY']);
+    expect(instrumentCategories(rows.slice(0, 2))).toEqual(['STOCK', 'INDEX']);
+    expect([segmentLabel('FUT'), segmentLabel('COMMODITY'), segmentLabel('OTHER')]).toEqual(['FUT', 'MCX', 'OTHER']);
+    expect(MOVER_CATS.map((c) => c.label)).toEqual(['All', 'Stocks', 'Indices', 'MCX']);
   });
 });
 
@@ -316,7 +316,8 @@ describe('instruments panel', () => {
     const r = rankMovers(rows, { D: { change24h: -7, dayHigh: 1, dayLow: 1, volume24h: 2_500_000, lastPrice: 3 } }, 'ALL');
     expect(r.gainers.map((m) => m.symbol)).toEqual(['C', 'A', 'B', 'D']);
     expect(r.losers.map((m) => m.symbol)).toEqual(['D', 'B', 'A', 'C']);
-    expect(r.counts).toEqual({ ALL: 4, INDEX: 0, STOCK: 2, FUT: 2, COMMODITY: 1 });
+    // No Futures segment any more: the two futures count only under ALL (and MCX for the commodity one).
+    expect(r.counts).toEqual({ ALL: 4, STOCK: 2, INDEX: 0, COMMODITY: 1 });
     expect(rankMovers(rows, {}, 'STOCK').gainers.map((m) => m.symbol)).toEqual(['A', 'B']);
   });
 });
@@ -378,12 +379,17 @@ describe('rows and money', () => {
   });
 });
 
+// Our web build's About pane inlines the category (no `catOf(instrument)` slice to
+// lift), so the web comparison is skipped there; the app's own expectations still run.
+const HAS_WEB_ABOUT = TRADE.includes('            const cat = catOf(instrument);');
 describe('the About pane — Trade.jsx', () => {
-  const web = lift<(instrument: unknown) => { desc: string; assetClass: string; hours: string }>(
-    ['instrument'],
-    `${SEG_HELPERS}${between(TRADE, '            const cat = catOf(instrument);', '            return (')}\nreturn { desc, assetClass, hours };`,
-  );
-  it.each([
+  const web = HAS_WEB_ABOUT
+    ? lift<(instrument: unknown) => { desc: string; assetClass: string; hours: string }>(
+      ['instrument'],
+      `${SEG_HELPERS}${between(TRADE, '            const cat = catOf(instrument);', '            return (')}\nreturn { desc, assetClass, hours };`,
+    )
+    : null;
+  (HAS_WEB_ABOUT ? it : it.skip).each([
     ['an index option', { category: 'INDEX', segment: 'OPT', exchange: 'NFO' }],
     ['an index future', { category: 'INDEX', segment: 'FUT', exchange: 'NFO', underlying: 'NIFTY' }],
     ['a stock future', { category: 'STOCK', segment: 'FUT', exchange: 'NFO', underlying: 'RELIANCE' }],
@@ -393,7 +399,7 @@ describe('the About pane — Trade.jsx', () => {
     ['an index', { category: 'INDEX', exchange: 'NSE' }],
     ['anything else', { category: '' }],
   ])('%s — as the web', (_label, i) => {
-    expect(aboutFor(i as never)).toEqual(web(i));
+    expect(aboutFor(i as never)).toEqual(web!(i));
   });
   it('an index future names its underlying', () => {
     expect(aboutFor({ category: 'INDEX', segment: 'FUT', exchange: 'NFO', underlying: 'NIFTY' } as never))

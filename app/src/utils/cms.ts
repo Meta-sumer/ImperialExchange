@@ -102,7 +102,7 @@ export const footerTarget = (item: Pick<FooterItem, 'href' | 'openInNewTab'>): F
 
 /** The brand's name — the config's, else the product's. */
 export const footerBrand = (config: Pick<FooterConfig, 'brand'> | null | undefined): string =>
-  config?.brand || 'EquityHub';
+  config?.brand || 'Imperial Exchange';
 
 /** CmsFooter.jsx: the admin's copyright line, else `© <year> · <brand> · All rights reserved`. */
 export const footerCopyright = (config: Pick<FooterConfig, 'brand' | 'copyright'> | null | undefined, year: number): string =>

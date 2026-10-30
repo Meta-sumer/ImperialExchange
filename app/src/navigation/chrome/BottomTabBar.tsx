@@ -5,6 +5,7 @@ import { SafeAreaInsetsContext, useSafeAreaInsets } from 'react-native-safe-area
 
 import { AppText, Icon, type IconName } from '@/components/ui';
 import { useTheme } from '@/theme';
+import { useFnoAvailable } from '@/store/features';
 
 import { navigationRef } from '../navigationRef';
 import { BOTTOM_TABS, isNavActive, type NavItem } from './primaryNav';
@@ -60,6 +61,9 @@ export function BottomTabBar({ current }: { current: { name: string; params?: ob
   const t = useTheme();
   const insets = useSafeAreaInsets();
   const keyboard = useKeyboardShown();
+  // No F&O on this backend → no Option Chain tab (store/features).
+  const fno = useFnoAvailable();
+  const tabs = fno ? BOTTOM_TABS : BOTTOM_TABS.filter((i) => i.route.name !== 'Options');
   if (keyboard) return null;
 
   return (
@@ -70,7 +74,7 @@ export function BottomTabBar({ current }: { current: { name: string; params?: ob
         { backgroundColor: t.colors.surface, borderTopColor: t.colors.borderDark, paddingBottom: insets.bottom },
       ]}
     >
-      {BOTTOM_TABS.map((item) => {
+      {tabs.map((item) => {
         const active = isNavActive(item, current);
         const color = active ? t.colors.primaryText : t.colors.textMuted;
         return (

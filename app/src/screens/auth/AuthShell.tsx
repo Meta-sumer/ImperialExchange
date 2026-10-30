@@ -201,7 +201,7 @@ export function AuthHeader({
       <View style={styles.headerBar}>
         <Pressable
           accessibilityRole="link"
-          accessibilityLabel="EquityHub home"
+          accessibilityLabel="Imperial Exchange home"
           onPress={() => nav.navigate('Landing', undefined, { pop: true })}
         >
           <BrandLogo variant="full" height={wide ? 44 : 36} />
