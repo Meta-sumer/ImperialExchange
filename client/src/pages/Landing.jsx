@@ -90,7 +90,7 @@ const WHY = [
   { icon: 'lock', title: '256-bit Encryption', body: 'Bank-grade encryption and 2FA keep your account and funds fully protected.' },
   { icon: 'dollar', title: '$0 Free to Start', body: 'No signup fees and a free demo balance to practice risk-free before going live.' },
   { icon: 'clock', title: '24/7 Access', body: 'Markets, charts and support available round the clock, any day of the year.' },
-  { icon: 'grid', title: '500+ Options', body: 'A huge catalogue of instruments and order types to build any strategy.' },
+  { icon: 'grid', title: '200+ NSE Stocks', body: 'The NIFTY 50, NIFTY Next 50 and liquid mid-caps, plus indices and MCX commodities, with every order type you need.' },
   { icon: 'deposit', title: 'Instant Deposits & Withdrawals', body: 'Fund and cash out quickly with multiple secure payment methods.' },
 ];
 
@@ -133,7 +133,7 @@ const STEPS = [
   { n: '1', title: 'Create Account', body: 'Sign up in under two minutes — instant demo balance, no paperwork.' },
   { n: '2', title: 'Verify Identity', body: 'Quick KYC unlocks real-money trading and fast withdrawals.' },
   { n: '3', title: 'Deposit Funds', body: 'Top up securely with your preferred payment method.' },
-  { n: '4', title: 'Start Trading', body: 'Trade 500+ markets with pro tools, copy trading and live analytics.' },
+  { n: '4', title: 'Start Trading', body: 'Trade NSE, BSE and MCX with pro tools, copy trading and live analytics.' },
 ];
 
 const TESTIMONIALS = [
@@ -798,7 +798,7 @@ function SecIcon({ name }) {
 }
 function ProtectedBanner() {
   const items = [
-    { icon: 'snow',   title: 'Cold Storage',    sub: 'Most funds stored offline' },
+    { icon: 'snow',   title: 'Segregated Funds', sub: 'Client money kept in dedicated bank accounts' },
     { icon: 'lock',   title: 'SSL Encryption',  sub: 'Bank-level 256-bit SSL' },
     { icon: 'shield', title: 'Two-Factor Auth', sub: 'Extra layer on your account' },
     { icon: 'audit',  title: 'Regular Audits',  sub: 'Continuous security checks' },

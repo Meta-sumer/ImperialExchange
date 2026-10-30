@@ -103,7 +103,7 @@ export default function Register() {
       if (payload.referralCode) {
         toast.success(`Account created · referral ${payload.referralCode} applied`);
       } else {
-        toast.success('Account created! A demo account with $10,000 has been added.');
+        toast.success('Account created! Your trading account is ready — add funds to start.');
       }
       navigate('/explore');
     } catch (err) {
