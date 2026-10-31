@@ -119,9 +119,18 @@ const setActive = (flag) => asyncHandler(async (req, res) => {
 });
 
 // GET /:id/users — who is assigned to this account (newest first, max 200).
+// Optional ?search= over email / name / UID. Special characters are dropped
+// rather than escaped, so no regex can be injected and nothing needs quoting.
+const searchFilter = (q) => {
+  const s = String(q || '').split(/[^A-Za-z0-9@._+ -]/).join('').trim();
+  if (!s) return {};
+  const rx = new RegExp(s, 'i');
+  return { $or: [{ email: rx }, { firstName: rx }, { lastName: rx }, { userUid: rx }] };
+};
+
 const users = asyncHandler(async (req, res) => {
   const doc = await loadOr404(req.params.id);
-  const rows = await User.find({ depositBankAccountId: doc._id })
+  const rows = await User.find({ depositBankAccountId: doc._id, ...searchFilter(req.query.search) })
     .select('email firstName lastName userUid role isActive createdAt')
     .sort({ createdAt: -1 })
     .limit(200)
@@ -130,6 +139,44 @@ const users = asyncHandler(async (req, res) => {
 });
 
 // POST /assign { userId, bankAccountId | null } — manual (un)assignment.
+// Customers with no usable deposit account: none assigned, or assigned to an
+// account that is inactive / gone. The rows the admin picks from when
+// assigning by hand (the users modal's "Unassigned users" view).
+const unassignedUsers = asyncHandler(async (req, res) => {
+  const activeIds = (await BankAccount.find({ isActive: true }).select('_id').lean()).map((a) => a._id);
+  const rows = await User.find({
+    role: { $nin: [...bankAssignment.STAFF_ROLES] }, isActive: true,
+    $and: [
+      { $or: [{ depositBankAccountId: null }, { depositBankAccountId: { $nin: activeIds } }] },
+      searchFilter(req.query.search),
+    ],
+  }).select('email firstName lastName userUid role isActive createdAt depositBankAccountId').sort({ createdAt: -1 }).limit(200).lean();
+  sendSuccess(res, rows);
+});
+
+// Bulk: move many users to one account (or back to auto) in one request —
+// the modal's select-all + "Move selected to". Staff rows are skipped.
+const assignMany = asyncHandler(async (req, res) => {
+  const { userIds, bankAccountId } = req.body || {};
+  const ids = Array.isArray(userIds) ? [...new Set(userIds.map((v) => String(v)))].filter(isObjectId) : [];
+  if (!ids.length) throw new AppError('userIds is required', 400);
+  if (ids.length > 500) throw new AppError('Up to 500 users per request', 400);
+  const wantsClear = bankAccountId == null || bankAccountId === '';
+  if (!wantsClear && !isObjectId(bankAccountId)) throw new AppError('Invalid bankAccountId', 400);
+  if (!wantsClear) await loadOr404(bankAccountId);
+  const found = await User.find({ _id: { $in: ids } }).select('_id role depositBankAccountId').lean();
+  let assigned = 0; let skipped = 0;
+  for (const u of found) {
+    if (bankAssignment.isStaffRole(u.role)) { skipped += 1; continue; }
+    await bankAssignment.assignUser(u._id, wantsClear ? null : bankAccountId);
+    assigned += 1;
+  }
+  await audit(req, 'BANK_ACCOUNT_ASSIGNED_MANY', wantsClear ? null : bankAccountId, {
+    count: assigned, skipped, to: wantsClear ? null : String(bankAccountId),
+  });
+  sendSuccess(res, { assigned, skipped, bankAccountId: wantsClear ? null : String(bankAccountId) });
+});
+
 const assign = asyncHandler(async (req, res) => {
   const { userId, bankAccountId } = req.body || {};
   if (!isObjectId(userId)) throw new AppError('userId is required', 400);
@@ -157,6 +204,8 @@ const distribute = asyncHandler(async (req, res) => {
 });
 
 module.exports = {
+  unassignedUsers,
+  assignMany,
   list,
   stats,
   create,

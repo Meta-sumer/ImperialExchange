@@ -16,6 +16,8 @@ router.get('/', c.list);
 router.get('/stats', c.stats);
 router.post('/', c.create);
 router.post('/assign', c.assign);
+router.post('/assign-many', c.assignMany);      // bulk: select-all + "Move selected to"
+router.get('/unassigned/users', c.unassignedUsers); // customers without a usable account
 router.post('/distribute', c.distribute);
 
 router.get('/:id/users', c.users);

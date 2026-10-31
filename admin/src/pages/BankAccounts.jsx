@@ -134,8 +134,9 @@ export default function BankAccounts() {
         <Stat
           label="Unassigned"
           value={stats ? stats.unassignedUsers : '—'}
-          hint={stats?.unassignedUsers ? 'auto-assigned on next deposit, or distribute now' : 'everyone is covered'}
+          hint={stats?.unassignedUsers ? 'click to assign by hand, or distribute now' : 'everyone is covered · click to review'}
           tone={stats?.unassignedUsers ? 'warn' : 'ok'}
+          onClick={() => setUsersFor({ _id: 'unassigned', label: 'Unassigned users', bankName: '', accountNumber: '' })}
         />
       </div>
 
@@ -250,14 +251,15 @@ export default function BankAccounts() {
   );
 }
 
-function Stat({ label, value, hint, tone }) {
+function Stat({ label, value, hint, tone, onClick }) {
   const color = tone === 'warn' ? 'text-amber-300' : tone === 'ok' ? 'text-emerald-400' : 'text-white';
+  const Tag = onClick ? 'button' : 'div';
   return (
-    <div className="card p-4">
+    <Tag type={onClick ? 'button' : undefined} onClick={onClick} className={`card p-4 text-left w-full ${onClick ? 'hover:border-primary-500/60 transition-colors cursor-pointer' : ''}`}>
       <div className="text-[11px] uppercase tracking-wider text-text-muted">{label}</div>
       <div className={`text-2xl font-bold mt-1 ${color}`}>{value}</div>
       {hint && <div className="text-[11px] text-text-muted mt-0.5">{hint}</div>}
-    </div>
+    </Tag>
   );
 }
 
@@ -356,28 +358,46 @@ function AccountModal({ row, onClose, onSaved }) {
 }
 
 /** Users assigned to one account, each with a reassign control. */
+/**
+ * The users on one account — or, for the pseudo-account `unassigned`, every
+ * customer without a usable account. Search runs server-side (the list is
+ * capped at 200), rows can be ticked one by one or all at once, and the bulk
+ * bar moves the selection to an account (or back to auto) in one request.
+ * The per-row "Move to" stays for one-offs.
+ */
 function UsersModal({ account, accounts, onClose, onChanged }) {
+  const isUnassigned = account._id === 'unassigned';
   const [list, setList] = useState(null);
+  const [q, setQ] = useState('');
+  const [selected, setSelected] = useState(() => new Set());
   const [moving, setMoving] = useState('');
+  const [bulkTo, setBulkTo] = useState(isUnassigned && accounts[0] ? String(accounts[0]._id) : '');
+  const [bulkBusy, setBulkBusy] = useState(false);
 
-  const load = async () => {
+  const load = async (search) => {
     try {
-      const { data } = await api.get(`/admin/bank-accounts/${account._id}/users`);
+      const url = isUnassigned ? '/admin/bank-accounts/unassigned/users' : `/admin/bank-accounts/${account._id}/users`;
+      const { data } = await api.get(url, { params: search.trim() ? { search: search.trim() } : {} });
       setList(data.data || []);
+      setSelected(new Set());
     } catch (e) {
       toast.error(errorMessage(e));
       setList([]);
     }
   };
-  useEffect(() => { load(); }, [account._id]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const t = setTimeout(() => load(q), q ? 300 : 0);
+    return () => clearTimeout(t);
+  }, [account._id, q]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const refresh = async () => { await load(q); onChanged?.(); };
 
   const reassign = async (u, bankAccountId) => {
     setMoving(u._id);
     try {
       await api.post('/admin/bank-accounts/assign', { userId: u._id, bankAccountId: bankAccountId || null });
-      toast.success(`${u.email} ${bankAccountId ? 'reassigned' : 'set to auto'}`);
-      await load();
-      onChanged?.();
+      toast.success(`${u.email} ${bankAccountId ? 'assigned' : 'set to auto'}`);
+      await refresh();
     } catch (e) {
       toast.error(errorMessage(e));
     } finally {
@@ -385,23 +405,83 @@ function UsersModal({ account, accounts, onClose, onChanged }) {
     }
   };
 
+  const allSelected = !!list && list.length > 0 && list.every((u) => selected.has(u._id));
+  const toggleAll = () => setSelected(allSelected ? new Set() : new Set((list || []).map((u) => u._id)));
+  const toggleOne = (id) => setSelected((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+
+  const bulkMove = async () => {
+    if (!selected.size) return;
+    setBulkBusy(true);
+    try {
+      const { data } = await api.post('/admin/bank-accounts/assign-many', { userIds: [...selected], bankAccountId: bulkTo || null });
+      const r = data.data || {};
+      toast.success(`${r.assigned || 0} user(s) ${bulkTo ? 'assigned' : 'set to auto'}${r.skipped ? ` · ${r.skipped} skipped` : ''}`);
+      await refresh();
+    } catch (e) {
+      toast.error(errorMessage(e));
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  const rowValue = isUnassigned ? '' : String(account._id);
+  const targetOptions = (
+    <>
+      {accounts.map((a) => <option key={a._id} value={a._id}>{a.label}</option>)}
+      {!isUnassigned && !accounts.some((a) => String(a._id) === String(account._id)) && (
+        <option value={String(account._id)}>{account.label} (inactive)</option>
+      )}
+      <option value="">Auto (least-loaded)</option>
+    </>
+  );
+
   return (
     <div className="fixed inset-0 z-[60] bg-black/70 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-bg-card rounded-2xl border border-border-dark max-w-2xl w-full shadow-2xl max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
-        <div className="px-5 py-3 border-b border-border-dark flex items-center justify-between">
+      <div className="bg-bg-card rounded-2xl border border-border-dark max-w-3xl w-full shadow-2xl max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="px-5 py-3 border-b border-border-dark flex items-center justify-between gap-3">
           <div>
             <h3 className="text-base font-bold text-text-primary">{account.label}</h3>
-            <div className="text-[11px] text-text-muted">{account.bankName || '—'} · {mask(account.accountNumber)} · assigned users</div>
+            <div className="text-[11px] text-text-muted">
+              {isUnassigned ? 'Customers without an active bank account' : `${account.bankName || '—'} · ${mask(account.accountNumber)} · assigned users`}
+            </div>
           </div>
           <button type="button" onClick={onClose} className="text-text-muted hover:text-text-primary text-xl leading-none">×</button>
         </div>
+
+        {/* Search + bulk bar */}
+        <div className="px-5 py-3 border-b border-border-dark flex items-center gap-2 flex-wrap">
+          <input
+            className="input text-sm flex-1 min-w-[200px]"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search email, name or UID…"
+            autoFocus
+          />
+          <label className="flex items-center gap-2 text-xs text-text-secondary select-none cursor-pointer">
+            <input type="checkbox" checked={allSelected} onChange={toggleAll} disabled={!list || list.length === 0} />
+            Select all{list ? ` (${list.length})` : ''}
+          </label>
+          <span className="text-xs text-text-muted">{selected.size} selected</span>
+          <select className="input text-xs py-1 w-48" value={bulkTo} onChange={(e) => setBulkTo(e.target.value)} disabled={!selected.size}>
+            {targetOptions}
+          </select>
+          <button type="button" onClick={bulkMove} disabled={!selected.size || bulkBusy} className="btn-primary text-xs py-1.5 px-3 disabled:opacity-50">
+            {bulkBusy ? 'Moving…' : 'Move selected'}
+          </button>
+        </div>
+
         <div className="overflow-y-auto flex-1">
           {list === null && <div className="p-6 text-text-muted text-sm">Loading…</div>}
-          {list && list.length === 0 && <div className="p-6 text-text-muted text-sm">No users are assigned to this account.</div>}
+          {list && list.length === 0 && (
+            <div className="p-6 text-text-muted text-sm">
+              {q ? 'No users match this search.' : isUnassigned ? 'Every customer has an active bank account.' : 'No users are assigned to this account.'}
+            </div>
+          )}
           {list && list.length > 0 && (
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-[11px] uppercase tracking-wider text-text-muted border-b border-border-dark">
+                  <th className="px-4 py-2 w-8"><input type="checkbox" checked={allSelected} onChange={toggleAll} /></th>
                   <th className="px-4 py-2">User</th>
                   <th className="px-4 py-2">Joined</th>
                   <th className="px-4 py-2 text-right">Move to</th>
@@ -409,7 +489,8 @@ function UsersModal({ account, accounts, onClose, onChanged }) {
               </thead>
               <tbody>
                 {list.map((u) => (
-                  <tr key={u._id} className="border-b border-border-dark/60">
+                  <tr key={u._id} className={`border-b border-border-dark/60 ${selected.has(u._id) ? 'bg-primary-500/5' : ''}`}>
+                    <td className="px-4 py-2"><input type="checkbox" checked={selected.has(u._id)} onChange={() => toggleOne(u._id)} /></td>
                     <td className="px-4 py-2">
                       <div className="text-text-primary">{u.email}</div>
                       <div className="text-[11px] text-text-muted">{[u.userUid, [u.firstName, u.lastName].filter(Boolean).join(' ')].filter(Boolean).join(' · ') || '—'}</div>
@@ -418,15 +499,12 @@ function UsersModal({ account, accounts, onClose, onChanged }) {
                     <td className="px-4 py-2 text-right">
                       <select
                         className="input text-xs py-1"
-                        value={String(account._id)}
+                        value={rowValue}
                         disabled={moving === u._id}
                         onChange={(e) => reassign(u, e.target.value)}
                       >
-                        {accounts.map((a) => <option key={a._id} value={a._id}>{a.label}</option>)}
-                        {!accounts.some((a) => String(a._id) === String(account._id)) && (
-                          <option value={String(account._id)}>{account.label} (inactive)</option>
-                        )}
-                        <option value="">Auto (least-loaded)</option>
+                        {isUnassigned && <option value="">— choose account —</option>}
+                        {targetOptions}
                       </select>
                     </td>
                   </tr>
@@ -434,7 +512,7 @@ function UsersModal({ account, accounts, onClose, onChanged }) {
               </tbody>
             </table>
           )}
-          {list && list.length >= 200 && <div className="px-4 py-2 text-[11px] text-text-muted">Showing the first 200 users.</div>}
+          {list && list.length >= 200 && <div className="px-4 py-2 text-[11px] text-text-muted">Showing the first 200 — narrow it down with the search box.</div>}
         </div>
         <div className="px-5 py-3 border-t border-border-dark flex justify-end">
           <button type="button" onClick={onClose} className="btn-ghost text-sm">Close</button>
