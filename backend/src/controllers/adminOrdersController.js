@@ -430,7 +430,7 @@ const pendingOrders = asyncHandler(async (req, res) => {
       feeCategory: feeCat,
       // Whatever the engine or controller recorded. The old form replaced a
       // real reason with null unless the order happened to be CANCELLED.
-      rejectionReason: o.rejectionReason || (isCancelled ? 'Cancelled by admin' : null),
+      rejectionReason: o.rejectionReason || (isCancelled ? 'Cancelled manually' : null),
       cancelledAt: isCancelled ? o.cancelledAt : null,
       createdTime: o.createdAt,
     };
@@ -494,7 +494,7 @@ const cancelledOrders = asyncHandler(async (req, res) => {
       charges: commissionEst,
       commissionEstimated: true,
       feeCategory: feeCat,
-      rejectionReason: o.rejectionReason || 'Cancelled by admin',
+      rejectionReason: o.rejectionReason || 'Cancelled manually',
       cancelledAt: o.cancelledAt,
       createdTime: o.createdAt,
     };
@@ -878,7 +878,7 @@ const cancelPending = asyncHandler(async (req, res) => {
   if (![ORDER_STATUS.PENDING, ORDER_STATUS.PARTIALLY_FILLED].includes(order.status)) {
     throw new AppError('Order cannot be cancelled', 400);
   }
-  order.rejectionReason = (req.body.reason || '').trim() || 'Cancelled by admin';
+  order.rejectionReason = (req.body.reason || '').trim() || 'Cancelled manually';
   await order.save();
   await orderRouter.routeCancel({ order });
   if (gt(order.lockedMargin || '0', '0')) {
@@ -890,7 +890,7 @@ const cancelPending = asyncHandler(async (req, res) => {
       await walletService.releaseMargin({
         userId: order.userId, accountId: order.accountId,
         currency: account?.baseCurrency || BASE_CURRENCY, amount: releaseAmt,
-        orderId: order._id, note: `Admin cancel: released ${releaseAmt} for unfilled ${remaining}`,
+        orderId: order._id, note: `Order cancelled: released ${releaseAmt} for unfilled ${remaining}`,
       });
     }
   }
@@ -1015,7 +1015,7 @@ async function cancelOne(req, id) {
   const order = await Order.findById(id);
   if (!order) throw new AppError('Not found', 404);
   if (![ORDER_STATUS.PENDING, ORDER_STATUS.PARTIALLY_FILLED].includes(order.status)) throw new AppError('Not cancellable', 400);
-  order.rejectionReason = (req.body.reason || '').trim() || 'Cancelled by admin (bulk)';
+  order.rejectionReason = (req.body.reason || '').trim() || 'Cancelled manually';
   await order.save();
   await orderRouter.routeCancel({ order });
   if (gt(order.lockedMargin || '0', '0')) {
@@ -1188,7 +1188,7 @@ const manualTrade = asyncHandler(async (req, res) => {
       // the position, and the error says exactly how much is missing.
       await walletService.lockMargin({
         userId: user._id, accountId: account._id, currency, amount: margin, orderId: order._id,
-        note: `Margin locked: ${margin} · manual trade ${ticketShort(order._id)} by admin`,
+        note: `Margin locked: ${margin} · manual trade ${ticketShort(order._id)}${remark ? ` · ${remark}` : ''}`,
       });
       try {
         position = await Position.create({ ...base, quantity, closedQuantity: '0', margin, status: POSITION_STATUS.OPEN });
@@ -1213,7 +1213,7 @@ const manualTrade = asyncHandler(async (req, res) => {
         userId: user._id, accountId: account._id, currency, marginToRelease: '0',
         pnl: realizedPnl, fee: commission, positionId: position._id, tradeId: trade._id,
         dedupeKey: `MANUAL_TRADE:${position._id}`, symbol,
-        noteExtra: `manual trade by admin, backdated to ${openedAt.toISOString()}`,
+        noteExtra: `${remark ? `${remark} · ` : ''}manual trade, backdated to ${openedAt.toISOString()}`,
       });
     }
   } catch (err) {
@@ -1289,13 +1289,13 @@ const editTrade = asyncHandler(async (req, res) => {
     if (delta.gt(0)) {
       await walletService.lockMargin({
         userId: position.userId, accountId: position.accountId, currency, amount: delta.toString(),
-        orderId: position._id, note: `Margin +${delta.toString()} · admin trade edit ${ticket}`,
+        orderId: position._id, note: `Margin +${delta.toString()} · trade adjustment ${ticket}`,
       });
       wallet = { effect: 'MARGIN_LOCKED', amount: delta.toString() };
     } else if (delta.lt(0)) {
       await walletService.releaseMargin({
         userId: position.userId, accountId: position.accountId, currency, amount: delta.abs().toString(),
-        positionId: position._id, note: `Margin -${delta.abs().toString()} · admin trade edit ${ticket}`,
+        positionId: position._id, note: `Margin -${delta.abs().toString()} · trade adjustment ${ticket}`,
       });
       wallet = { effect: 'MARGIN_RELEASED', amount: delta.abs().toString() };
     }
@@ -1310,7 +1310,7 @@ const editTrade = asyncHandler(async (req, res) => {
     const money = {
       userId: position.userId, accountId: position.accountId, currency, type: 'ADJUSTMENT',
       referenceType: 'position', referenceId: position._id,
-      note: `admin trade edit ${ticket} · net PnL ${oldNet.toString()} → ${newNet.toString()}`,
+      note: `trade adjustment ${ticket} · net PnL ${oldNet.toString()} → ${newNet.toString()}`,
     };
     if (delta.gt(0)) {
       await walletService.credit({ ...money, amount: delta.toString() });

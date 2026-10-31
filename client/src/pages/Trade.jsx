@@ -5068,7 +5068,7 @@ const CLOSE_REASONS = {
   INSTRUMENT_DISABLED_FORCE_CLOSE: { t: 'Instrument Disabled', c: 'text-warn' },
   COPY_MASTER_CLOSED: { t: 'Master Closed', c: 'text-text-secondary' },
   MANUAL: { t: 'Manual', c: 'text-text-secondary' },
-  ADMIN: { t: 'By Admin', c: 'text-warn' },
+  ADMIN: { t: 'Manual', c: 'text-warn' },
 };
 
 function closeReasonLabel(reason) {

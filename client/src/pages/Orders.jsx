@@ -42,7 +42,7 @@ const STATUS_OPTIONS = [
   { value: '',                 label: 'All records' },
   { value: 'closed',           label: 'Any close reason',        group: TRADE_GROUP },
   { value: 'MANUAL',           label: 'Manual close',            group: TRADE_GROUP },
-  { value: 'ADMIN',            label: 'Closed by admin',         group: TRADE_GROUP },
+  { value: 'ADMIN',            label: 'Manual close',            group: TRADE_GROUP },
   { value: 'TAKE_PROFIT',      label: 'Take Profit',             group: TRADE_GROUP },
   { value: 'STOP_LOSS',        label: 'Stop Loss',               group: TRADE_GROUP },
   { value: 'TRAILING_STOP',    label: 'Trailing Stop',           group: TRADE_GROUP },
@@ -353,7 +353,7 @@ export default function Orders() {
         p.closePrice || '',
         isTrade ? (p.commission || '0') : '',
         isTrade ? (p.swap || '0') : '',
-        isTrade ? (p.closeReason === 'ADMIN' ? 'ADMIN' : 'SELF') : '',
+        isTrade ? (p.closeReason === 'ADMIN' ? 'MANUAL' : 'SELF') : '',
         isTrade ? ((p.remark || '').trim() || remarkText(p.closeReason)) : orderRemark(p),
         formatDateTime(p.openedAt || p.createdAt),
         formatDateTime(p.closedAt),
@@ -627,7 +627,7 @@ function remarkText(reason) {
     case 'INSTRUMENT_DISABLED_FORCE_CLOSE': return 'CLOSED — Instrument disabled';
     case 'COPY_MASTER_CLOSED': return 'CLOSED — Master closed';
     case 'MANUAL':            return 'closed by user';
-    case 'ADMIN':             return 'closed by admin';
+    case 'ADMIN':             return 'Manual';
     default:                  return 'N/A';
   }
 }
@@ -648,12 +648,14 @@ function SidePill({ side }) {
 }
 
 function ExecutedByPill({ reason }) {
-  // ADMIN close-reason = an admin/super force-closed this position → show ADMIN.
+  // ADMIN close-reason = the desk closed/booked this position. The user never
   // Otherwise the user themselves (no copy-trading yet → swap to MASTER later).
+  // sees the word "admin": the pill reads MANUAL (the Remarks cell carries any
+  // remark the desk wrote).
   const admin = reason === 'ADMIN';
   return (
     <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${admin ? 'bg-warn/20 text-warn border-warn/40' : 'bg-info/20 text-info border-info/40'}`}>
-      {admin ? 'ADMIN' : 'SELF'}
+      {admin ? 'MANUAL' : 'SELF'}
     </span>
   );
 }

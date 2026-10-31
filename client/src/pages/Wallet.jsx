@@ -2325,7 +2325,7 @@ function WithdrawModal({ balances, accounts, onClose, onDone }) {
             )}
 
             <div className="bg-blue-900/20 border border-blue-700/30 text-blue-200 text-xs p-3 rounded">
-              ℹ️ Withdrawals are processed manually by admin within <strong>1-24 hours</strong>. Funds are locked from your balance immediately upon submission.
+              ℹ️ Withdrawals are processed manually within <strong>1-24 hours</strong>. Funds are locked from your balance immediately upon submission.
             </div>
 
             <button type="submit" disabled={loading} className="btn-primary w-full">

@@ -30,7 +30,8 @@ export function SidePill({ side }: { side: string }): React.JSX.Element {
 /** Orders.jsx `ExecutedByPill` — ADMIN when an admin force-closed it, otherwise the trader (SELF). */
 export function ExecutedByPill({ row }: { row: Pick<HistoryRecord, 'closeReason'> }): React.JSX.Element {
   const who = executedBy(row);
-  return <Badge label={who} tone={who === 'ADMIN' ? 'warn' : 'info'} size="xs" />;
+  // The user never sees the word "admin": a desk-booked/closed trade reads MANUAL.
+  return <Badge label={who === 'ADMIN' ? 'MANUAL' : who} tone={who === 'ADMIN' ? 'warn' : 'info'} size="xs" />;
 }
 
 /** Orders.jsx `RecordStatusPill` — CLOSED (bull), CANCELLED (neutral), REJECTED (bear). */

@@ -53,7 +53,7 @@ export const STATUS_OPTIONS: readonly { value: string; label: string; group?: st
   { value: '', label: 'All records' },
   { value: 'closed', label: 'Any close reason', group: TRADE_GROUP },
   { value: 'MANUAL', label: 'Manual close', group: TRADE_GROUP },
-  { value: 'ADMIN', label: 'Closed by admin', group: TRADE_GROUP },
+  { value: 'ADMIN', label: 'Manual close', group: TRADE_GROUP },
   { value: 'TAKE_PROFIT', label: 'Take Profit', group: TRADE_GROUP },
   { value: 'STOP_LOSS', label: 'Stop Loss', group: TRADE_GROUP },
   { value: 'TRAILING_STOP', label: 'Trailing Stop', group: TRADE_GROUP },
@@ -236,7 +236,7 @@ export const remarkText = (reason: string | null | undefined): string => {
     case 'INSTRUMENT_DISABLED_FORCE_CLOSE': return 'CLOSED — Instrument disabled';
     case 'COPY_MASTER_CLOSED': return 'CLOSED — Master closed';
     case 'MANUAL': return 'closed by user';
-    case 'ADMIN': return 'closed by admin';
+    case 'ADMIN': return 'Manual';
     default: return 'N/A';
   }
 };

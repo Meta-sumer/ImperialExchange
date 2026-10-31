@@ -398,7 +398,7 @@ export const CLOSE_REASONS: Readonly<Record<string, { t: string; tone: ReasonTon
   INSTRUMENT_DISABLED_FORCE_CLOSE: { t: 'Instrument Disabled', tone: 'warn' },
   COPY_MASTER_CLOSED: { t: 'Master Closed', tone: 'secondary' },
   MANUAL: { t: 'Manual', tone: 'secondary' },
-  ADMIN: { t: 'By Admin', tone: 'warn' },
+  ADMIN: { t: 'Manual', tone: 'warn' },
 };
 
 /**
