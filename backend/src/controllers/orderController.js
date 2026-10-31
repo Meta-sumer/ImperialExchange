@@ -1053,7 +1053,8 @@ const unifiedHistory = asyncHandler(async (req, res) => {
       quantity: 1, closedQuantity: 1,
       entryPrice: 1, closePrice: 1,
       commission: 1, swap: 1,
-      realizedPnl: 1, closeReason: 1, remark: 1,
+      realizedPnl: 1, closeReason: 1,
+      remark: { $ifNull: ['$remark', ''] }, // older rows predate the field
       openedAt: 1, closedAt: 1, createdAt: 1,
       rejectionReason: { $literal: null },
       orderType: { $literal: null },
