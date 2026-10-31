@@ -274,7 +274,7 @@ export default function DepositModal({
               <div className="text-[11px] uppercase tracking-wider font-bold text-text-muted mb-1.5">Amount</div>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted">{sym.trim() || '$'}</span>
-                <input type="number" step="0.01" min={method.min} autoFocus value={amount} onChange={(e) => setAmount(e.target.value)} placeholder={String(method.min)} className="w-full pl-7 pr-3 py-2.5 rounded-xl border border-border-dark text-lg font-mono tabular-nums font-bold focus:outline-none focus:border-primary-500" />
+                <input type="number" step="0.01" min={method.min} autoFocus value={amount} onChange={(e) => setAmount(e.target.value)} placeholder={String(method.min)} className="w-full pl-7 pr-3 py-2.5 rounded-xl border border-border-dark bg-white text-text-primary placeholder-text-muted text-lg font-mono tabular-nums font-bold focus:outline-none focus:border-primary-500" />
               </div>
               <div className="grid grid-cols-4 gap-2 mt-2">
                 {[method.min, method.min * 5, method.min * 10, method.min * 50].map((q, i) => (

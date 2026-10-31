@@ -636,7 +636,7 @@ function DepositModal({ currency, onClose, onSuccess }) {
                     value={amount}
                     onChange={(e) => setAmount(e.target.value)}
                     placeholder={payMin > 0 ? String(Math.ceil(payMin)) : '0.00'}
-                    className="w-full pl-7 pr-3 py-2.5 rounded-xl border border-border-dark text-lg font-mono tabular-nums font-bold focus:outline-none focus:border-primary-500"
+                    className="w-full pl-7 pr-3 py-2.5 rounded-xl border border-border-dark bg-white text-text-primary placeholder-text-muted text-lg font-mono tabular-nums font-bold focus:outline-none focus:border-primary-500"
                   />
                 </div>
                 {/* Quick amounts. These were min × 1/5/10/50, so with no

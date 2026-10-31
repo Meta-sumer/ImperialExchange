@@ -149,6 +149,23 @@
   background-color: rgb(var(--color-bg-card) / 0.9) !important;
 }
 
+/* Form fields follow the theme. A raw <input> with no bg-/text- utility used
+   to keep the browser's white background while inheriting the dark theme's
+   light text — white on white (the Main Wallet "Add funds" amount box). This
+   base rule gives every text-like field the card colour and primary text in
+   BOTH themes; Tailwind utilities on the element still override it. */
+@layer base {
+  input:not([type='checkbox']):not([type='radio']):not([type='file']):not([type='range']):not([type='color']):not([type='submit']):not([type='button']),
+  textarea,
+  select {
+    background-color: rgb(var(--color-bg-card));
+    color: rgb(var(--color-text-primary));
+  }
+  input::placeholder, textarea::placeholder {
+    color: rgb(var(--color-text-muted));
+  }
+}
+
 @layer components {
   /* Cards — Groww uses a soft off-white card on a white page with a hairline
      border and a barely-there shadow. No glow. */
