@@ -1053,7 +1053,7 @@ const unifiedHistory = asyncHandler(async (req, res) => {
       quantity: 1, closedQuantity: 1,
       entryPrice: 1, closePrice: 1,
       commission: 1, swap: 1,
-      realizedPnl: 1, closeReason: 1,
+      realizedPnl: 1, closeReason: 1, remark: 1,
       openedAt: 1, closedAt: 1, createdAt: 1,
       rejectionReason: { $literal: null },
       orderType: { $literal: null },
@@ -1072,6 +1072,7 @@ const unifiedHistory = asyncHandler(async (req, res) => {
       swap: { $literal: null },
       realizedPnl: { $literal: null },
       closeReason: { $literal: null },
+      remark: { $literal: null },
       // An order never opened a position, so "opened" is when it was PLACED
       // and "closed" is when it was refused or withdrawn. cancelledAt is
       // written on cancel; a rejection is stamped at write time, so updatedAt

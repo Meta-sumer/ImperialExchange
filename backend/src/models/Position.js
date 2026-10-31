@@ -105,6 +105,12 @@ const positionSchema = new mongoose.Schema(
 
     openedAt: { type: Date, default: Date.now },
     closedAt: Date,
+
+    // Admin-set remark shown to the user in Trade History in place of the
+    // automatic "closed by admin" / "closed by user" text — on any trade,
+    // however it was placed. Set from Orders Management → Add Manual Trade
+    // / Edit. Empty = show the automatic text.
+    remark: { type: String, default: '' },
   },
   { timestamps: true }
 );

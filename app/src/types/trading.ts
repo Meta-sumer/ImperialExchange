@@ -119,6 +119,8 @@ export interface HistoryRecord {
   realizedPnl: Decimal | null;
   closeReason: string | null;
   rejectionReason: string | null;
+  /** Admin-set remark shown in place of the automatic close-reason text. */
+  remark?: string | null;
   /** The order's engine type (LIMIT / STOP / MARKET); null for a trade. */
   orderType: string | null;
   /** A trade: when it opened. An order: when it was placed. */
@@ -366,6 +368,8 @@ export interface Position {
   commission: Decimal;
   swap: Decimal;
   closeReason?: string | null;
+  /** Admin-set remark shown in place of the automatic close-reason text. */
+  remark?: string | null;
   openedAt: string;
   closedAt?: string | null;
   /* ── Added by the markets/trading API layer ── */

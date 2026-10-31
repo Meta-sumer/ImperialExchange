@@ -99,7 +99,7 @@ function HistoryTable({ items, loading }) {
         {items.map((p) => {
           const isTrade = p.kind !== 'ORDER';
           const pnl = Number(p.realizedPnl || 0);
-          const remark = isTrade ? remarkText(p.closeReason) : orderRemark(p);
+          const remark = isTrade ? ((p.remark || '').trim() || remarkText(p.closeReason)) : orderRemark(p);
           return (
             <tr key={`${p.kind || 'TRADE'}-${p._id}`} className="border-b border-border-subtle hover:bg-bg-hover transition-colors">
               <td className="px-4 py-3 font-mono text-gray-300" title={p._id}>{ticketShort(p._id)}</td>
@@ -354,7 +354,7 @@ export default function Orders() {
         isTrade ? (p.commission || '0') : '',
         isTrade ? (p.swap || '0') : '',
         isTrade ? (p.closeReason === 'ADMIN' ? 'ADMIN' : 'SELF') : '',
-        isTrade ? remarkText(p.closeReason) : orderRemark(p),
+        isTrade ? ((p.remark || '').trim() || remarkText(p.closeReason)) : orderRemark(p),
         formatDateTime(p.openedAt || p.createdAt),
         formatDateTime(p.closedAt),
         isTrade ? p.realizedPnl : '',

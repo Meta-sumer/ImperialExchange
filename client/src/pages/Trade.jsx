@@ -5039,7 +5039,7 @@ function ClosedTable({ trades, fxRate, instrumentsBySymbol }) {
               <td className="p-2 text-right font-mono text-text-secondary">{charges ? fmtPnlSimple(-Math.abs(charges), quote) : '—'}</td>
               <td className="p-2 text-left text-xs text-text-secondary">{fmtDate(t.openedAt || t.createdAt)}</td>
               <td className="p-2 text-left text-xs text-text-secondary">{fmtDate(t.closedAt)}</td>
-              <td className="p-2 text-left text-xs">{closeReasonLabel(t.closeReason)}</td>
+              <td className="p-2 text-left text-xs">{(t.remark || '').trim() || closeReasonLabel(t.closeReason)}</td>
               <td className={`p-2 text-right font-mono font-semibold sticky right-0 z-10 bg-white group-hover:bg-bg-hover border-l border-border-subtle ${pnl >= 0 ? 'text-bull' : 'text-bear'}`}>{fmtPnlSimple(pnl, quote)}</td>
             </tr>
           );

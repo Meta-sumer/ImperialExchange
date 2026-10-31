@@ -749,7 +749,7 @@ function DetailDrawer({ target, onClose }) {
                 ['Order ID', ticket(p._id)], ['Symbol', p.symbol], ['Side', p.side], ['Book', p.book],
                 ['Volume', fmtNum(p.quantity, 4)], ['Open Price', fmtNum(p.entryPrice, 5)], ['Current', fmtNum(p.currentPrice, 5)],
                 ['Floating PnL', signed(p.floatingPnl)], ['Margin', fmtMoney(p.margin)], ['SL', p.stopLoss ?? '—'], ['TP', p.takeProfit ?? '—'],
-                ['Status', p.status],
+                ['Remark', p.remark || '—'], ['Status', p.status],
               ]} />
             </Section>
 

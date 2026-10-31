@@ -358,6 +358,7 @@ const openOrders = asyncHandler(async (req, res) => {
       stopLoss: p.stopLoss != null ? num(p.stopLoss) : null,
       takeProfit: p.takeProfit != null ? num(p.takeProfit) : null,
       margin: num(p.margin), book: p.book, leverage: p.leverage,
+      remark: p.remark || '',
       openTime: p.openedAt,
     };
   });
@@ -595,7 +596,7 @@ const closedOrders = asyncHandler(async (req, res) => {
     realizedPnl: round(num(p.realizedPnl), 2), commission: num(p.commission), swap: num(p.swap),
     charges: round(num(p.commission) + num(p.swap), 2),
     feeCategory: catMap.get(String(p._id)) || 'COMMISSION',
-    book: p.book, closeReason: p.closeReason,
+    book: p.book, closeReason: p.closeReason, remark: p.remark || '',
     openTime: p.openedAt, closeTime: p.closedAt,
   }));
   sendSuccess(res, { items, pagination: { page, limit, total, pages: Math.ceil(total / limit) } });
@@ -1096,6 +1097,7 @@ const tradeSnapshot = (p) => ({
   stopLoss: p.stopLoss ?? null, takeProfit: p.takeProfit ?? null, commission: p.commission,
   openedAt: p.openedAt, closePrice: p.closePrice ?? null, closedAt: p.closedAt ?? null,
   realizedPnl: p.realizedPnl, settlementAmount: p.settlementAmount ?? null,
+  remark: p.remark || '',
 });
 
 const isInsufficient = (err) => !!err && (
@@ -1144,6 +1146,7 @@ const manualTrade = asyncHandler(async (req, res) => {
   const takeProfit = parseDec(b.takeProfit, 'takeProfit', { optional: true });
   const productType = ['DELIVERY', 'INTRADAY', 'NORMAL'].includes(b.productType) ? b.productType : 'NORMAL';
   const note = String(b.note || '').trim().slice(0, 500);
+  const remark = String(b.remark || '').trim().slice(0, 200); // shown to the user in Trade History
 
   const openedAt = parseWhen(b.openedAt, 'openedAt');
   if (!openedAt) throw new AppError('openedAt is required', 400);
@@ -1177,7 +1180,7 @@ const manualTrade = asyncHandler(async (req, res) => {
   try {
     const base = {
       userId: user._id, accountId: account._id, instrumentId: instrument._id, symbol, side, positionSide,
-      book: 'B_BOOK', entryPrice, leverage, productType, commission, openedAt,
+      book: 'B_BOOK', entryPrice, leverage, productType, commission, openedAt, remark,
       ...(stopLoss ? { stopLoss } : {}), ...(takeProfit ? { takeProfit } : {}),
     };
     if (status === 'OPEN') {
@@ -1251,6 +1254,7 @@ const editTrade = asyncHandler(async (req, res) => {
   const stopLoss = has('stopLoss') ? parseDec(b.stopLoss, 'stopLoss', { optional: true }) : (position.stopLoss ?? null);
   const takeProfit = has('takeProfit') ? parseDec(b.takeProfit, 'takeProfit', { optional: true }) : (position.takeProfit ?? null);
   const openedAt = has('openedAt') ? parseWhen(b.openedAt, 'openedAt') : position.openedAt;
+  const remark = has('remark') ? String(b.remark || '').trim().slice(0, 200) : (position.remark || '');
   if (!openedAt) throw new AppError('openedAt is required', 400);
 
   let closedAt = position.closedAt || null;
@@ -1295,7 +1299,7 @@ const editTrade = asyncHandler(async (req, res) => {
       });
       wallet = { effect: 'MARGIN_RELEASED', amount: delta.abs().toString() };
     }
-    position.set({ side, positionSide, quantity, entryPrice, leverage, margin: newMargin, commission, stopLoss, takeProfit, openedAt });
+    position.set({ side, positionSide, quantity, entryPrice, leverage, margin: newMargin, commission, stopLoss, takeProfit, openedAt, remark });
   } else {
     // A different net result moves the balance by the difference, as an
     // ADJUSTMENT row that names the trade, so the ledger explains the jump.
@@ -1326,6 +1330,7 @@ const editTrade = asyncHandler(async (req, res) => {
       wallet = { effect: 'DEBITED', amount: delta.abs().toString() };
     }
     position.set({
+      remark,
       side, positionSide, quantity: '0', closedQuantity: quantity, entryPrice, leverage, commission,
       stopLoss, takeProfit, openedAt, closePrice, closedAt, realizedPnl,
       settlementAmount: newNet.toString(), settledAt: closedAt,

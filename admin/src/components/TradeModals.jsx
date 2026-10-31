@@ -111,7 +111,7 @@ export function ManualTradeModal({ onClose, onSaved }) {
   const [f, setF] = useState({
     accountId: '', side: 'BUY', quantity: '', entryPrice: '',
     openedAt: toLocalInput(new Date()), status: 'CLOSED', closePrice: '', closedAt: toLocalInput(new Date()),
-    leverage: '', stopLoss: '', takeProfit: '', commission: '0', note: '',
+    leverage: '', stopLoss: '', takeProfit: '', commission: '0', note: '', remark: '',
   });
   const set = (k, v) => setF((s) => ({ ...s, [k]: v }));
 
@@ -224,6 +224,7 @@ export function ManualTradeModal({ onClose, onSaved }) {
         takeProfit: f.takeProfit === '' ? undefined : f.takeProfit,
         commission: f.commission === '' ? '0' : f.commission,
         note: f.note,
+        remark: f.remark,
       };
       if (f.status === 'CLOSED') { body.closePrice = f.closePrice; body.closedAt = toIso(f.closedAt); }
       await api.post('/order-management/manual-trade', body);
@@ -330,6 +331,7 @@ export function ManualTradeModal({ onClose, onSaved }) {
         <Field label="Take profit" hint="optional"><input className="input" value={f.takeProfit} onChange={(e) => set('takeProfit', e.target.value)} placeholder="blank = none" /></Field>
         <Field label="Commission" hint="deducted from PnL"><input className="input" value={f.commission} onChange={(e) => set('commission', e.target.value)} placeholder="0" /></Field>
         <Field label="Internal note" hint="audit trail only"><input className="input" value={f.note} onChange={(e) => set('note', e.target.value)} placeholder="why this trade is being booked" /></Field>
+        <Field label="Remark (shown to user)" hint="replaces the automatic 'closed by admin' text in their Trade History"><input className="input" value={f.remark} onChange={(e) => set('remark', e.target.value)} placeholder="e.g. Booked as per client request" /></Field>
       </div>
 
       <Preview side={f.side} quantity={f.quantity} entryPrice={f.entryPrice} leverage={f.leverage || account?.leverage || 1} status={f.status} closePrice={f.closePrice} commission={f.commission} />
@@ -367,6 +369,7 @@ export function EditTradeModal({ row, onClose, onSaved }) {
           entryPrice: str(p.entryPrice), openedAt: toLocalInput(p.openedAt),
           leverage: str(p.leverage ?? ''), stopLoss: str(p.stopLoss ?? ''), takeProfit: str(p.takeProfit ?? ''),
           commission: str(p.commission ?? '0'),
+          remark: str(p.remark ?? ''),
           closePrice: closed ? str(p.closePrice ?? '') : '', closedAt: closed ? toLocalInput(p.closedAt) : '',
         };
         setPos(p); setInit(form); setF(form);
@@ -434,6 +437,7 @@ export function EditTradeModal({ row, onClose, onSaved }) {
             <Field label="Stop loss" hint="blank = none"><input className="input" value={f.stopLoss} onChange={(e) => set('stopLoss', e.target.value)} /></Field>
             <Field label="Take profit" hint="blank = none"><input className="input" value={f.takeProfit} onChange={(e) => set('takeProfit', e.target.value)} /></Field>
           </div>
+          <Field label="Remark (shown to user)" hint="replaces the automatic 'closed by admin' / 'closed by user' text in Trade History; blank = automatic"><input className="input" value={f.remark} onChange={(e) => set('remark', e.target.value)} placeholder="e.g. Closed on client's instruction" /></Field>
           <Preview side={f.side} quantity={f.quantity} entryPrice={f.entryPrice} leverage={f.leverage || 1} status={closed ? 'CLOSED' : 'OPEN'} closePrice={f.closePrice} commission={f.commission} />
         </>
       )}

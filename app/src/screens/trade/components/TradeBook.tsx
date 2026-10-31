@@ -257,7 +257,8 @@ function ClosedCard({ c, inst }: { c: Position; inst: Instrument | undefined }):
   const prec = inst?.pricePrecision || 4;
   const pnl = Number(c.realizedPnl || 0);
   const { comm, charges } = feeColumns(c);
-  const reason = closeReasonInfo(c.closeReason);
+  const auto = closeReasonInfo(c.closeReason);
+  const reason = (c.remark || '').trim() ? { ...auto, text: String(c.remark).trim() } : auto;
   return (
     <View style={[s.card, { borderColor: t.colors.borderSubtle, backgroundColor: t.colors.surface }]} testID={`book-closed-${c.id}`}>
       <View style={s.head}>

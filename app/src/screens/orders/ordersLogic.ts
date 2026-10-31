@@ -251,9 +251,12 @@ export const orderRemark = (o: Pick<HistoryRecord, 'rejectionReason' | 'status'>
   return 'CANCELLED — order withdrawn';
 };
 
-/** The REMARKS cell — how a trade closed, or why an order was refused. */
-export const remarkFor = (r: Pick<HistoryRecord, 'kind' | 'closeReason' | 'rejectionReason' | 'status'>): string =>
-  (isTrade(r) ? remarkText(r.closeReason) : orderRemark(r));
+/**
+ * The REMARKS cell — the admin's own remark when one is set on the trade,
+ * else how it closed; for an order, why it was refused.
+ */
+export const remarkFor = (r: Pick<HistoryRecord, 'kind' | 'closeReason' | 'rejectionReason' | 'status'> & { remark?: string | null }): string =>
+  (isTrade(r) ? ((r.remark || '').trim() || remarkText(r.closeReason)) : orderRemark(r));
 
 /** The record status pill (Orders.jsx RecordStatusPill): its words and tone. */
 export const recordStatus = (r: Pick<HistoryRecord, 'status'>): { label: string; tone: 'bear' | 'neutral' | 'bull' } => {
