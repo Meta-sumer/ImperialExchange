@@ -111,6 +111,19 @@ const positionSchema = new mongoose.Schema(
     // however it was placed. Set from Orders Management → Add Manual Trade
     // / Edit. Empty = show the automatic text.
     remark: { type: String, default: '' },
+
+    // Admin soft delete (Orders Management → Delete). A deleted trade vanishes
+    // from the user's history, chart, stats and exports but stays on record for
+    // audit. One deleted while CLOSED can be restored (its reversed P&L comes
+    // back with it); one deleted while OPEN was closed out flat and cannot.
+    deletedAt: { type: Date, default: null },
+    deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    deleteReason: String,
+    deletedFromStatus: { type: String, enum: ['OPEN', 'CLOSED'] },
+    deleteWalletEffect: {
+      type: { type: String, enum: ['NONE', 'REVERSED_PNL', 'MARGIN_RELEASED'] },
+      amount: String, // signed net P&L reversed, or the margin released
+    },
   },
   { timestamps: true }
 );

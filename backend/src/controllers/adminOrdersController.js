@@ -327,7 +327,7 @@ const openOrders = asyncHandler(async (req, res) => {
   const { page, limit, skip } = pageOf(req);
   const { filter, idExpr } = await resolveFilters(req, scopeIds);
 
-  const match = { status: POSITION_STATUS.OPEN, ...filter };
+  const match = { status: POSITION_STATUS.OPEN, deletedAt: null, ...filter };
   if (req.query.symbol) match.symbol = new RegExp(String(req.query.symbol), 'i');
   if (req.query.side) match.side = String(req.query.side).toUpperCase();
   if (req.query.book) match.book = String(req.query.book).toUpperCase();
@@ -561,6 +561,9 @@ const closedOrders = asyncHandler(async (req, res) => {
   const { filter, idExpr } = await resolveFilters(req, scopeIds);
 
   const match = { status: POSITION_STATUS.CLOSED, ...filter };
+  // Deleted trades are hidden by default; ?deleted=1 lists only them.
+  const showDeleted = req.query.deleted === '1' || req.query.deleted === 'true';
+  match.deletedAt = showDeleted ? { $ne: null } : null;
   if (req.query.symbol) match.symbol = new RegExp(String(req.query.symbol), 'i');
   if (req.query.side) match.side = String(req.query.side).toUpperCase();
   if (req.query.book) match.book = String(req.query.book).toUpperCase();
@@ -598,6 +601,9 @@ const closedOrders = asyncHandler(async (req, res) => {
     feeCategory: catMap.get(String(p._id)) || 'COMMISSION',
     book: p.book, closeReason: p.closeReason, remark: p.remark || '',
     openTime: p.openedAt, closeTime: p.closedAt,
+    deletedAt: p.deletedAt || null, deleteReason: p.deleteReason || '',
+    deletedFromStatus: p.deletedFromStatus || null, deleteWalletEffect: p.deleteWalletEffect || null,
+    restorable: !!p.deletedAt && p.deletedFromStatus === 'CLOSED',
   }));
   sendSuccess(res, { items, pagination: { page, limit, total, pages: Math.ceil(total / limit) } });
 });
@@ -734,9 +740,9 @@ const detail = asyncHandler(async (req, res) => {
 async function userTradingStats(userId) {
   const [open, closed, agg] = await Promise.all([
     Position.countDocuments({ userId, status: POSITION_STATUS.OPEN }),
-    Position.countDocuments({ userId, status: POSITION_STATUS.CLOSED }),
+    Position.countDocuments({ userId, status: POSITION_STATUS.CLOSED, deletedAt: null }),
     Position.aggregate([
-      { $match: { userId: new mongoose.Types.ObjectId(String(userId)), status: POSITION_STATUS.CLOSED } },
+      { $match: { userId: new mongoose.Types.ObjectId(String(userId)), status: POSITION_STATUS.CLOSED, deletedAt: null } },
       { $group: {
           _id: null,
           realized: { $sum: { $toDouble: '$realizedPnl' } },
@@ -1345,7 +1351,143 @@ const editTrade = asyncHandler(async (req, res) => {
   sendSuccess(res, { position: position.toObject(), wallet });
 });
 
+// ── Delete / restore (manage only) ─────────────────────────────────────────
+// A deleted trade is hidden from the user (history, chart, stats, exports) but
+// kept for audit. A CLOSED trade can be restored; a trade deleted while OPEN is
+// closed out first (margin released, no P&L) and cannot be restored.
+//
+// POST /order-management/positions/:id/delete { reason?, reverseWallet? }
+const deleteTrade = asyncHandler(async (req, res) => {
+  requireManage(req);
+  const b = req.body || {};
+  const reason = String(b.reason || '').trim().slice(0, 300);
+  const reverseWallet = b.reverseWallet === true || b.reverseWallet === 'true';
+
+  const position = await Position.findById(req.params.id);
+  if (!position) throw new AppError('Position not found', 404);
+  await assertInScope(req, position.userId);
+  if (position.deletedAt) throw new AppError('Trade is already deleted', 409, 'ALREADY_DELETED');
+  if (position.status === POSITION_STATUS.CLOSING) throw new AppError('Position is settling — try again in a moment', 409, 'ALREADY_SETTLING');
+
+  const account = await TradingAccount.findById(position.accountId).select('baseCurrency').lean();
+  const currency = account?.baseCurrency || BASE_CURRENCY;
+  const ticket = ticketShort(position._id);
+  const before = tradeSnapshot(position);
+  const stamp = { deletedAt: new Date(), deletedBy: req.userId, deleteReason: reason };
+  let effect = { type: 'NONE', amount: '0' };
+
+  if (position.status === POSITION_STATUS.CLOSED) {
+    if (reverseWallet) {
+      // Take back what the trade paid out (or give back what it cost):
+      // net = realizedPnl − commission, booked as an ADJUSTMENT naming the trade.
+      const net = D(netOf(position.realizedPnl || '0', position.commission || '0'));
+      const money = {
+        userId: position.userId, accountId: position.accountId, currency, type: 'ADJUSTMENT',
+        referenceType: 'position', referenceId: position._id,
+        note: `trade removed ${ticket} · net PnL ${net.toString()} reversed`,
+      };
+      if (net.gt(0)) {
+        try { await walletService.debit({ ...money, amount: net.toString() }); }
+        catch (err) {
+          if (isInsufficient(err)) {
+            throw new AppError(`Wallet balance cannot absorb the ${net.toString()} ${currency} reversal`, 400, 'INSUFFICIENT_FUNDS');
+          }
+          throw err;
+        }
+      } else if (net.lt(0)) {
+        await walletService.credit({ ...money, amount: net.abs().toString() });
+      }
+      effect = { type: 'REVERSED_PNL', amount: net.toString() };
+    }
+    await Position.updateOne({ _id: position._id }, { $set: { ...stamp, deletedFromStatus: 'CLOSED', deleteWalletEffect: effect } });
+  } else {
+    // OPEN: claim it like a close so the workers stop touching it, release the
+    // locked margin, then close it out flat and hide it. Roll back if the
+    // release fails so the position is never left half-deleted.
+    const claimed = await Position.findOneAndUpdate(
+      { _id: position._id, status: POSITION_STATUS.OPEN, settled: { $ne: true }, deletedAt: null },
+      { $set: { status: POSITION_STATUS.CLOSING, closeReason: 'ADMIN' } },
+      { new: true }
+    );
+    if (!claimed) throw new AppError('Position changed while deleting — reload and retry', 409, 'ALREADY_SETTLING');
+    const margin = String(claimed.margin || '0');
+    try {
+      await walletService.releaseMargin({
+        userId: claimed.userId, accountId: claimed.accountId, currency, amount: margin,
+        positionId: claimed._id, note: `trade removed ${ticket} · margin ${margin} released`,
+      });
+    } catch (err) {
+      await Position.updateOne({ _id: claimed._id, status: POSITION_STATUS.CLOSING }, { $set: { status: POSITION_STATUS.OPEN }, $unset: { closeReason: '' } });
+      throw err;
+    }
+    const inst = await Instrument.findById(claimed.instrumentId).select('lastPrice').lean();
+    const closePrice = String(inst?.lastPrice || claimed.entryPrice);
+    const now = new Date();
+    effect = { type: 'MARGIN_RELEASED', amount: margin };
+    await Position.updateOne({ _id: claimed._id }, { $set: {
+      ...stamp, deletedFromStatus: 'OPEN', deleteWalletEffect: effect,
+      status: POSITION_STATUS.CLOSED, closeReason: 'ADMIN', closedAt: now, closePrice,
+      realizedPnl: '0', closedQuantity: claimed.quantity, quantity: '0', margin: '0',
+      settled: true, settledAt: now, settlementAmount: '0',
+    } });
+  }
+
+  const after = await Position.findById(position._id).lean();
+  await audit(req, 'ADMIN_DELETE_TRADE', position._id, { symbol: position.symbol, reason, before, effect });
+  notifyTradeChange(position.userId, position.accountId, position._id);
+  sendSuccess(res, { position: after, wallet: effect });
+});
+
+// POST /order-management/positions/:id/restore — only for trades deleted while CLOSED.
+const restoreTrade = asyncHandler(async (req, res) => {
+  requireManage(req);
+  const position = await Position.findById(req.params.id);
+  if (!position) throw new AppError('Position not found', 404);
+  await assertInScope(req, position.userId);
+  if (!position.deletedAt) throw new AppError('Trade is not deleted', 409, 'NOT_DELETED');
+  if (position.deletedFromStatus !== 'CLOSED') {
+    throw new AppError('A trade deleted while open was closed out and cannot be restored', 400, 'CANNOT_RESTORE_OPEN');
+  }
+  const account = await TradingAccount.findById(position.accountId).select('baseCurrency').lean();
+  const currency = account?.baseCurrency || BASE_CURRENCY;
+  const ticket = ticketShort(position._id);
+  const eff = position.deleteWalletEffect || {};
+  let wallet = { effect: 'NONE', amount: '0' };
+  if (eff.type === 'REVERSED_PNL') {
+    // Put the reversed net P&L back exactly as it was taken.
+    const net = D(eff.amount || '0');
+    const money = {
+      userId: position.userId, accountId: position.accountId, currency, type: 'ADJUSTMENT',
+      referenceType: 'position', referenceId: position._id,
+      note: `trade restored ${ticket} · net PnL ${net.toString()} re-applied`,
+    };
+    if (net.gt(0)) {
+      await walletService.credit({ ...money, amount: net.toString() });
+      wallet = { effect: 'CREDITED', amount: net.toString() };
+    } else if (net.lt(0)) {
+      try { await walletService.debit({ ...money, amount: net.abs().toString() }); }
+      catch (err) {
+        if (isInsufficient(err)) {
+          throw new AppError(`Wallet balance cannot absorb the ${net.abs().toString()} ${currency} this restore implies`, 400, 'INSUFFICIENT_FUNDS');
+        }
+        throw err;
+      }
+      wallet = { effect: 'DEBITED', amount: net.abs().toString() };
+    }
+  }
+  await Position.updateOne({ _id: position._id }, {
+    $set: { deletedAt: null },
+    $unset: { deletedBy: '', deleteReason: '', deletedFromStatus: '', deleteWalletEffect: '' },
+  });
+  const after = await Position.findById(position._id).lean();
+  await audit(req, 'ADMIN_RESTORE_TRADE', position._id, { symbol: position.symbol, wallet });
+  notifyTradeChange(position.userId, position.accountId, position._id);
+  sendSuccess(res, { position: after, wallet });
+});
+
 module.exports = {
+  deleteTrade,
+  restoreTrade,
   accountTypes,
   summary, openOrders, pendingOrders, cancelledOrders, rejectedOrders, closedOrders, risk, detail,
   modifySLTP, forceClose, transferBook, addComment,

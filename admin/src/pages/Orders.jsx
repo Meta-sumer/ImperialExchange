@@ -5,7 +5,7 @@ import { fmtNum, fmtMoney, fmtDate } from '../utils/format';
 import { useAuthStore } from '../store/auth';
 import { useConfirm } from '../components/ConfirmProvider';
 import PageHero from '../components/PageHero';
-import { ManualTradeModal, EditTradeModal } from '../components/TradeModals';
+import { ManualTradeModal, EditTradeModal, DeleteTradeModal } from '../components/TradeModals';
 
 /**
  * Orders Management — institutional dealing-desk console.
@@ -19,7 +19,7 @@ import { ManualTradeModal, EditTradeModal } from '../components/TradeModals';
  */
 
 const sgn = (n) => (Number(n) > 0 ? 'text-bull' : Number(n) < 0 ? 'text-bear' : 'text-text-secondary');
-const signed = (n) => `${Number(n) < 0 ? '-' : ''}$${fmtNum(Math.abs(Number(n) || 0), 2)}`;
+const signed = (n) => `${Number(n) < 0 ? '-' : ''}₹${fmtNum(Math.abs(Number(n) || 0), 2)}`;
 const sideChip = (s) => (s === 'BUY'
   ? 'bg-bull/15 text-bull border-bull/30'
   : 'bg-bear/15 text-bear border-bear/30');
@@ -105,14 +105,24 @@ export default function Orders() {
   const [cancelReasonModal, setCancelReasonModal] = useState(null); // order row
   const [manualModal, setManualModal] = useState(false);        // book a backdated trade for a user
   const [editModal, setEditModal] = useState(null);             // position row (open or closed) to edit
+  const [deleteModal, setDeleteModal] = useState(null);         // { row, isOpen } — soft-delete a trade
+  const [showDeleted, setShowDeleted] = useState(false);        // Closed History: list deleted trades instead
 
   const busyRef = useRef(false);
 
   const queryParams = useCallback((extra = {}) => {
-    const p = { page, limit: 25, ...filters, ...extra };
+    const p = { page, limit: 25, ...filters, ...(tab === 'closed' && showDeleted ? { deleted: 1 } : {}), ...extra };
     Object.keys(p).forEach((k) => { if (p[k] === '' || p[k] == null) delete p[k]; });
     return p;
-  }, [page, filters]);
+  }, [page, filters, tab, showDeleted]);
+
+  const doRestore = async (r) => {
+    const pnlNote = r.deleteWalletEffect?.type === 'REVERSED_PNL' ? ` Its net P&L of ${signed(r.deleteWalletEffect.amount)} will be re-applied to the wallet.` : '';
+    const ok = await confirm({ title: 'Restore trade', message: `Put ${r.symbol} ${ticket(r._id)} back into ${r.userName}'s history?${pnlNote}`, confirmText: 'Restore' });
+    if (!ok) return;
+    try { await api.post(`/order-management/positions/${r._id}/restore`); toast.success('Trade restored'); refreshAll(); }
+    catch (e) { toast.error(errorMessage(e)); }
+  };
 
   const loadSummary = useCallback(async () => {
     try { const { data } = await api.get('/order-management/summary'); setSummary(data.data); }
@@ -141,7 +151,7 @@ export default function Orders() {
     setSelected(new Set());
     loadSummary();
     if (tab === 'risk') loadRisk(); else loadList();
-  }, [tab, filters, page]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [tab, filters, page, showDeleted]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Live polling — every 8s, refresh quietly when no modal/drawer is open.
   useEffect(() => {
@@ -286,6 +296,12 @@ export default function Orders() {
       {tab !== 'risk' && (
         <FilterBar tab={tab} draft={draft} setDraft={setDraft} onApply={applyFilters} onReset={resetFilters} onExport={exportCsv} acctTypeOptions={acctTypeOptions} />
       )}
+      {tab === 'closed' && canManage && (
+        <label className="inline-flex items-center gap-2 text-xs text-text-secondary select-none cursor-pointer">
+          <input type="checkbox" checked={showDeleted} onChange={(e) => { setShowDeleted(e.target.checked); setPage(1); setSelected(new Set()); }} />
+          Show deleted trades only
+        </label>
+      )}
 
       {/* Bulk toolbar */}
       {canManage && tab !== 'risk' && tab !== 'cancelled' && tab !== 'rejected' && selected.size > 0 && (
@@ -335,7 +351,8 @@ export default function Orders() {
                     onView={() => setDrawer({ kind: r.kind, id: r._id })}
                     onSltp={() => setSltpModal(r)} onComment={() => setCommentModal(r)} onClose={() => doForceClose(r)}
                     onMove={(b) => doMoveBook(r, b)} onCancelWithReason={() => setCancelReasonModal(r)} onExecute={() => doForceExecute(r)}
-                    onModifyPending={() => setPendingModal(r)} onEdit={() => setEditModal(r)} />
+                    onModifyPending={() => setPendingModal(r)} onEdit={() => setEditModal(r)}
+                    onDelete={() => setDeleteModal({ row: r, isOpen: tab === 'open' })} onRestore={() => doRestore(r)} />
                 ))}
               </tbody>
             </table>
@@ -359,6 +376,7 @@ export default function Orders() {
       {cancelReasonModal && <CancelReasonModal row={cancelReasonModal} onClose={() => setCancelReasonModal(null)} onDone={() => { setCancelReasonModal(null); refreshAll(); }} />}
       {manualModal && <ManualTradeModal onClose={() => setManualModal(false)} onSaved={() => { setManualModal(false); refreshAll(); }} />}
       {editModal && <EditTradeModal row={editModal} onClose={() => setEditModal(null)} onSaved={() => { setEditModal(null); refreshAll(); }} />}
+      {deleteModal && <DeleteTradeModal row={deleteModal.row} isOpen={deleteModal.isOpen} onClose={() => setDeleteModal(null)} onDone={() => { setDeleteModal(null); refreshAll(); }} />}
     </div>
   );
 }
@@ -517,7 +535,7 @@ const COLUMNS = {
   ],
 };
 
-function Row({ tab, r, canManage, selected, onSel, onView, onSltp, onComment, onClose, onMove, onCancelWithReason, onExecute, onModifyPending, onEdit }) {
+function Row({ tab, r, canManage, selected, onSel, onView, onSltp, onComment, onClose, onMove, onCancelWithReason, onExecute, onModifyPending, onEdit, onDelete, onRestore }) {
   const price = (v) => (v == null ? '—' : fmtNum(v, 5));
   const charge = (v) => (Number(v) ? <span className="text-text-secondary">{signed(-Math.abs(Number(v)))}</span> : '—');
   // A trade's single fee belongs to ONE group (by type): commission-type →
@@ -527,10 +545,10 @@ function Row({ tab, r, canManage, selected, onSel, onView, onSltp, onComment, on
   const commCell = _isCharge ? 0 : _fee;
   const chargeCell = (_isCharge ? _fee : 0) + (Number(r.swap) || 0);
   return (
-    <tr className="table-row align-middle">
+    <tr className={`table-row align-middle ${r.deletedAt ? 'opacity-60' : ''}`}>
       {canManage && <td className="p-2.5"><input type="checkbox" checked={selected} onChange={onSel} /></td>}
       <td className="p-2.5 font-mono text-[11px] text-text-muted" title={r._id}>{ticket(r._id)}</td>
-      <td className="p-2.5 font-semibold text-white">{r.symbol}</td>
+      <td className="p-2.5 font-semibold text-white">{r.symbol}{r.deletedAt && <span className="ml-1.5 px-1.5 py-0.5 rounded text-[10px] font-bold border bg-bear/15 text-bear border-bear/30" title={r.deleteReason ? `Deleted: ${r.deleteReason}` : 'Deleted'}>DELETED</span>}</td>
       {tab === 'open' && <>
         <td className="p-2.5"><span className={`px-1.5 py-0.5 rounded text-[11px] font-bold border ${sideChip(r.side)}`}>{r.side}</span></td>
         <td className="p-2.5 text-right">{fmtNum(r.volume, 4)}</td>
@@ -596,6 +614,7 @@ function Row({ tab, r, canManage, selected, onSel, onView, onSltp, onComment, on
               <button onClick={onClose} className="text-[11px] px-2 py-1 rounded text-bear hover:bg-bear/10" title="Force close">Close</button>
               <BookMenu onMove={onMove} current={r.book} />
               <button onClick={onComment} className="btn-ghost text-[11px] px-2 py-1" title="Internal comment">💬</button>
+              <button onClick={onDelete} className="text-[11px] px-2 py-1 rounded text-bear hover:bg-bear/10" title="Delete trade — release margin, hide from the user">Delete</button>
             </>}
           </>}
           {tab === 'pending' && canManage && <>
@@ -606,8 +625,12 @@ function Row({ tab, r, canManage, selected, onSel, onView, onSltp, onComment, on
           {tab === 'cancelled' && canManage && <>
             <button onClick={onView} className="btn-ghost text-[11px] px-2 py-1" title="View details">View</button>
           </>}
-          {tab === 'closed' && canManage && (
+          {tab === 'closed' && canManage && !r.deletedAt && <>
             <button onClick={onEdit} className="btn-ghost text-[11px] px-2 py-1" title="Edit trade (prices, times, size, side…)">Edit</button>
+            <button onClick={onDelete} className="text-[11px] px-2 py-1 rounded text-bear hover:bg-bear/10" title="Delete trade — hide from the user's history">Delete</button>
+          </>}
+          {tab === 'closed' && canManage && r.deletedAt && r.restorable && (
+            <button onClick={onRestore} className="text-[11px] px-2 py-1 rounded text-emerald-400 hover:bg-emerald-500/10" title="Restore to the user's history">Restore</button>
           )}
         </div>
       </td>

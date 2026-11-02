@@ -84,7 +84,7 @@ async function getTraderAnalytics(userId, accountId) {
 
   // Closed positions = the realized track record (read-only), scoped to the
   // box's source account when provided.
-  const posBase = { userId: oid(userId), status: POSITION_STATUS.CLOSED };
+  const posBase = { userId: oid(userId), status: POSITION_STATUS.CLOSED, deletedAt: null };
   if (accountId) posBase.accountId = oid(accountId);
   const closed = await Position.find(posBase)
     .select('symbol side realizedPnl openedAt closedAt leverage stopLoss')
@@ -344,7 +344,7 @@ function periodRange(period, from, to) {
 
 /** Paginated closed-trade history for a trader (read-only). */
 async function getTraderHistory(userId, { period = 'all', page = 1, limit = 20, from, to, accountId } = {}) {
-  const q = { userId: oid(userId), status: POSITION_STATUS.CLOSED };
+  const q = { userId: oid(userId), status: POSITION_STATUS.CLOSED, deletedAt: null };
   if (accountId) q.accountId = oid(accountId);
   const range = periodRange(period, from, to);
   if (range) q.closedAt = range;

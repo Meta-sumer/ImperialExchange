@@ -1023,7 +1023,7 @@ const unifiedHistory = asyncHandler(async (req, res) => {
   const wantRejected  = (recordType === 'all' || recordType === 'rejected')  && !reasonFilter;
 
   // ── closed positions ──
-  const posMatch = { ...scope, status: POSITION_STATUS.CLOSED };
+  const posMatch = { ...scope, status: POSITION_STATUS.CLOSED, deletedAt: null }; // admin-deleted trades stay hidden
   if (reasonFilter) posMatch.closeReason = reasonFilter;
   applyDateRange(posMatch, 'closedAt', from, to);
 
@@ -1155,7 +1155,7 @@ const positionHistory = asyncHandler(async (req, res) => {
     limit: limitRaw = '30',
   } = req.query;
 
-  const baseFilter = { userId: req.userId, status: POSITION_STATUS.CLOSED };
+  const baseFilter = { userId: req.userId, status: POSITION_STATUS.CLOSED, deletedAt: null };
   if (accountId) {
     baseFilter.accountId = accountId;
   } else if (accountIds) {
@@ -1251,7 +1251,7 @@ const listPositions = asyncHandler(async (req, res) => {
   // switching accounts shows ONLY that account's open positions. Omitting it
   // keeps the legacy user-wide behaviour. The userId clause still guarantees
   // a user can never read another user's rows via a foreign accountId.
-  const posFilter = { userId: req.userId, status: POSITION_STATUS.OPEN };
+  const posFilter = { userId: req.userId, status: POSITION_STATUS.OPEN, deletedAt: null };
   if (req.query.accountId) posFilter.accountId = req.query.accountId;
   const positions = await Position.find(posFilter).lean();
   if (!positions.length) return sendSuccess(res, []);

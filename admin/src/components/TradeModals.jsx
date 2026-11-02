@@ -269,7 +269,7 @@ export function ManualTradeModal({ onClose, onSaved }) {
         <select className="input" value={f.accountId} disabled={!user} onChange={(e) => { set('accountId', e.target.value); const a = accounts.find((x) => String(x._id) === e.target.value); if (a?.leverage) set('leverage', str(a.leverage)); }}>
           {!accounts.length && <option value="">{user ? 'No accounts' : 'Pick a user first'}</option>}
           {accounts.map((a) => (
-            <option key={a._id} value={a._id}>{a.accountNumber} · {a.accountType} · bal {money(num(a.balance))} · {a.baseCurrency || 'USD'}</option>
+            <option key={a._id} value={a._id}>{a.accountNumber} · {a.accountType} · bal {money(num(a.balance))} · {a.baseCurrency || 'INR'}</option>
           ))}
         </select>
       </Field>
@@ -441,6 +441,74 @@ export function EditTradeModal({ row, onClose, onSaved }) {
           <Preview side={f.side} quantity={f.quantity} entryPrice={f.entryPrice} leverage={f.leverage || 1} status={closed ? 'CLOSED' : 'OPEN'} closePrice={f.closePrice} commission={f.commission} />
         </>
       )}
+    </Shell>
+  );
+}
+
+/* ───────────────────────── Delete trade ───────────────────────── */
+
+/**
+ * Soft-delete a trade: it disappears from the user's history, chart and stats
+ * but stays on record, listed under Closed History → "Show deleted".
+ *   CLOSED → optionally reverse its net P&L (realized − commission) from the
+ *            wallet; restorable later (the P&L comes back with it).
+ *   OPEN   → margin is released, the position is closed out flat with no P&L,
+ *            and it cannot be restored.
+ * POST /order-management/positions/:id/delete
+ */
+export function DeleteTradeModal({ row, isOpen, onClose, onDone }) {
+  const [reason, setReason] = useState('');
+  const [reverse, setReverse] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const realized = Number(row.realizedPnl) || 0;
+  const commission = Number(row.commission) || 0;
+  const net = isOpen ? 0 : realized - commission;
+  const marginN = Number(row.margin) || 0;
+
+  const submit = async () => {
+    setSaving(true);
+    try {
+      const { data } = await api.post(`/order-management/positions/${row._id}/delete`, { reason: reason.trim(), reverseWallet: !isOpen && reverse });
+      const w = data.data?.wallet;
+      const eff = w?.type === 'REVERSED_PNL' ? ` · ${money(-Number(w.amount))} applied to the wallet`
+        : w?.type === 'MARGIN_RELEASED' ? ` · margin ${money(Number(w.amount))} released` : '';
+      toast.success(`Trade ${row.symbol} deleted${eff}`);
+      onDone();
+    } catch (e) { toast.error(errorMessage(e)); } finally { setSaving(false); }
+  };
+
+  return (
+    <Shell
+      title={`Delete Trade · ${row.symbol}`}
+      subtitle={isOpen
+        ? "The position is closed out flat, its margin released and it is hidden from the user. This cannot be restored."
+        : "Hidden from the user's history, chart and stats. You can restore it later from Closed History → Show deleted."}
+      onClose={onClose}
+      footer={<>
+        <button onClick={onClose} className="btn-secondary text-sm">Cancel</button>
+        <button onClick={submit} disabled={saving} className="btn-bear text-sm disabled:opacity-40">{saving ? 'Deleting…' : 'Delete Trade'}</button>
+      </>}
+    >
+      <div className="text-xs text-text-muted">
+        {row.side} {fmtNum(row.volume, 4)} · {row.userName || '—'} · {row.accountNumber || '—'}
+        {isOpen ? ` · margin ${money(marginN)}` : ` · net P&L ${money(net)}`}
+      </div>
+      {isOpen ? (
+        <div className="rounded-lg border border-border-dark p-3 text-xs text-text-secondary">
+          Margin {money(marginN)} will be released back to the wallet. No P&amp;L is booked.
+        </div>
+      ) : (
+        <label className="flex items-start gap-2 rounded-lg border border-border-dark p-3 text-xs text-text-secondary cursor-pointer">
+          <input type="checkbox" className="mt-0.5" checked={reverse} onChange={(e) => setReverse(e.target.checked)} />
+          <span>
+            Also reverse the trade's net P&amp;L from the wallet — {net >= 0 ? `debit ${money(net)}` : `credit ${money(-net)}`}
+            {' '}(realized {money(realized)} − commission {money(commission)}). Leave unticked to keep the balance as it is.
+          </span>
+        </label>
+      )}
+      <Field label="Reason" hint="kept in the audit trail, shown to admins only">
+        <input className="input" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="optional" />
+      </Field>
     </Shell>
   );
 }

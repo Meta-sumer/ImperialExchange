@@ -117,7 +117,7 @@ const getDashboard = asyncHandler(async (req, res) => {
           .select('_id lastPrice quoteCurrency')
           .lean()
       : Promise.resolve([]),
-    Position.find({ accountId: { $in: liveAccountIds }, status: 'CLOSED' })
+    Position.find({ accountId: { $in: liveAccountIds }, status: 'CLOSED', deletedAt: null })
       .select('closedAt realizedPnl quantity entryPrice')
       .lean(),
   ]);
@@ -326,7 +326,7 @@ const getLifetimeStats = asyncHandler(async (req, res) => {
     });
   }
 
-  const closedFilter = { accountId: { $in: accountIds }, status: 'CLOSED' };
+  const closedFilter = { accountId: { $in: accountIds }, status: 'CLOSED', deletedAt: null };
   // Custom range (fromDate/toDate) wins over the preset `days` window.
   if (req.query.fromDate || req.query.toDate) {
     // Inclusive of the whole `toDate` day (shared helper, tz-consistent bounds).
@@ -490,6 +490,7 @@ const getMonthlySeries = asyncHandler(async (req, res) => {
   const closed = await Position.find({
     accountId: { $in: accountIds },
     status: 'CLOSED',
+    deletedAt: null,
     closedAt: { $gte: oldest },
   }).lean();
 

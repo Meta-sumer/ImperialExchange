@@ -56,7 +56,7 @@ const exportOrderHistory = asyncHandler(async (req, res) => {
 
 const exportClosedPositions = asyncHandler(async (req, res) => {
   const { from, to, accountId } = req.query;
-  const filter = { userId: req.userId, status: 'CLOSED' };
+  const filter = { userId: req.userId, status: 'CLOSED', deletedAt: null };
   if (accountId) filter.accountId = accountId;   // scoped by userId above → safe
   // Inclusive of the whole `to` day (fixes From==To returning nothing).
   applyDateRange(filter, 'closedAt', from, to);
