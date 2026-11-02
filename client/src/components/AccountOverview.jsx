@@ -235,7 +235,7 @@ export default function AccountOverview({
       {/* ── Main Wallet + Referral/IB Wallet cards ─────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Main Wallet */}
-        <div className="rounded-2xl border border-border-dark overflow-hidden" style={{ background: 'linear-gradient(135deg,#EFF6FF,#FFFFFF 60%)' }}>
+        <div className="rounded-2xl border border-border-dark overflow-hidden bg-white bg-gradient-to-br from-[#1D4ED8]/10 via-transparent to-transparent">
           <div className="p-5">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -264,7 +264,7 @@ export default function AccountOverview({
         </div>
 
         {/* Referral / IB Wallet */}
-        <div className="rounded-2xl border border-border-dark overflow-hidden" style={{ background: 'linear-gradient(135deg,#F5F3FF,#FFFFFF 60%)' }}>
+        <div className="rounded-2xl border border-border-dark overflow-hidden bg-white bg-gradient-to-br from-[#8B5CF6]/10 via-transparent to-transparent">
           <div className="p-5">
             <div className="flex items-center justify-between">
               <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full" style={{ background: '#8B5CF615', color: '#8B5CF6' }}>Withdraw Only</span>
