@@ -76,7 +76,7 @@ export default function UserTransfers() {
         <div className="grid grid-cols-2 sm:grid-cols-6 gap-3">
           <FilterInput label="Email / name" value={filters.email} onChange={(v) => setFilters({ ...filters, email: v })} />
           <FilterInput label="Status" value={filters.status} onChange={(v) => setFilters({ ...filters, status: v })} as="select" options={[['','any'], ['COMPLETED','Completed'], ['FAILED','Failed']]} />
-          <FilterInput label="Currency" value={filters.currency} onChange={(v) => setFilters({ ...filters, currency: v })} as="select" options={[['',''], ['USD','USD'], ['EUR','EUR'], ['GBP','GBP'], ['INR','INR']]} />
+          <FilterInput label="Currency" value={filters.currency} onChange={(v) => setFilters({ ...filters, currency: v })} as="select" options={[['',''], ['INR','INR']]} />
           <FilterInput label="From user id" value={filters.fromUserId} onChange={(v) => setFilters({ ...filters, fromUserId: v })} />
           <FilterInput label="To user id"   value={filters.toUserId}   onChange={(v) => setFilters({ ...filters, toUserId: v })} />
           <FilterInput label="Min amount"   value={filters.minAmount}  onChange={(v) => setFilters({ ...filters, minAmount: v })} type="number" />

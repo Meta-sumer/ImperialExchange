@@ -756,7 +756,7 @@ function ExchangeRatesCard() {
             <label className="block text-[10px] text-text-muted mb-0.5">Symbol</label>
             <input value={draft.symbol}
               onChange={(e) => setDraft({ ...draft, symbol: e.target.value })}
-              maxLength={4} placeholder="$" className={inp} />
+              maxLength={4} placeholder="₹" className={inp} />
           </div>
           <div>
             <label className="block text-[10px] text-text-muted mb-0.5">Mode</label>

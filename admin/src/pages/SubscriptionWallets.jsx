@@ -71,9 +71,9 @@ export default function SubscriptionWallets() {
       {/* Stats strip */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Stat label="Visible rows" value={stats.total} />
-        <Stat label="Credits (visible)" value={`$${fmt(stats.credits)}`} accent="emerald" />
-        <Stat label="Debits (visible)" value={`$${fmt(stats.debits)}`} accent="rose" />
-        <Stat label="Net (visible)" value={`$${fmt(stats.net)}`} accent={stats.net >= 0 ? 'emerald' : 'rose'} />
+        <Stat label="Credits (visible)" value={`₹${fmt(stats.credits)}`} accent="emerald" />
+        <Stat label="Debits (visible)" value={`₹${fmt(stats.debits)}`} accent="rose" />
+        <Stat label="Net (visible)" value={`₹${fmt(stats.net)}`} accent={stats.net >= 0 ? 'emerald' : 'rose'} />
       </div>
 
       {/* Filter bar */}
@@ -144,7 +144,7 @@ export default function SubscriptionWallets() {
                       {isCredit ? '+' : '−'}${fmt(t.amount)}
                     </td>
                     <td className="py-2 px-3 text-right font-mono tabular-nums text-text-secondary">
-                      {t.balanceAfter != null ? `$${fmt(t.balanceAfter)}` : '—'}
+                      {t.balanceAfter != null ? `₹${fmt(t.balanceAfter)}` : '—'}
                     </td>
                     <td className="py-2 px-3 text-center">
                       <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
@@ -204,10 +204,10 @@ function ActionModal({ mode, onClose, onSaved }) {
     try {
       if (mode === 'credit') {
         await api.post('/subscription-wallet/admin/credit', { userId, amount: Number(amount), note });
-        toast.success(`Credited $${Number(amount).toFixed(2)}`);
+        toast.success(`Credited ₹${Number(amount).toFixed(2)}`);
       } else if (mode === 'debit') {
         await api.post('/subscription-wallet/admin/debit', { userId, amount: Number(amount), note });
-        toast.success(`Debited $${Number(amount).toFixed(2)}`);
+        toast.success(`Debited ₹${Number(amount).toFixed(2)}`);
       } else if (mode === 'autorenew') {
         await api.patch(`/subscription-wallet/admin/${userId}/auto-renew`, { enabled });
         toast.success(`Auto-renew ${enabled ? 'enabled' : 'disabled'}`);
@@ -239,7 +239,7 @@ function ActionModal({ mode, onClose, onSaved }) {
           {(mode === 'credit' || mode === 'debit') && (
             <>
               <label className="block">
-                <div className="text-[11px] font-semibold text-text-secondary mb-1">Amount (USD)</div>
+                <div className="text-[11px] font-semibold text-text-secondary mb-1">Amount (INR)</div>
                 <input type="number" step="0.01" min="0" className="input" value={amount} onChange={(e) => setAmount(e.target.value)} />
               </label>
               <label className="block">

@@ -350,7 +350,7 @@ function PartnerSettingsCard({ settings, save, saving }) {
     enabled:     settings['partner.enabled'] !== false,
     bonusAmount: String(settings['partner.bonusAmount'] ?? '10'),
     minDeposit:  String(settings['partner.minDeposit']  ?? '50'),
-    bonusCurrency: String(settings['partner.bonusCurrency'] ?? 'USD').toUpperCase(),
+    bonusCurrency: String(settings['partner.bonusCurrency'] ?? 'INR').toUpperCase(),
     volumeTiers: Array.isArray(settings['partner.volumeTiers']) && settings['partner.volumeTiers'].length
       ? settings['partner.volumeTiers'].map((t) => ({
           name:      String(t.name),
@@ -432,7 +432,7 @@ function PartnerSettingsCard({ settings, save, saving }) {
             onChange={(e) => setDraft({ ...draft, bonusCurrency: e.target.value })}
             className="w-full px-3 py-2 rounded bg-bg-dark border border-border-dark text-sm font-mono text-white focus:border-primary-500 focus:outline-none"
           >
-            {['USD', 'EUR', 'GBP', 'INR', 'AUD', 'CAD', 'AED'].map((c) => <option key={c} value={c}>{c}</option>)}
+            {['INR'].map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
           <div className="mt-1 text-[10px] text-text-muted">Currency recorded on the bonus payout & audit trail</div>
         </div>
@@ -451,7 +451,7 @@ function PartnerSettingsCard({ settings, save, saving }) {
               />
             </div>
             <div className="col-span-5">
-              <label className="block text-[10px] text-text-muted mb-0.5">Min volume (USD)</label>
+              <label className="block text-[10px] text-text-muted mb-0.5">Min volume (INR)</label>
               <input
                 type="number" min="0" step="1000"
                 value={t.minVolume}

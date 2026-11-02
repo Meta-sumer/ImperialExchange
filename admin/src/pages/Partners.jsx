@@ -102,7 +102,7 @@ export default function Partners() {
               <div key={e.userId} className="bg-bg-dark border border-border-dark rounded p-3">
                 <div className="text-[10px] text-text-muted uppercase tracking-wider font-bold">#{i + 1} · {e.referralCode || e.userId.slice(-6)}</div>
                 <div className="text-sm font-bold text-white truncate" title={e.name}>{e.name}</div>
-                <div className="mt-1 text-base font-bold font-mono text-bull">${e.total}</div>
+                <div className="mt-1 text-base font-bold font-mono text-bull">₹{e.total}</div>
               </div>
             ))}
           </div>
@@ -139,8 +139,8 @@ export default function Partners() {
                   ${Number(r.previousMonthVolume || 0).toLocaleString()}
                   <span className="block text-[10px] text-text-muted">{r.totalReferrals} referral{r.totalReferrals === 1 ? '' : 's'}</span>
                 </td>
-                <td className="p-3 text-right font-mono text-bull">${r.lifetimeEarnings}</td>
-                <td className="p-3 text-right font-mono text-warn">${r.pendingEarnings}</td>
+                <td className="p-3 text-right font-mono text-bull">₹{r.lifetimeEarnings}</td>
+                <td className="p-3 text-right font-mono text-warn">₹{r.pendingEarnings}</td>
                 <td className="p-3 text-xs text-text-secondary font-mono whitespace-nowrap">{fmtDate(r.createdAt)}</td>
                 <td className="p-3 text-right">
                   <PartnerActions row={r} onOverride={overrideLevel} onBlock={toggleBlock} />

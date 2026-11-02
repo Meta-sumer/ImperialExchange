@@ -49,7 +49,7 @@ export function RecentClosedTrades({
     <Section padded={false} testID="recent-closed-trades">
       <View style={[styles.head, { borderBottomColor: t.colors.borderSubtle }]}>
         <AppText variant="bodyStrong">Recent Closed Trades</AppText>
-        <TextLink label="View All Closed Trades →" onPress={() => nav.navigate('Reports')} />
+        <TextLink label="View All Closed Trades →" onPress={() => nav.navigate('Orders')} />
       </View>
 
       {loading ? (

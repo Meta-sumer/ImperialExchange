@@ -162,7 +162,7 @@ export default function AccountPlans() {
                       </div>
                     </td>
                     <td className="py-2 px-3 font-mono text-xs text-text-secondary">{p.code}</td>
-                    <td className="py-2 px-3 text-right font-mono tabular-nums">${p.minDeposit}</td>
+                    <td className="py-2 px-3 text-right font-mono tabular-nums">₹{p.minDeposit}</td>
                     <td className="py-2 px-3 text-right font-mono tabular-nums">{p.maxLeverage ? `1:${p.maxLeverage}` : '1:∞'}</td>
                     <td className="py-2 px-3 text-text-secondary text-xs">
                       <div className="font-semibold text-text-primary">{feeTypeText(p.feeKind) || '—'}</div>

@@ -224,7 +224,7 @@ export default function BonusWallets() {
                   <tr key={w._id} className="border-b border-border-subtle hover:bg-bg-hover/40">
                     <td className="py-2 px-3 text-text-primary">{userLabel(w.userId)}</td>
                     <td className="py-2 px-3 font-mono text-[11px] text-text-secondary">{typeof w.userId === 'object' ? w.userId?._id : w.userId}</td>
-                    <td className="py-2 px-3 text-right font-mono tabular-nums font-bold text-text-primary">${fmt(w.balance)}</td>
+                    <td className="py-2 px-3 text-right font-mono tabular-nums font-bold text-text-primary">₹{fmt(w.balance)}</td>
                     <td className="py-2 px-3 text-text-secondary whitespace-nowrap">{w.updatedAt ? new Date(w.updatedAt).toLocaleString() : '—'}</td>
                   </tr>
                 ))}
@@ -252,7 +252,7 @@ function ActionModal({ mode, onClose, onSaved }) {
     setSubmitting(true);
     try {
       await api.post(`/bonus-wallet/admin/${mode}`, { userId, amount: Number(amount), note });
-      toast.success(`${mode === 'credit' ? 'Credited' : 'Debited'} $${Number(amount).toFixed(2)}`);
+      toast.success(`${mode === 'credit' ? 'Credited' : 'Debited'} ₹${Number(amount).toFixed(2)}`);
       onSaved();
     } catch (e) {
       toast.error(errorMessage(e));

@@ -182,11 +182,11 @@ export default function Plans() {
                       </div>
                     </td>
                     <td className="py-2 px-3 font-mono text-xs text-text-secondary">{p.code}</td>
-                    <td className="py-2 px-3 text-right font-mono tabular-nums">${p.monthlyPrice}</td>
-                    <td className="py-2 px-3 text-right font-mono tabular-nums text-text-muted">${p.yearlyPrice}</td>
+                    <td className="py-2 px-3 text-right font-mono tabular-nums">₹{p.monthlyPrice}</td>
+                    <td className="py-2 px-3 text-right font-mono tabular-nums text-text-muted">₹{p.yearlyPrice}</td>
                     <td className="py-2 px-3 text-right font-mono tabular-nums">1:{p.limits?.defaultLeverage || 100}</td>
                     <td className="py-2 px-3 text-right font-mono tabular-nums font-bold text-text-primary">{a.active ?? 0}</td>
-                    <td className="py-2 px-3 text-right font-mono tabular-nums text-emerald-600 font-bold">${a.monthlyRevenue ?? '0.00'}</td>
+                    <td className="py-2 px-3 text-right font-mono tabular-nums text-emerald-600 font-bold">₹{a.monthlyRevenue ?? '0.00'}</td>
                     <td className="py-2 px-3 text-center">
                       <button
                         onClick={() => toggleStatus(p)}
@@ -367,7 +367,7 @@ function PlanForm({ plan, onClose, onSaved }) {
           </Section>
 
           {/* Pricing */}
-          <Section title="Pricing (USD)">
+          <Section title="Pricing (INR)">
             <div className="grid grid-cols-3 gap-3">
               <Field label="Monthly">
                 <input type="number" step="any" className="input" value={form.monthlyPrice} onChange={(e) => set('monthlyPrice', e.target.value)} />
@@ -445,10 +445,10 @@ function PlanForm({ plan, onClose, onSaved }) {
               <Field label="Default leverage (1:X)">
                 <input type="number" className="input" value={form.defaultLeverage} onChange={(e) => set('defaultLeverage', e.target.value)} />
               </Field>
-              <Field label="Withdrawal daily limit (USD)">
+              <Field label="Withdrawal daily limit (INR)">
                 <input type="number" step="any" className="input" value={form.withdrawalDailyLimit} onChange={(e) => set('withdrawalDailyLimit', e.target.value)} placeholder="empty = unlimited" />
               </Field>
-              <Field label="Trading daily limit (USD)" className="col-span-2">
+              <Field label="Trading daily limit (INR)" className="col-span-2">
                 <input type="number" step="any" className="input" value={form.tradingDailyLimit} onChange={(e) => set('tradingDailyLimit', e.target.value)} placeholder="empty = unlimited" />
               </Field>
             </div>
@@ -490,7 +490,7 @@ function PlanForm({ plan, onClose, onSaved }) {
                   <input type="number" step="any" className="input" value={form.minimumMonthlyFee} onChange={(e) => set('minimumMonthlyFee', e.target.value)} />
                 </Field>
                 <Field label="Currency">
-                  <input className="input uppercase" value={form.postPaidCurrency} onChange={(e) => set('postPaidCurrency', e.target.value)} placeholder="USD" />
+                  <input className="input uppercase" value={form.postPaidCurrency} onChange={(e) => set('postPaidCurrency', e.target.value)} placeholder="INR" />
                 </Field>
               </div>
               <p className="text-[11px] text-text-muted mt-2 leading-snug">

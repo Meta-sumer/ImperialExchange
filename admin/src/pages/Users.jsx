@@ -65,8 +65,8 @@ const PLAN_TONE = {
 };
 const PLAN_FILTER_OPTIONS = ['FREE', 'BASIC', 'SILVER', 'GOLD', 'PREMIUM', 'PRO', 'VIP'];
 
-const signedMoney = (v) => { const n = Number(v) || 0; return `${n < 0 ? '-' : ''}$${fmtNum(Math.abs(n))}`; };
-const money = (v) => `$${fmtNum(Math.abs(Number(v) || 0))}`;
+const signedMoney = (v) => { const n = Number(v) || 0; return `${n < 0 ? '-' : ''}₹${fmtNum(Math.abs(n))}`; };
+const money = (v) => `₹${fmtNum(Math.abs(Number(v) || 0))}`;
 const fullName = (u) => [u?.firstName, u?.lastName].filter(Boolean).join(' ');
 const csvEscape = (val) => {
   const s = val == null ? '' : String(val);
@@ -678,7 +678,7 @@ function HistoryModal({ kind, user, onClose }) {
             <h2 className="text-base font-bold text-white">{isDep ? 'Deposit' : 'Withdrawal'} history</h2>
             <p className="text-[11px] text-gray-500 mt-0.5">
               {user.email} · lifetime {isDep ? 'deposited' : 'withdrawn'}{' '}
-              <span className={isDep ? 'text-emerald-300' : 'text-amber-300'}>${fmtNum(lifetime)}</span>
+              <span className={isDep ? 'text-emerald-300' : 'text-amber-300'}>₹{fmtNum(lifetime)}</span>
             </p>
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-white text-xl leading-none">×</button>
@@ -692,7 +692,7 @@ function HistoryModal({ kind, user, onClose }) {
                 <tr>
                   <th className="text-left p-2">Date</th>
                   <th className="text-right p-2">Amount</th>
-                  <th className="text-right p-2">USD</th>
+                  <th className="text-right p-2">INR</th>
                   <th className="text-left p-2">{isDep ? 'Target' : 'Source'}</th>
                   <th className="text-left p-2">Status</th>
                 </tr>
@@ -702,7 +702,7 @@ function HistoryModal({ kind, user, onClose }) {
                   <tr key={x._id} className="border-t border-border-dark/60">
                     <td className="p-2 text-gray-400">{fmtDate(x.createdAt)}</td>
                     <td className="p-2 text-right font-mono text-gray-200">{fmtNum(x.amount)} {x.currency}</td>
-                    <td className="p-2 text-right font-mono text-gray-300">${fmtNum(x.baseAmount)}</td>
+                    <td className="p-2 text-right font-mono text-gray-300">₹{fmtNum(x.baseAmount)}</td>
                     <td className="p-2 text-gray-400">{isDep ? (x.targetWallet || 'trading') : (x.source || 'TRADING')}</td>
                     <td className="p-2">
                       <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${

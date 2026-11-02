@@ -7,7 +7,7 @@ import { api, errorMessage } from '../services/api';
  * RoleGate + backend requireRole; backend also returns 403 directly).
  * Premium WHITE-theme dashboard, intentionally distinct from the dark admin.
  */
-const money =(v) => `$${Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const money =(v) => `₹${Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const fmtD = (d) => (d ? new Date(d).toLocaleDateString() : '—');
 const csvEscape = (v) => { const s = v == null ? '' : String(v); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
 const download = (content, filename, type) => {
@@ -55,8 +55,8 @@ export default function Portfolio() {
       ['Platform Portfolio Report'],
       ['Range', `All-time (up to ${fmtD(data.range.to)})`],
       [],
-      ['Metric', 'Value (USD)'],
-      ...cards.map((c) => [c.label, Number(String(c.value).replace(/[$,]/g, ''))]),
+      ['Metric', 'Value (INR)'],
+      ...cards.map((c) => [c.label, Number(String(c.value).replace(/[₹$,]/g, ''))]),
       [],
       ['Date', 'Deposits', 'Withdrawals', 'Closed PnL'],
       ...series.map((s) => [s.date, s.deposits, s.withdrawals, s.closedPnl]),
@@ -67,12 +67,12 @@ export default function Portfolio() {
 
   const exportExcel = () => {
     if (!k) return;
-    const kpiRows = cards.map((c) => `<tr><td>${c.label}</td><td>${String(c.value).replace(/[$,]/g, '')}</td></tr>`).join('');
+    const kpiRows = cards.map((c) => `<tr><td>${c.label}</td><td>${String(c.value).replace(/[₹$,]/g, '')}</td></tr>`).join('');
     const serRows = series.map((s) => `<tr><td>${s.date}</td><td>${s.deposits}</td><td>${s.withdrawals}</td><td>${s.closedPnl}</td></tr>`).join('');
     const html = `<html><head><meta charset="utf-8"></head><body>
       <h3>Platform Portfolio Report</h3>
       <p>Range: All-time (up to ${fmtD(data.range.to)})</p>
-      <table border="1"><tr><th>Metric</th><th>Value (USD)</th></tr>${kpiRows}</table>
+      <table border="1"><tr><th>Metric</th><th>Value (INR)</th></tr>${kpiRows}</table>
       <br/><table border="1"><tr><th>Date</th><th>Deposits</th><th>Withdrawals</th><th>Closed PnL</th></tr>${serRows}</table>
       </body></html>`;
     download(html, `portfolio_${data.range.period}.xls`, 'application/vnd.ms-excel');

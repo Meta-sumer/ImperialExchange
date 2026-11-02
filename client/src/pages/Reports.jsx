@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { api, errorMessage } from '../services/api';
 import PageHero from '../components/PageHero';
-import AssetIcon from '../components/AssetIcon';
 
 const downloadCsv = async (path, filename) => {
   try {
@@ -22,7 +21,6 @@ const downloadCsv = async (path, filename) => {
 };
 
 export default function Reports() {
-  const [trades, setTrades] = useState([]);
   // Aggregated stats over ALL closed positions for this user (across pages),
   // computed on the backend so we don't have to fetch + iterate the full set.
   const [stats, setStats] = useState({ totalTrades: 0, totalLot: 0, netPnl: 0, wins: 0, losses: 0 });
@@ -46,13 +44,8 @@ export default function Reports() {
   useEffect(() => {
     (async () => {
       try {
-        const [oh, hist] = await Promise.all([
-          api.get('/trading/orders/history'),
-          // limit=1 because we only need the `summary` block, not the rows.
-          // The recent-activity table below uses /orders/history instead.
-          api.get('/trading/positions/history', { params: { limit: 1 } }),
-        ]);
-        setTrades(oh.data?.data?.items ?? []);
+        // limit=1 because only the `summary` block is needed, not the rows.
+        const hist = await api.get('/trading/positions/history', { params: { limit: 1 } });
         setStats(hist.data.data?.summary || { totalTrades: 0, totalLot: 0, netPnl: 0, wins: 0, losses: 0 });
       } finally {
         setLoading(false);
@@ -155,72 +148,6 @@ export default function Reports() {
         </div>
       </div>
 
-      {/* Recent trades */}
-      <div className="card overflow-hidden">
-        <div className="px-5 py-3 border-b border-border-dark">
-          <h2 className="text-white font-semibold">Recent Order Activity</h2>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-xs uppercase text-gray-500 bg-bg-card">
-                <th className="text-left py-2 px-4">Date</th>
-                <th className="text-left py-2 px-4">Symbol</th>
-                <th className="text-left py-2 px-4">Side</th>
-                <th className="text-left py-2 px-4">Type</th>
-                <th className="text-right py-2 px-4">Qty</th>
-                <th className="text-right py-2 px-4">Price</th>
-                <th className="text-left py-2 px-4">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading && (
-                <tr><td colSpan={7} className="text-center py-6 text-gray-500">Loading…</td></tr>
-              )}
-              {!loading && trades.length === 0 && (
-                <tr>
-                  <td colSpan={7} className="text-center py-10">
-                    <div className="mx-auto w-12 h-12 rounded-full bg-bg-hover flex items-center justify-center mb-2 text-text-muted">
-                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M3 3v18h18" />
-                        <path d="M7 14l4-4 4 4 5-7" />
-                      </svg>
-                    </div>
-                    <div className="text-sm text-text-secondary mb-1">No trades yet</div>
-                    <Link to="/trade" className="text-xs text-primary-500 hover:underline font-semibold">Start trading →</Link>
-                  </td>
-                </tr>
-              )}
-              {trades.slice(0, 50).map((t) => (
-                <tr key={t._id} className="table-row">
-                  <td className="py-2 px-4 text-gray-300">{new Date(t.createdAt).toLocaleString()}</td>
-                  <td className="py-2 px-4 text-white font-medium">
-                    <div className="flex items-center gap-2">
-                      <AssetIcon symbol={t.symbol} size={20} round />
-                      <span>{t.symbol}</span>
-                    </div>
-                  </td>
-                  <td className={`py-2 px-4 font-semibold ${t.side === 'BUY' ? 'text-bull' : 'text-bear'}`}>{t.side}</td>
-                  <td className="py-2 px-4 text-gray-300">{t.type}</td>
-                  <td className="py-2 px-4 text-right font-mono text-white">{t.filledQuantity || t.quantity}</td>
-                  <td className="py-2 px-4 text-right font-mono text-white">{t.avgFillPrice || t.price || '—'}</td>
-                  <td className="py-2 px-4">
-                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                      t.status === 'FILLED' ? 'bg-bull/15 text-bull' :
-                      // Neutral tint in theme tokens, matching the pattern the other
-                      // three use. The old bg-gray-700 was a fixed dark grey: a
-                      // near-black slab on the light table, and lost in the dark one.
-                      t.status === 'CANCELLED' ? 'bg-text-muted/15 text-text-secondary' :
-                      t.status === 'REJECTED' ? 'bg-bear/15 text-bear' :
-                      'bg-warn/15 text-warn'
-                    }`}>{t.status}</span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
     </div>
   );
 }

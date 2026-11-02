@@ -1832,7 +1832,7 @@ function RecentClosedTrades() {
     <section className="bg-white border border-border-dark rounded-2xl overflow-hidden shadow-sm">
       <div className="px-5 py-3.5 border-b border-border-subtle flex items-center justify-between">
         <h2 className="text-sm font-bold text-text-primary">Recent Closed Trades</h2>
-        <Link to="/reports" className="text-xs font-semibold text-primary-600 hover:underline">View All Closed Trades →</Link>
+        <Link to="/orders" className="text-xs font-semibold text-primary-600 hover:underline">View All Closed Trades →</Link>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm min-w-[860px]">

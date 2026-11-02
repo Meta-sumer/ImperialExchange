@@ -275,34 +275,19 @@ export function ReportsScreen({ navigation }: AppScreenProps<'Reports'>): React.
         </View>
       </View>
 
-      {/* Recent trades */}
-      <View style={[styles.activityHead, { backgroundColor: t.colors.bgCard, borderColor: t.colors.borderDark, borderTopLeftRadius: t.radius.xl, borderTopRightRadius: t.radius.xl }]}>
-        <AppText variant="bodyStrong">Recent Order Activity</AppText>
-      </View>
     </View>
   );
 
-  const recent = orders.slice(0, RECENT_ORDERS_LIMIT);
+  // The "Recent Order Activity" list was removed: it showed each order's
+  // booking time (createdAt), so a backdated trade read as today. Trade
+  // History (Orders) shows the real open/close times.
+  const recent: Order[] = [];
 
-  const empty = (
-    <View style={[styles.activityBody, { borderColor: t.colors.borderDark, backgroundColor: t.colors.bgCard }]}>
-      {loading && !loaded ? (
-        <AppText variant="body" tone="muted" align="center" style={styles.pad24}>Loading…</AppText>
-      ) : error && !loaded ? (
-        <ErrorView error={error} onRetry={() => { setLoading(true); void load(); }} compact />
-      ) : (
-        <View style={styles.emptyBox}>
-          <View style={[styles.emptyIcon, { backgroundColor: t.colors.bgHover }]}>
-            <Icon name="reports" size={22} color={t.colors.textMuted} />
-          </View>
-          <AppText variant="body" tone="secondary">No trades yet</AppText>
-          <Pressable accessibilityRole="link" onPress={() => navigation.navigate('Trade', undefined, { pop: true })} hitSlop={6}>
-            <AppText variant="smallStrong" color={t.colors.primaryText}>Start trading →</AppText>
-          </Pressable>
-        </View>
-      )}
+  const empty = error && !loaded ? (
+    <View style={styles.side}>
+      <ErrorView error={error} onRetry={() => { setLoading(true); void load(); }} compact />
     </View>
-  );
+  ) : null;
 
   const renderItem = useCallback(({ item, index }: { item: Order; index: number }) => {
     const inst = instrumentBySymbol.get(item.symbol) ?? null;
@@ -349,7 +334,7 @@ export function ReportsScreen({ navigation }: AppScreenProps<'Reports'>): React.
         keyExtractor={(o, i) => o.id || `order-${i}`}
         renderItem={renderItem}
         ListHeaderComponent={header}
-        ListEmptyComponent={<View style={styles.side}>{empty}</View>}
+        ListEmptyComponent={empty}
         ListFooterComponent={(
           <View>
             {recent.length ? (

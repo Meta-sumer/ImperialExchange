@@ -17,7 +17,7 @@ import { useAuthStore } from '../store/auth';
  * Backend (/api/finance/*) enforces every permission + the per-request scope;
  * this UI only shows/hides controls accordingly.
  */
-const money = (v) => Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const money = (v) => Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const CREATABLE = {
   SUPER_ADMIN: ['FINANCIAL_ADMIN', 'DEPOSIT_MANAGER', 'WITHDRAWAL_MANAGER', 'AUDIT_MANAGER'],
   FINANCIAL_ADMIN: ['DEPOSIT_MANAGER', 'WITHDRAWAL_MANAGER', 'AUDIT_MANAGER'],
@@ -151,7 +151,7 @@ export default function Finance() {
                       </td>
                       <td className="p-3 text-right font-mono text-text-primary whitespace-nowrap">
                         {r.amount} <span className="text-[10px] text-text-muted">{r.currency}</span>
-                        {Number(r.baseAmount) > 0 && <div className="text-[10px] text-text-muted">${money(r.baseAmount)}</div>}
+                        {Number(r.baseAmount) > 0 && <div className="text-[10px] text-text-muted">₹{money(r.baseAmount)}</div>}
                       </td>
                       <td className="p-3 text-xs text-text-secondary">{r.method || '—'}</td>
                       <td className="p-3 text-xs">
