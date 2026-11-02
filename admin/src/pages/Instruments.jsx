@@ -221,6 +221,7 @@ export default function Instruments() {
   const [indianOpen, setIndianOpen] = useState(false); // Import Indian (Dhan) modal
   const [autoSync, setAutoSync] = useState(null);       // daily Dhan auto-import: null=loading, true/false
   const [disabling, setDisabling] = useState(null);     // instrument being disabled (opens the options modal)
+  const [calibrating, setCalibrating] = useState(null); // derived (MCX) instrument being calibrated to the exchange price
 
   const toggleSel = (symbol) => setSelected((s) => { const n = new Set(s); n.has(symbol) ? n.delete(symbol) : n.add(symbol); return n; });
   const applyBulkRouting = async () => {
@@ -459,7 +460,14 @@ export default function Instruments() {
                   </td>
                   <td className="p-3 text-gray-400">{it.name}</td>
                   <td className="p-3 text-xs">{it.category}</td>
-                  <td className="p-3 text-right font-mono">{fmtNum(it.lastPrice, it.pricePrecision)}</td>
+                  <td className="p-3 text-right font-mono">
+                    {fmtNum(it.lastPrice, it.pricePrecision)}
+                    {it.feedConvert?.fx && (
+                      <div className="text-[10px] font-sans text-violet-400" title="Derived: international future × USD/INR × contract unit. Use Calibrate to match today's MCX price.">
+                        derived{Number(it.feedConvert.adjustPct) ? ` · ${Number(it.feedConvert.adjustPct) > 0 ? '+' : ''}${Number(it.feedConvert.adjustPct).toFixed(2)}%` : ''}
+                      </div>
+                    )}
+                  </td>
                   <td className="p-3 text-right">
                     {it.leverageOverride ? (
                       <span className="text-[11px] font-bold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 border border-amber-500/30" title={`Override until ${fmtUtc(it.leverageOverride.endAt)}`}>
@@ -514,6 +522,7 @@ export default function Instruments() {
                     </span>
                   </td>
                   <td className="p-3 text-right space-x-1">
+                    {it.feedConvert?.fx && <button onClick={() => setCalibrating(it)} className="btn-ghost text-xs text-violet-400" title="Match this family's price to today's MCX quote">Calibrate</button>}
                     <button onClick={() => setOverridesFor(it)} className="btn-ghost text-xs text-amber-400">Overrides</button>
                     <button onClick={() => setEditing(it)} className="btn-ghost text-xs">Edit</button>
                     {(it.isActive === false || it.tradingEnabled === false)
@@ -530,6 +539,7 @@ export default function Instruments() {
       {editing && <InstrumentEditor data={editing} existing={items} onSave={save} onClose={() => setEditing(null)} />}
       {indianOpen && <IndianImportModal onClose={() => setIndianOpen(false)} onDone={load} />}
       {disabling && <DisableInstrumentModal instrument={disabling} onClose={() => setDisabling(null)} onDone={load} />}
+      {calibrating && <CalibrateModal instrument={calibrating} family={items} onClose={() => setCalibrating(null)} onDone={load} />}
       {overridesFor && <OverridesModal instrument={overridesFor} onClose={() => { setOverridesFor(null); load(); }} />}
     </div>
   );
@@ -539,7 +549,7 @@ export default function Instruments() {
 const planFeeText = (p) => {
   if (p?.feeDisplay) return p.feeDisplay;
   const v = Number(p?.feeValue || 0);
-  if (p?.feeKind === 'FIXED_PER_TRADE') return `$${v} per trade`;
+  if (p?.feeKind === 'FIXED_PER_TRADE') return `₹${v} per trade`;
   if (p?.feeKind === 'PCT_OF_PROFIT') return `${(v * 100).toFixed(2)}% of profit`;
   return `${(v * 100).toFixed(3)}% of trade value`;
 };
@@ -817,6 +827,82 @@ function ChoiceBtn({ value, cur, set, label, sub, tone }) {
 
 // Disable-with-options modal: force-close vs keep-open positions, continue vs
 // stop market data, show vs hide from users, + reason. Shows live impact counts.
+/**
+ * Calibrate a derived (MCX) price family to the exchange's own quote.
+ *
+ * Our MCX price is international future × USD/INR × contract unit; MCX trades
+ * at its own basis over that (import duty, premium/discount, expiry), so the
+ * admin types today's MCX price for this contract once and every contract in
+ * the family (gold → GOLD, GOLDM, GOLDGUINEA, GOLDPETAL) moves by the same
+ * percentage, live, until reset. POST /instruments/:symbol/calibrate.
+ */
+function CalibrateModal({ instrument, family, onClose, onDone }) {
+  const sym = instrument.symbol;
+  const group = instrument.feedConvert?.group || sym;
+  const cur = Number(instrument.lastPrice) || 0;
+  const oldAdj = Number(instrument.feedConvert?.adjustPct) || 0;
+  const raw = oldAdj > -100 ? cur / (1 + oldAdj / 100) : cur;
+  const members = (family || []).filter((i) => i.isActive !== false && (i.feedConvert?.group || i.symbol) === group).map((i) => i.symbol);
+  const [ref, setRef] = useState('');
+  const [busy, setBusy] = useState(false);
+  const refN = Number(ref);
+  const preview = refN > 0 && raw > 0 ? Math.max(-50, Math.min(50, (refN / raw - 1) * 100)) : null;
+
+  const call = async (body, okMsg) => {
+    setBusy(true);
+    try {
+      const { data } = await api.post(`/instruments/${sym}/calibrate`, body);
+      const d = data.data || {};
+      toast.success(`${okMsg} — ${d.group}: ${d.adjustPct > 0 ? '+' : ''}${Number(d.adjustPct).toFixed(2)}% on ${(d.updated || []).length} contract(s)`);
+      onDone(); onClose();
+    } catch (e) { toast.error(errorMessage(e)); } finally { setBusy(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-bg-card border border-border-dark rounded-xl w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border-dark">
+          <h2 className="text-lg font-semibold text-white">Calibrate {sym}</h2>
+          <button onClick={onClose} className="text-text-muted hover:text-white text-xl leading-none">✕</button>
+        </div>
+        <div className="p-5 space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="rounded-lg bg-bg-dark border border-border-dark p-3">
+              <div className="text-[10px] uppercase tracking-wider text-text-muted font-bold">Our price now</div>
+              <div className="text-xl font-bold text-white mt-1 font-mono">₹{fmtNum(cur, instrument.pricePrecision)}</div>
+              <div className="text-[10px] text-text-muted mt-0.5">{oldAdj ? `${oldAdj > 0 ? '+' : ''}${oldAdj.toFixed(2)}% applied · raw ₹${fmtNum(raw, instrument.pricePrecision)}` : 'raw parity (no adjustment)'}</div>
+            </div>
+            <div className="rounded-lg bg-bg-dark border border-border-dark p-3">
+              <div className="text-[10px] uppercase tracking-wider text-text-muted font-bold">Family</div>
+              <div className="text-sm font-bold text-white mt-1">{group}</div>
+              <div className="text-[10px] text-text-muted mt-0.5 break-words">{members.length ? members.join(', ') : sym}</div>
+            </div>
+          </div>
+          <div>
+            <label className="label">Live MCX price for {sym}</label>
+            <input className="input font-mono" value={ref} onChange={(e) => setRef(e.target.value)} placeholder={`e.g. ${fmtNum(cur, instrument.pricePrecision)}`} autoFocus />
+            <div className="text-[11px] text-text-muted mt-1.5">
+              {preview == null
+                ? 'Type the price MCX is showing right now; the whole family moves by the same percentage.'
+                : `Adjustment will be ${preview > 0 ? '+' : ''}${preview.toFixed(2)}% (applied to ${members.length || 1} contract${members.length === 1 ? '' : 's'}; limit ±50%).`}
+            </div>
+          </div>
+          <p className="text-[11px] text-text-muted">
+            Derived prices follow the international future × USD/INR. MCX carries its own duty and basis, so the calibration keeps our quote on the MCX level while the live movement still comes from the free feed.
+          </p>
+        </div>
+        <div className="px-5 py-4 border-t border-border-dark flex items-center justify-between gap-2">
+          <button type="button" onClick={() => call({ reset: true }, 'Reset to raw parity')} disabled={busy || !oldAdj} className="btn-ghost text-xs text-text-muted disabled:opacity-40">Reset to raw</button>
+          <div className="flex gap-2">
+            <button type="button" onClick={onClose} className="btn-secondary text-sm">Cancel</button>
+            <button type="button" onClick={() => call({ referencePrice: refN }, 'Calibrated')} disabled={busy || !(refN > 0)} className="btn-primary text-sm disabled:opacity-40">{busy ? 'Applying…' : 'Apply'}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function DisableInstrumentModal({ instrument, onClose, onDone }) {
   const sym = instrument.symbol;
   const [openAction, setOpenAction] = useState('KEEP_OPEN'); // FORCE_CLOSE | KEEP_OPEN

@@ -25,6 +25,7 @@
  */
 const Instrument = require('../models/Instrument');
 const { updateCandlesForTrade } = require('./candleService');
+const { derivedPrice } = require('../utils/derivedPrice');
 
 const POLL_MS = Number(process.env.YAHOO_POLL_MS) || 5000;
 const TIMEOUT_MS = Number(process.env.YAHOO_TIMEOUT_MS) || 7000;
@@ -188,11 +189,12 @@ async function _pollGlobalYahoo() {
     let px = prices.get(String(i.externalFeedSymbol).trim());
     if (px == null) continue;
     const conv = i.feedConvert || null;
-    if (conv && (conv.fx || (conv.multiplier && conv.multiplier !== 1))) {
-      // price(₹) = feed × USDINR × unit multiplier (services/mcxCommodities.js)
+    if (conv && (conv.fx || (conv.multiplier && conv.multiplier !== 1) || Number(conv.adjustPct))) {
+      // price(₹) = feed × USDINR × unit multiplier × (1 + adjustPct/100)
+      // (services/mcxCommodities.js, utils/derivedPrice.js)
       let fx = 1;
       if (conv.fx === 'USDINR') { fx = prices.get('INR=X'); if (fx == null) continue; }
-      px = px * fx * (Number(conv.multiplier) || 1);
+      px = derivedPrice(px, fx, conv.multiplier, conv.adjustPct);
     }
     await _publishTick(i, px); wrote += 1;   // spot instruments → price is the LTP as-is
   }
@@ -361,4 +363,4 @@ async function getNews(inst) {
   })).filter((n) => n.title && n.link);
 }
 
-module.exports = { start, stop, setBroadcaster, setIndianFallback, isActive: () => active, _enabled, spotSymbol, priceFor, getFundamentals, getNews };
+module.exports = { start, stop, setBroadcaster, setIndianFallback, isActive: () => active, _enabled, spotSymbol, priceFor, getFundamentals, getNews, quoteRaw: _yahooQuote };

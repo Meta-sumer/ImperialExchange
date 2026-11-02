@@ -24,6 +24,7 @@ router.get('/:symbol/impact', authenticate, requireAdmin, c.instrumentImpact); /
 router.post('/', authenticate, requireAdmin, c.create);
 router.post('/:symbol/disable', authenticate, requireAdmin, c.disableInstrument); // disable trading (+ options) for a symbol
 router.post('/:symbol/enable', authenticate, requireAdmin, c.enableInstrument);   // re-enable trading + market data + visibility
+router.post('/:symbol/calibrate', authenticate, requireAdmin, c.calibrateDerived); // derived (MCX) family: match today's exchange price / reset
 router.post('/bulk-routing', authenticate, requireAdmin, c.bulkRouting); // before /:symbol
 router.post('/sync-indian', authenticate, requireAdmin, c.syncIndian);  // on-demand Dhan import (Indian)
 router.post('/auto-sync', authenticate, requireAdmin, c.setAutoSync);   // toggle daily Dhan auto-import on/off

@@ -186,6 +186,13 @@ const instrumentSchema = new mongoose.Schema(
     feedConvert: {
       fx: { type: String, default: null },
       multiplier: { type: Number, default: 1 },
+      // Admin calibration (Instruments → Calibrate): MCX trades at its own
+      // basis over international parity, so the derived price is nudged by
+      // this percentage (±50 max). `group` names the contract family that
+      // shares one calibration (GOLD / SILVER / CRUDE / NATGAS / COPPER /
+      // ALUMINIUM). See utils/derivedPrice.js.
+      adjustPct: { type: Number, default: 0 },
+      group: { type: String, default: null },
     },
 
     // Synthetic price simulator (doc Phase 2: "market maker bot").

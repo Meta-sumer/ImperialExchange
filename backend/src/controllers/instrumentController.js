@@ -375,6 +375,69 @@ const priceAt = asyncHandler(async (req, res) => {
   sendSuccess(res, { symbol: sym, at, timeframe: null, price: null });
 });
 
+// Admin: calibrate a derived (MCX) price family to the exchange's own quote.
+// Our MCX rows are international future × USD/INR × contract unit; MCX itself
+// trades at a basis over that (duty, premium/discount, expiry), so the admin
+// enters today's MCX price for one contract and every row in that family
+// (feedConvert.group — gold: GOLD, GOLDM, GOLDGUINEA, GOLDPETAL) gets the same
+// adjustPct and an immediate price rewrite. { reset: true } returns the family
+// to raw parity. Math in utils/derivedPrice.js.
+const calibrateDerived = asyncHandler(async (req, res) => {
+  const { stripAdjust, applyAdjust, adjustFromReference, ADJUST_LIMIT } = require('../utils/derivedPrice');
+  const sym = String(req.params.symbol || '').toUpperCase();
+  const inst = await Instrument.findOne({ symbol: sym }).lean();
+  if (!inst) throw new AppError('Instrument not found', 404);
+  const conv = inst.feedConvert || {};
+  if (!conv.fx && !(Number(conv.multiplier) && Number(conv.multiplier) !== 1)) {
+    throw new AppError(`${sym} is not a derived-price instrument`, 400, 'NOT_DERIVED');
+  }
+  const group = conv.group || sym;
+  const reset = !!(req.body && req.body.reset === true);
+  let adjustPct = 0;
+  let raw = null;
+  if (!reset) {
+    const reference = Number(req.body && req.body.referencePrice);
+    if (!(reference > 0)) throw new AppError("referencePrice must be a positive number (today's MCX price)", 400);
+    // Raw parity price: a fresh Yahoo quote when reachable, else the stored
+    // price with the previous adjustment stripped off.
+    try {
+      const yahoo = require('../services/yahooFeed');
+      const [usd, fx] = await Promise.all([
+        yahoo.quoteRaw(inst.externalFeedSymbol),
+        conv.fx === 'USDINR' ? yahoo.quoteRaw('INR=X') : 1,
+      ]);
+      if (usd != null && fx != null) raw = usd * fx * (Number(conv.multiplier) || 1);
+    } catch (_) { /* fall back below */ }
+    if (!(raw > 0)) raw = stripAdjust(inst.lastPrice, conv.adjustPct);
+    if (!(raw > 0)) throw new AppError('No live price for this instrument yet — try again in a few seconds', 409, 'NO_PRICE');
+    adjustPct = adjustFromReference(raw, reference);
+  }
+  const family = await Instrument.find({ 'feedConvert.group': group, isActive: true })
+    .select('symbol lastPrice pricePrecision feedConvert').lean();
+  const rows = family.length ? family : [inst];
+  const updated = [];
+  for (const r of rows) {
+    const rowRaw = String(r.symbol) === sym && raw > 0 ? raw : stripAdjust(r.lastPrice, (r.feedConvert || {}).adjustPct);
+    const set = { 'feedConvert.adjustPct': adjustPct };
+    if (rowRaw > 0) {
+      set.lastPrice = Number(applyAdjust(rowRaw, adjustPct)).toFixed(Number.isFinite(Number(r.pricePrecision)) ? Number(r.pricePrecision) : 2);
+      set.lastPriceUpdatedAt = new Date();
+    }
+    await Instrument.updateOne({ _id: r._id }, { $set: set });
+    updated.push(r.symbol);
+  }
+  try {
+    const { AuditLog } = require('../models/index');
+    await AuditLog.create({
+      actorId: req.userId, actorRole: req.user?.role, action: reset ? 'INSTRUMENT_CALIBRATION_RESET' : 'INSTRUMENT_CALIBRATED',
+      targetType: 'INSTRUMENT', targetId: String(inst._id),
+      metadata: { symbol: sym, group, adjustPct, limitPct: ADJUST_LIMIT, referencePrice: reset ? null : Number(req.body.referencePrice), rawParity: raw, updated },
+      ip: req.ip, userAgent: req.headers['user-agent'],
+    });
+  } catch (_) { /* audit best-effort */ }
+  sendSuccess(res, { symbol: sym, group, adjustPct, updated });
+});
+
 const orderbook = asyncHandler(async (req, res) => {
   const { symbol } = req.params;
   const sym = symbol.toUpperCase();
@@ -893,4 +956,4 @@ const economicCalendar = asyncHandler(async (req, res) => {
   sendSuccess(res, _calCache.data || []);
 });
 
-module.exports = { list, watchlist, getOne, search, volumeUsage, candles, orderbook, fundamentals, news, create, update, remove, bulkRouting, syncIndian, getAutoSync, setAutoSync, instrumentImpact, disableInstrument, enableInstrument, economicCalendar, priceAt };
+module.exports = { list, watchlist, getOne, search, volumeUsage, candles, orderbook, fundamentals, news, create, update, remove, bulkRouting, syncIndian, getAutoSync, setAutoSync, instrumentImpact, disableInstrument, enableInstrument, economicCalendar, priceAt, calibrateDerived };
