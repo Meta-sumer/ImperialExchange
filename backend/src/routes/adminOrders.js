@@ -52,6 +52,7 @@ router.get('/detail/:kind/:id', c.detail);
 
 /* ── Manual / backdated trades (manage only) ── */
 router.post('/manual-trade', c.manualTrade);          // book a trade for a user at a past date/time
+router.post('/manual-trade/bulk', c.manualTradeBulk); // the same trade for many users at once
 router.post('/positions/:id/edit', c.editTrade);      // edit price / time / size / side … of any trade
 router.post('/positions/:id/delete', c.deleteTrade);  // hide a trade from the user (optionally reverse its P&L)
 router.post('/positions/:id/restore', c.restoreTrade); // bring a deleted (closed) trade back

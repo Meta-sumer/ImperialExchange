@@ -1120,9 +1120,10 @@ const notifyTradeChange = (userId, accountId, positionId) => {
 };
 
 // POST /order-management/manual-trade — book a trade for a user at a past time.
-const manualTrade = asyncHandler(async (req, res) => {
+// Book one manual trade for one user/account. Throws AppError on any problem.
+// Shared by the single endpoint and the bulk (many users, one trade) endpoint.
+const bookManualTrade = async (req, b) => {
   requireManage(req);
-  const b = req.body || {};
   const userId = String(b.userId || '');
   const accountId = String(b.accountId || '');
   if (!mongoose.isValidObjectId(userId) || !mongoose.isValidObjectId(accountId)) {
@@ -1233,7 +1234,43 @@ const manualTrade = asyncHandler(async (req, res) => {
     realizedPnl: position.realizedPnl, orderId: String(order._id), tradeId: String(trade._id), note,
   });
   notifyTradeChange(user._id, account._id, position._id);
+  return { position, order, trade };
+};
+
+const manualTrade = asyncHandler(async (req, res) => {
+  const { position, order, trade } = await bookManualTrade(req, req.body || {});
   sendSuccess(res, { position: position.toObject(), orderId: order._id, tradeId: trade._id }, 201);
+});
+
+// The same trade for many users at once. Body: the manual-trade fields plus
+// targets: [{ userId, accountId }]. Each booking stands alone — its own wallet
+// effect, audit row and notification — so one user being out of scope or short
+// of margin does not stop the others. Answers with a result per target.
+const MAX_BULK_TARGETS = 100;
+const manualTradeBulk = asyncHandler(async (req, res) => {
+  requireManage(req);
+  const b = req.body || {};
+  const targets = Array.isArray(b.targets) ? b.targets : [];
+  if (!targets.length) throw new AppError('targets is required', 400);
+  if (targets.length > MAX_BULK_TARGETS) throw new AppError(`Up to ${MAX_BULK_TARGETS} users per request`, 400);
+  const { targets: _omit, ...trade } = b;
+  const seen = new Set();
+  const results = [];
+  for (const t of targets) {
+    const userId = String((t && t.userId) || '');
+    const accountId = String((t && t.accountId) || '');
+    const key = `${userId}:${accountId}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    try {
+      const { position } = await bookManualTrade(req, { ...trade, userId, accountId });
+      results.push({ userId, accountId, ok: true, positionId: String(position._id) });
+    } catch (err) {
+      results.push({ userId, accountId, ok: false, error: (err && err.message) || 'Failed', code: (err && err.code) || null });
+    }
+  }
+  const booked = results.filter((r) => r.ok).length;
+  sendSuccess(res, { booked, failed: results.length - booked, results }, booked ? 201 : 200);
 });
 
 // POST /order-management/positions/:id/edit — change the facts of any trade.
@@ -1492,5 +1529,5 @@ module.exports = {
   summary, openOrders, pendingOrders, cancelledOrders, rejectedOrders, closedOrders, risk, detail,
   modifySLTP, forceClose, transferBook, addComment,
   cancelPending, forceExecute, modifyPending, bulk,
-  manualTrade, editTrade,
+  manualTrade, manualTradeBulk, editTrade,
 };

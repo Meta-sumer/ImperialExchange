@@ -8,7 +8,7 @@ import { fmtNum } from '../utils/format';
  *
  *   ManualTradeModal — book a trade straight into a user's account on any
  *   script at any past date/time, either still open or already closed.
- *   POST /order-management/manual-trade
+ *   POST /order-management/manual-trade/bulk (one or many users)
  *
  *   EditTradeModal — change the facts of an existing trade: entry price, open
  *   time, size, side, leverage, SL/TP, commission, and on a closed trade the
@@ -99,8 +99,9 @@ function Preview({ side, quantity, entryPrice, leverage, status, closePrice, com
 export function ManualTradeModal({ onClose, onSaved }) {
   const [userQ, setUserQ] = useState('');
   const [userHits, setUserHits] = useState([]);
-  const [user, setUser] = useState(null);
-  const [accounts, setAccounts] = useState([]);
+  // Users the trade is booked for: [{ user, accounts (null while loading), accountId, error }]
+  const [targets, setTargets] = useState([]);
+  const [bookedAny, setBookedAny] = useState(false); // a partial run booked some — refresh on close
   const [instruments, setInstruments] = useState([]);
   const [instQ, setInstQ] = useState('');
   const [instrument, setInstrument] = useState(null);
@@ -117,7 +118,7 @@ export function ManualTradeModal({ onClose, onSaved }) {
 
   // User search — debounced, min 2 chars.
   useEffect(() => {
-    if (user || userQ.trim().length < 2) { setUserHits([]); return undefined; }
+    if (userQ.trim().length < 2) { setUserHits([]); return undefined; }
     let on = true;
     const t = setTimeout(async () => {
       try {
@@ -126,23 +127,27 @@ export function ManualTradeModal({ onClose, onSaved }) {
       } catch (_) { /* ignore while typing */ }
     }, 250);
     return () => { on = false; clearTimeout(t); };
-  }, [userQ, user]);
+  }, [userQ]);
 
-  // Accounts of the chosen user; the first one is selected by default.
-  useEffect(() => {
-    if (!user) { setAccounts([]); set('accountId', ''); return undefined; }
-    let on = true;
-    (async () => {
+  // Add users to the booking; each loads its accounts and defaults to the first.
+  const addTargets = async (users) => {
+    const fresh = users.filter((u) => !targets.some((t) => t.user._id === u._id));
+    setUserQ(''); setUserHits([]);
+    if (!fresh.length) return;
+    setTargets((ts) => [...ts, ...fresh.map((u) => ({ user: u, accounts: null, accountId: '', error: '' }))]);
+    await Promise.all(fresh.map(async (u) => {
       try {
-        const { data } = await api.get(`/admin/accounts/users/${user._id}/accounts`);
+        const { data } = await api.get(`/admin/accounts/users/${u._id}/accounts`);
         const list = data.data || [];
-        if (!on) return;
-        setAccounts(list);
-        if (list[0]) { set('accountId', String(list[0]._id)); set('leverage', str(list[0].leverage || '')); }
-      } catch (e) { toast.error(errorMessage(e)); }
-    })();
-    return () => { on = false; };
-  }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
+        setTargets((ts) => ts.map((t) => (t.user._id === u._id ? { ...t, accounts: list, accountId: list[0] ? String(list[0]._id) : '' } : t)));
+      } catch (e) {
+        setTargets((ts) => ts.map((t) => (t.user._id === u._id ? { ...t, accounts: [], error: errorMessage(e) } : t)));
+      }
+    }));
+  };
+  const removeTarget = (id) => setTargets((ts) => ts.filter((t) => t.user._id !== id));
+  const setTargetAccount = (id, accountId) => setTargets((ts) => ts.map((t) => (t.user._id === id ? { ...t, accountId, error: '' } : t)));
+  const close = () => (bookedAny ? onSaved() : onClose());
 
   // Every instrument (active or not) once — the admin may book on any script.
   useEffect(() => {
@@ -208,8 +213,9 @@ export function ManualTradeModal({ onClose, onSaved }) {
     return `market ${fmtNum(h.price, 2)} at ${when} (${h.timeframe} candle)${auto[k] ? ' · auto-filled' : ''}`;
   };
 
-  const account = accounts.find((a) => String(a._id) === f.accountId);
-  const canSave = user && f.accountId && instrument && num(f.quantity) > 0 && num(f.entryPrice) > 0 && f.openedAt
+  // First selected user's account — drives the preview's leverage default.
+  const account = targets[0]?.accounts?.find((a) => String(a._id) === targets[0].accountId) || null;
+  const canSave = targets.length > 0 && targets.every((t) => t.accountId) && instrument && num(f.quantity) > 0 && num(f.entryPrice) > 0 && f.openedAt
     && (f.status === 'OPEN' || (num(f.closePrice) > 0 && f.closedAt));
 
   const save = async () => {
@@ -217,7 +223,8 @@ export function ManualTradeModal({ onClose, onSaved }) {
     setSaving(true);
     try {
       const body = {
-        userId: user._id, accountId: f.accountId, symbol: instrument.symbol, side: f.side,
+        targets: targets.map((t) => ({ userId: t.user._id, accountId: t.accountId })),
+        symbol: instrument.symbol, side: f.side,
         quantity: f.quantity, entryPrice: f.entryPrice, openedAt: toIso(f.openedAt), status: f.status,
         leverage: f.leverage === '' ? undefined : f.leverage,
         stopLoss: f.stopLoss === '' ? undefined : f.stopLoss,
@@ -227,52 +234,83 @@ export function ManualTradeModal({ onClose, onSaved }) {
         remark: f.remark,
       };
       if (f.status === 'CLOSED') { body.closePrice = f.closePrice; body.closedAt = toIso(f.closedAt); }
-      await api.post('/order-management/manual-trade', body);
-      toast.success(`${f.status === 'OPEN' ? 'Open' : 'Closed'} trade booked for ${user.email}`);
-      onSaved();
+      const { data } = await api.post('/order-management/manual-trade/bulk', body);
+      const r = data.data || {};
+      const failed = (r.results || []).filter((x) => !x.ok);
+      const kind = f.status === 'OPEN' ? 'Open' : 'Closed';
+      if (!failed.length) {
+        toast.success(`${kind} trade booked for ${r.booked} user${r.booked === 1 ? '' : 's'}`);
+        onSaved();
+        return;
+      }
+      // Partial: keep only the users that failed, each with its reason.
+      if (r.booked) { setBookedAny(true); toast.success(`${kind} trade booked for ${r.booked} user${r.booked === 1 ? '' : 's'}`); }
+      toast.error(`${failed.length} could not be booked — see the reasons below`);
+      setTargets((ts) => ts
+        .map((t) => ({ t, fail: failed.find((x) => x.userId === String(t.user._id) && x.accountId === String(t.accountId)) }))
+        .filter(({ fail }) => fail)
+        .map(({ t, fail }) => ({ ...t, error: fail.error || 'Failed' })));
     } catch (e) { toast.error(errorMessage(e)); } finally { setSaving(false); }
   };
 
   return (
-    <Shell title="Add Manual Trade" subtitle="Books a trade into the user's account at the date/time you choose. Open trades lock margin; closed trades settle PnL to the wallet." onClose={onClose}
+    <Shell title="Add Manual Trade" subtitle="Books the same trade into one or many users' accounts at the date/time you choose. Open trades lock margin; closed trades settle PnL to the wallet." onClose={close}
       footer={<>
-        <button onClick={onClose} className="btn-secondary text-sm">Cancel</button>
-        <button onClick={save} disabled={saving || !canSave} className="btn-primary text-sm disabled:opacity-40">{saving ? 'Booking…' : 'Book Trade'}</button>
+        <button onClick={close} className="btn-secondary text-sm">{bookedAny ? 'Close' : 'Cancel'}</button>
+        <button onClick={save} disabled={saving || !canSave} className="btn-primary text-sm disabled:opacity-40">{saving ? 'Booking…' : targets.length > 1 ? `Book for ${targets.length} users` : 'Book Trade'}</button>
       </>}>
-      {/* User */}
-      <Field label="User" hint="email, name or UID">
-        {user ? (
-          <div className="input flex items-center justify-between gap-2">
-            <span className="truncate"><b className="text-white">{[user.firstName, user.lastName].filter(Boolean).join(' ') || user.email}</b> <span className="text-text-muted">· {user.email}{user.userUid ? ` · ${user.userUid}` : ''}</span></span>
-            <button type="button" className="text-xs text-text-muted hover:text-white" onClick={() => { setUser(null); setUserQ(''); setInstrumentDefaults(); }}>change</button>
-          </div>
-        ) : (
-          <div className="relative">
-            <input className="input" value={userQ} onChange={(e) => setUserQ(e.target.value)} placeholder="Type at least 2 characters…" autoFocus />
-            {userHits.length > 0 && (
-              <div className="absolute z-20 left-0 right-0 mt-1 bg-bg-card border border-border-dark rounded-lg shadow-xl max-h-56 overflow-y-auto">
-                {userHits.map((u) => (
-                  <button key={u._id} type="button" onClick={() => { setUser(u); setUserHits([]); }}
-                    className="w-full text-left px-3 py-2 text-sm hover:bg-bg-hover flex items-center justify-between gap-2">
+      {/* Users — one or many; the same trade is booked for each. */}
+      <Field label="Users" hint="search and add one or many — the same trade is booked for each">
+        <div className="relative">
+          <input className="input" value={userQ} onChange={(e) => setUserQ(e.target.value)} placeholder="Search email, name or UID (2+ characters)…" autoFocus />
+          {userHits.length > 0 && (
+            <div className="absolute z-20 left-0 right-0 mt-1 bg-bg-card border border-border-dark rounded-lg shadow-xl max-h-64 overflow-y-auto">
+              {userHits.length > 1 && (
+                <button type="button" onClick={() => addTargets(userHits)} className="w-full text-left px-3 py-2 text-xs font-semibold text-primary-400 hover:bg-bg-hover border-b border-border-dark">
+                  + Add all {userHits.length} results
+                </button>
+              )}
+              {userHits.map((u) => {
+                const picked = targets.some((t) => t.user._id === u._id);
+                return (
+                  <button key={u._id} type="button" disabled={picked} onClick={() => addTargets([u])}
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-bg-hover flex items-center justify-between gap-2 disabled:opacity-40">
                     <span className="truncate"><b className="text-white">{[u.firstName, u.lastName].filter(Boolean).join(' ') || '—'}</b> <span className="text-text-muted">· {u.email}</span></span>
-                    <span className="font-mono text-[11px] text-text-muted">{u.userUid || ''}</span>
+                    <span className="font-mono text-[11px] text-text-muted">{picked ? 'added' : (u.userUid || '')}</span>
                   </button>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
+                );
+              })}
+            </div>
+          )}
+        </div>
       </Field>
 
-      {/* Account */}
-      <Field label="Trading account">
-        <select className="input" value={f.accountId} disabled={!user} onChange={(e) => { set('accountId', e.target.value); const a = accounts.find((x) => String(x._id) === e.target.value); if (a?.leverage) set('leverage', str(a.leverage)); }}>
-          {!accounts.length && <option value="">{user ? 'No accounts' : 'Pick a user first'}</option>}
-          {accounts.map((a) => (
-            <option key={a._id} value={a._id}>{a.accountNumber} · {a.accountType} · bal {money(num(a.balance))} · {a.baseCurrency || 'INR'}</option>
+      {/* Selected users — each with the trading account to book into. */}
+      {targets.length > 0 && (
+        <div className="border border-border-dark rounded-lg divide-y divide-border-dark max-h-64 overflow-y-auto">
+          <div className="px-3 py-1.5 flex items-center justify-between text-[11px] text-text-muted">
+            <span>{targets.length} user{targets.length === 1 ? '' : 's'} selected</span>
+            <button type="button" onClick={() => setTargets([])} className="hover:text-white">clear all</button>
+          </div>
+          {targets.map((t) => (
+            <div key={t.user._id} className="px-3 py-2 flex items-center gap-2 flex-wrap">
+              <div className="min-w-0 flex-1">
+                <div className="text-sm text-white truncate">{[t.user.firstName, t.user.lastName].filter(Boolean).join(' ') || t.user.email}</div>
+                <div className="text-[11px] text-text-muted truncate">{t.user.email}{t.user.userUid ? ` · ${t.user.userUid}` : ''}</div>
+                {t.error && <div className="text-[11px] text-bear mt-0.5">{t.error}</div>}
+              </div>
+              <select className="input !w-auto max-w-[260px] text-xs py-1" value={t.accountId} disabled={!t.accounts} onChange={(e) => setTargetAccount(t.user._id, e.target.value)}>
+                {!t.accounts && <option value="">loading accounts…</option>}
+                {t.accounts && !t.accounts.length && <option value="">no accounts</option>}
+                {(t.accounts || []).map((a) => (
+                  <option key={a._id} value={a._id}>{a.accountNumber} · {a.accountType} · bal {money(num(a.balance))}</option>
+                ))}
+              </select>
+              <button type="button" onClick={() => removeTarget(t.user._id)} className="text-text-muted hover:text-white text-lg leading-none px-1" title="Remove">×</button>
+            </div>
           ))}
-        </select>
-      </Field>
+        </div>
+      )}
 
       {/* Market — pick it first, then the script list for that market opens. */}
       <Field label="Market" hint="MCX = commodities (gold, silver, crude…)">
@@ -322,7 +360,7 @@ export function ManualTradeModal({ onClose, onSaved }) {
         <Field label="Quantity"><input className="input" value={f.quantity} onChange={(e) => set('quantity', e.target.value)} placeholder="e.g. 10" /></Field>
         <Field label="Entry price" hint={priceHint('entry')}><input className="input" value={f.entryPrice} onChange={(e) => { set('entryPrice', e.target.value); setAuto((a) => ({ ...a, entry: false })); }} placeholder="e.g. 2948.40" /></Field>
         <Field label="Open date & time" hint="past, local time"><input type="datetime-local" className="input" value={f.openedAt} max={toLocalInput(new Date())} onChange={(e) => set('openedAt', e.target.value)} /></Field>
-        <Field label="Leverage" hint={account ? `account default ${account.leverage || 1}×` : ''}><input className="input" value={f.leverage} onChange={(e) => set('leverage', e.target.value)} placeholder="1" /></Field>
+        <Field label="Leverage" hint="blank = each account's own leverage"><input className="input" value={f.leverage} onChange={(e) => set('leverage', e.target.value)} placeholder={account ? `${account.leverage || 1}` : '1'} /></Field>
         {f.status === 'CLOSED' && <>
           <Field label="Close price" hint={priceHint('close')}><input className="input" value={f.closePrice} onChange={(e) => { set('closePrice', e.target.value); setAuto((a) => ({ ...a, close: false })); }} placeholder="e.g. 2970.10" /></Field>
           <Field label="Close date & time" hint="after open, not in the future"><input type="datetime-local" className="input" value={f.closedAt} min={f.openedAt || undefined} max={toLocalInput(new Date())} onChange={(e) => set('closedAt', e.target.value)} /></Field>
@@ -338,9 +376,6 @@ export function ManualTradeModal({ onClose, onSaved }) {
     </Shell>
   );
 
-  // Reset the instrument-dependent defaults when the admin changes user — the
-  // price they typed for one account is rarely right for another.
-  function setInstrumentDefaults() { setAccounts([]); set('accountId', ''); }
 }
 
 /* ───────────────────────── Edit trade ───────────────────────── */
