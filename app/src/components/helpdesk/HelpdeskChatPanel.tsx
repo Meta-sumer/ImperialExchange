@@ -326,7 +326,7 @@ export function HelpdeskChatPanel({ embedded = false }: { embedded?: boolean }):
   const panelHeight = Math.round(winH * (embedded ? 0.68 : 0.7));
   const hintLine = uploadCfg
     ? (!uploadCfg.enabled
-      ? 'File uploads are currently disabled by the administrator.'
+      ? 'File uploads are currently disabled.'
       : `Allowed: ${uploadCfg.allowedExtensions.slice(0, 8).join(', ') || 'any (non-executable)'} · Max ${uploadCfg.maxFileMB} MB per file`)
     : null;
 

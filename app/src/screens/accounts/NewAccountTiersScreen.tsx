@@ -127,7 +127,7 @@ export function NewAccountTiersScreen({ navigation }: AppScreenProps<'NewAccount
           <ErrorView error={loadError} onRetry={() => { setLoading(true); void load(); }} />
         ) : groups.length === 0 ? (
           <Card padded={48}>
-            <AppText variant="body" tone="muted" align="center">No tiers available. Ask an admin to enable some.</AppText>
+            <AppText variant="body" tone="muted" align="center">No tiers available right now.</AppText>
           </Card>
         ) : (
           groups.map((g) => (

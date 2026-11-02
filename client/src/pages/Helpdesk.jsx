@@ -30,7 +30,7 @@ const STATUS_STYLES = {
 const KB_ARTICLES = [
   {
     q: 'How long do withdrawals take?',
-    a: 'UPI: ≤ 2 hours. Bank transfer: 1 business day. Crypto: ~30 minutes once admin approves. High-value (>10 lakh) needs two-admin approval — adds 24h.',
+    a: 'UPI: ≤ 2 hours. Bank transfer: 1 business day. Crypto: ~30 minutes once approved. High-value (>10 lakh) needs additional approval — adds 24h.',
     tag: 'Funds',
     link: '/wallet',
   },

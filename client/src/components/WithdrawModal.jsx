@@ -213,7 +213,7 @@ export default function WithdrawModal({ endpoint, title = 'Withdraw', currency =
       // The destination id only — the server resolves the real account from
       // the verified record. Nothing about where the money goes is sent here.
       await api.post(endpoint, { amount: n, withdrawalMethodId: selectedId });
-      toast.success('Withdrawal requested — pending admin approval');
+      toast.success('Withdrawal requested — pending approval');
       onSuccess && onSuccess();
     } catch (e) {
       const code = e.response?.data?.error?.code;

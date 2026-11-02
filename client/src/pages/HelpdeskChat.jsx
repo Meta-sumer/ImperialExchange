@@ -300,7 +300,7 @@ export default function HelpdeskChat({ embedded = false }) {
         {uploadCfg && (
           <div className="px-3 pb-2 text-[10px] text-text-muted">
             {uploadCfg.enabled === false
-              ? 'File uploads are currently disabled by the administrator.'
+              ? 'File uploads are currently disabled.'
               : `Allowed: ${(uploadCfg.allowedExtensions || []).slice(0, 8).join(', ') || 'any (non-executable)'} · Max ${uploadCfg.maxFileMB} MB per file`}
           </div>
         )}

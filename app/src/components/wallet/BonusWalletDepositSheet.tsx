@@ -204,7 +204,7 @@ export function BonusWalletDepositSheet({
           screenshot: proof?.dataUrl ?? '',
           screenshotMimeType: proof?.mimeType ?? '',
         }));
-        toast.success('Deposit submitted — pending admin verification');
+        toast.success('Deposit submitted — pending verification');
       }
       onSuccess();
     } catch (e) {
@@ -428,7 +428,7 @@ export function BonusWalletDepositSheet({
             <AppText variant="small" tone="secondary">
               {'Send '}
               <AppText variant="small" weight="700">{`${CURRENCY_SYMBOL}${nSafe.toFixed(2)}`}</AppText>
-              {` via ${method.label} to the details above, then upload proof. An admin will verify and credit your Main Wallet.`}
+              {` via ${method.label} to the details above, then upload proof. Our team will verify and credit your Main Wallet.`}
             </AppText>
           </View>
           <Input
@@ -489,7 +489,7 @@ export function BonusWalletDepositSheet({
             <AppText variant="caption" tone="muted">
               {trading
                 ? 'Funds transfer instantly. Your trading account is debited and your Main Wallet credited in one step.'
-                : 'Submission goes to admin for verification. You\'ll get a notification when the deposit is credited.'}
+                : 'Your submission will be verified. You\'ll get a notification when the deposit is credited.'}
             </AppText>
           </View>
         </View>

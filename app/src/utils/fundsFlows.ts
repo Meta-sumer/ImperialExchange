@@ -531,7 +531,7 @@ export const manualDepositProblem = (p: { isReal: boolean; hasProof: boolean; tx
 
 /** Success toasts. */
 export const depositSuccessMessage = (isDemo: boolean, amount: string): string =>
-  (isDemo ? `${fmtFlowAmount(amount)} added to demo account!` : 'Deposit submitted — pending admin verification');
+  (isDemo ? `${fmtFlowAmount(amount)} added to demo account!` : 'Deposit submitted — pending verification');
 
 /** Razorpay's verify succeeded. */
 export const razorpayCreditedMessage = (amount: string): string => `${fmtFlowAmount(amount)} credited`;
@@ -575,7 +575,7 @@ export const depositReviewRows = (p: {
 export const depositAssurance = (isReal: boolean, isRazor: boolean): string =>
   `Your payment is protected with bank-grade encryption. ${
     isReal && !isRazor
-      ? 'Admin will verify your screenshot within 1–24 hours.'
+      ? 'Your screenshot will be verified within 1–24 hours.'
       : isRazor ? 'Instant credit — powered by Razorpay.' : 'Demo funds credit instantly.'}`;
 
 /** The deposit method step's notices, word for word. */
@@ -829,7 +829,7 @@ export const buildWithdrawalPayload = (p: {
 export const withdrawSuccessMessage = (isDemo: boolean): string =>
   (isDemo
     ? 'Demo withdrawal completed instantly'
-    : 'Withdrawal request submitted — admin will process within 24 hours');
+    : 'Withdrawal request submitted — it will be processed within 24 hours');
 
 /** The final button. */
 export const withdrawPrimaryLabel = (p: { loading: boolean; isDemo: boolean; amount: string }): string => {

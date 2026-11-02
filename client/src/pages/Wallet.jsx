@@ -1311,7 +1311,7 @@ function InlineDepositFlow({ accounts, balances = [], fxRate, onDone, onCancel }
       if (isDemo) {
         toast.success(`${fmtMoney(amount, currency)} added to demo account!`);
       } else {
-        toast.success('Deposit submitted — pending admin verification');
+        toast.success('Deposit submitted — pending verification');
       }
       onDone();
     } catch (err) {
@@ -1960,7 +1960,7 @@ function InlineDepositFlow({ accounts, balances = [], fxRate, onDone, onCancel }
               <div className="rounded-xl bg-bull/10 border border-bull/30 p-3 flex items-start gap-2.5">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#16A34A" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 mt-0.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg>
                 <div className="text-[11px] text-text-secondary">
-                  Your payment is protected with bank-grade encryption. {isReal && !isRazor ? 'Admin will verify your screenshot within 1–24 hours.' : isRazor ? 'Instant credit — powered by Razorpay.' : 'Demo funds credit instantly.'}
+                  Your payment is protected with bank-grade encryption. {isReal && !isRazor ? 'Your screenshot will be verified within 1–24 hours.' : isRazor ? 'Instant credit — powered by Razorpay.' : 'Demo funds credit instantly.'}
                 </div>
               </div>
             </div>
@@ -2132,7 +2132,7 @@ function WithdrawModal({ balances, accounts, onClose, onDone }) {
       }
 
       await api.post('/wallet/withdrawals', payload);
-      toast.success('Withdrawal request submitted — admin will process within 24 hours');
+      toast.success('Withdrawal request submitted — it will be processed within 24 hours');
       onDone();
     } catch (err) {
       toast.error(errorMessage(err));
@@ -2768,7 +2768,7 @@ function WithdrawView({ accounts, balances, withdrawals, fxRate, onDone, onCance
       await api.post('/wallet/withdrawals', payload);
       toast.success(isDemo
         ? 'Demo withdrawal completed instantly'
-        : 'Withdrawal request submitted — admin will process within 24 hours');
+        : 'Withdrawal request submitted — it will be processed within 24 hours');
       onDone && onDone();
     } catch (err) {
       toast.error(errorMessage(err));
@@ -2927,7 +2927,7 @@ function WithdrawView({ accounts, balances, withdrawals, fxRate, onDone, onCance
               </div>
               {isDemo && (
                 <div className="rounded-xl bg-info/10 border border-info/30 p-3 text-xs text-text-primary">
-                  ✨ Demo withdrawals are processed instantly — no payment details or admin review needed.
+                  ✨ Demo withdrawals are processed instantly — no payment details or review needed.
                 </div>
               )}
             </div>
@@ -3335,7 +3335,7 @@ function WithdrawView({ accounts, balances, withdrawals, fxRate, onDone, onCance
               <div className="rounded-xl bg-bull/10 border border-bull/30 p-3 flex items-start gap-2.5">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#16A34A" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 mt-0.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg>
                 <div className="text-[11px] text-text-secondary">
-                  Funds will be locked immediately on submit. Admin verifies and releases within 1–24 hours.
+                  Funds will be locked immediately on submit. Verified and released within 1–24 hours.
                 </div>
               </div>
             </div>

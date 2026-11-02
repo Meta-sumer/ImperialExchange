@@ -172,7 +172,7 @@ export default function DepositModal({
         screenshot,
         screenshotMimeType,
       });
-      toast.success('Deposit submitted — pending admin verification');
+      toast.success('Deposit submitted — pending verification');
       onSuccess();
     } catch (e) {
       toast.error(errorMessage(e));
@@ -354,7 +354,7 @@ export default function DepositModal({
                 );
               })()}
               <div className="rounded-xl border border-primary-500/30 bg-primary-500/5 px-3 py-2.5 text-[12px] text-text-secondary leading-snug">
-                Send <span className="font-bold text-text-primary">{sym}{n.toFixed(2)}</span> via {method.label} to the details above, then upload proof. An admin will verify and credit your {walletName}.
+                Send <span className="font-bold text-text-primary">{sym}{n.toFixed(2)}</span> via {method.label} to the details above, then upload proof. Our team will verify and credit your {walletName}.
               </div>
               <div>
                 <div className="text-[11px] uppercase tracking-wider font-bold text-text-muted mb-1.5">Transaction reference *</div>
@@ -402,7 +402,7 @@ export default function DepositModal({
               <p className="text-[11px] text-text-muted leading-snug pt-2 border-t border-border-subtle">
                 {method.id === 'TRADING'
                   ? `Funds transfer instantly. Your trading wallet is debited and ${walletName} credited in one step.`
-                  : 'Submission goes to admin for verification. You\'ll get a notification when the deposit is credited.'}
+                  : 'Your submission will be verified. You\'ll get a notification when the deposit is credited.'}
               </p>
             </div>
           )}

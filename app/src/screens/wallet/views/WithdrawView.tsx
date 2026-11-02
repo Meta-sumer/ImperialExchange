@@ -262,7 +262,7 @@ export function WithdrawView({ onDone, onCancel, refreshKey }: WithdrawViewProps
   /* ── Render ──────────────────────────────────────────────────────── */
 
   const demoNotice = (
-    <Notice tone="info">✨ Demo withdrawals are processed instantly — no payment details or admin review needed.</Notice>
+    <Notice tone="info">✨ Demo withdrawals are processed instantly — no payment details or review needed.</Notice>
   );
 
   let body: React.ReactNode = null;
@@ -442,7 +442,7 @@ export function WithdrawView({ onDone, onCancel, refreshKey }: WithdrawViewProps
         />
         {isDemo ? demoNotice : (
           <Notice tone="bull" icon={<FlowGlyph name="shield" size={16} color={t.colors.bull} strokeWidth={2.4} />}>
-            Funds will be locked immediately on submit. Admin verifies and releases within 1–24 hours.
+            Funds will be locked immediately on submit. Verified and released within 1–24 hours.
           </Notice>
         )}
       </View>

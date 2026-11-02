@@ -105,7 +105,7 @@ export default function NewAccountTiers() {
         {loading ? (
           <div className="text-text-muted px-2 py-8">Loading account tiers…</div>
         ) : groups.length === 0 ? (
-          <div className="card p-12 text-center text-text-muted">No tiers available. Ask an admin to enable some.</div>
+          <div className="card p-12 text-center text-text-muted">No tiers available right now.</div>
         ) : (
           groups.map((g) => (
             <Section

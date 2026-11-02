@@ -132,7 +132,7 @@ export function UserWalletWithdrawSheet({
       // The destination id only — nothing about where the money goes.
       const body = withdrawBody(amount, selectedId);
       await walletApi.bonusWithdraw(body);
-      toast.success('Withdrawal requested — pending admin approval');
+      toast.success('Withdrawal requested — pending approval');
       onSuccess();
     } catch (e) {
       toast.error(withdrawErrorMessage(e));

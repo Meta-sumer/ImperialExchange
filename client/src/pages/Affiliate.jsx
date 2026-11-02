@@ -384,7 +384,7 @@ export default function Affiliate() {
                     </span>
                     <div className="min-w-0">
                       <div className="text-text-primary text-sm font-semibold truncate">
-                        {isAdj ? 'Bonus from admin' : 'Referral earning'}
+                        {isAdj ? 'Bonus credit' : 'Referral earning'}
                       </div>
                       <div className="text-[11px] text-text-muted truncate">
                         {isAdj && c.note ? c.note + ' · ' : ''}
