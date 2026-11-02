@@ -130,7 +130,7 @@ export default function Partner() {
     <div className="space-y-6 max-w-[1500px] mx-auto pb-10">
       {d.enabled === false && (
         <div className="bg-warn/10 border border-warn/30 text-warn rounded-2xl p-4 text-sm font-semibold">
-          The partner program is currently paused by the administrator. New commissions won't be credited.
+          The partner program is currently currently paused. New commissions won't be credited.
         </div>
       )}
 

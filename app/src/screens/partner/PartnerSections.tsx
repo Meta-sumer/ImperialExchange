@@ -131,7 +131,7 @@ export function PausedBanner(): React.JSX.Element {
   return (
     <View style={[styles.banner, { backgroundColor: t.alpha(t.colors.warn, 0.1), borderColor: t.alpha(t.colors.warn, 0.3) }]}>
       <AppText variant="bodyStrong" color={t.colors.warn}>
-        The partner program is currently paused by the administrator. New commissions won't be credited.
+        The partner program is currently currently paused. New commissions won't be credited.
       </AppText>
     </View>
   );
