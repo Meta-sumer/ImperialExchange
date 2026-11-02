@@ -557,8 +557,8 @@ const TYPE_CATEGORIES = [
   'Transfer - Wallet to Account',
   'Transfer - Account to Wallet',
   'Transfer - Wallet to Wallet',
-  'Trade Open',
-  'Trade Close',
+  // No 'Trade Open' / 'Trade Close': the server keeps trade rows out of this
+  // history (they belong to Trade History).
   'Fee',
   'Commission',
   'Charge',

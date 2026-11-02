@@ -16,6 +16,7 @@ const { gt, sub, add, mul, div } = require('../utils/decimal');
 // conversions. Imported rather than redeclared so the money layer and everything
 // that compares against it cannot drift apart.
 const { BASE_CURRENCY } = require('../config/constants');
+const { withoutTradeRows } = require('../utils/userLedgerFilter');
 
 const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 
@@ -174,7 +175,8 @@ const getLedger = asyncHandler(async (req, res) => {
   const { limit = 100, accountId } = req.query;
   const filter = { userId: req.userId };
   if (accountId) filter.accountId = accountId;
-  const entries = await WalletLedger.find(filter).sort({ createdAt: -1 }).limit(Number(limit)).lean();
+  // Trade postings and trade adjustments never reach the user's money history.
+  const entries = await WalletLedger.find(withoutTradeRows(filter)).sort({ createdAt: -1 }).limit(Number(limit)).lean();
 
   // Enrich peer-to-peer transfer rows with the counterparty's display
   // name so the wallet history can render "Transfer to/from <name>"
