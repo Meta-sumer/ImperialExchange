@@ -4,7 +4,7 @@ const Position = require('../models/Position');
 const { WalletLedger } = require('../models/Wallet');
 const { asyncHandler } = require('../utils/errors');
 const { applyDateRange } = require('../utils/dateRange');
-const { userLedgerFilter, reversedDepositIds } = require('../utils/userLedgerFilter');
+const { userLedgerFilter } = require('../utils/userLedgerFilter');
 
 /**
  * Tiny CSV serializer. Escapes quotes and wraps fields containing commas/quotes/newlines.
@@ -83,7 +83,7 @@ const exportLedger = asyncHandler(async (req, res) => {
   // Inclusive of the whole `to` day (fixes From==To returning nothing).
   applyDateRange(filter, 'createdAt', from, to);
   // Same rule as the in-app Transaction History: no trade rows in the export.
-  const entries = await WalletLedger.find(userLedgerFilter(filter, await reversedDepositIds(req.userId))).sort({ createdAt: -1 }).limit(5000).lean();
+  const entries = await WalletLedger.find(userLedgerFilter(filter)).sort({ createdAt: -1 }).limit(5000).lean();
   const csv = toCsv(entries, [
     { label: 'Date', value: (e) => new Date(e.createdAt).toISOString() },
     { label: 'Type', value: 'type' },

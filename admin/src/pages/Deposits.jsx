@@ -219,9 +219,9 @@ export default function Deposits() {
 
 /**
  * Reverse a deposit confirmed by mistake: the credited amount comes back off
- * the user's trading wallet, the deposit moves to REVERSED, and the user no
- * longer sees it (or the reversal). The remark is required and stays with
- * the deposit for admins.
+ * the user's trading wallet and the deposit moves to REVERSED. The user sees
+ * the deposit as Reversed with the remark (required), and the debit as its
+ * own "Deposit Reversed" entry.
  * POST /admin/deposits/:id/reverse { remark }
  */
 function ReverseDepositModal({ deposit, onClose, onDone }) {
@@ -265,11 +265,11 @@ function ReverseDepositModal({ deposit, onClose, onDone }) {
           </div>
           <ul className="text-xs text-gray-400 space-y-1 list-disc pl-4">
             <li>The credited amount is debited back from the user&apos;s trading wallet.</li>
-            <li>The deposit disappears from the user&apos;s history. It stays here under REVERSED.</li>
+            <li>The user sees this deposit as Reversed with your remark, and the debit as a separate entry.</li>
             <li>Money already locked as margin cannot be taken back.</li>
           </ul>
           <div>
-            <label className="label">Remark <span className="text-gray-500 font-normal">· required, admins only</span></label>
+            <label className="label">Remark <span className="text-gray-500 font-normal">· required, shown to the user</span></label>
             <textarea className="input min-h-[72px]" value={remark} onChange={(e) => setRemark(e.target.value)} maxLength={300}
               placeholder="e.g. Confirmed by mistake, payment not received" autoFocus />
           </div>

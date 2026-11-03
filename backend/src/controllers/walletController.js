@@ -16,7 +16,7 @@ const { gt, sub, add, mul, div } = require('../utils/decimal');
 // conversions. Imported rather than redeclared so the money layer and everything
 // that compares against it cannot drift apart.
 const { BASE_CURRENCY } = require('../config/constants');
-const { userLedgerFilter, reversedDepositIds } = require('../utils/userLedgerFilter');
+const { userLedgerFilter } = require('../utils/userLedgerFilter');
 
 const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 
@@ -175,10 +175,8 @@ const getLedger = asyncHandler(async (req, res) => {
   const { limit = 100, accountId } = req.query;
   const filter = { userId: req.userId };
   if (accountId) filter.accountId = accountId;
-  // Trade postings, trade adjustments and reversed deposits never reach the
-  // user's money history.
-  const hidden = await reversedDepositIds(req.userId);
-  const entries = await WalletLedger.find(userLedgerFilter(filter, hidden)).sort({ createdAt: -1 }).limit(Number(limit)).lean();
+  // Trade postings and trade adjustments never reach the user's money history.
+  const entries = await WalletLedger.find(userLedgerFilter(filter)).sort({ createdAt: -1 }).limit(Number(limit)).lean();
 
   // Enrich peer-to-peer transfer rows with the counterparty's display
   // name so the wallet history can render "Transfer to/from <name>"
@@ -438,8 +436,9 @@ const createDeposit = asyncHandler(async (req, res) => {
 });
 
 const listDeposits = asyncHandler(async (req, res) => {
-  // A deposit reversed as a mistake is gone from the user's side.
-  const deposits = await Deposit.find({ userId: req.userId, status: { $ne: 'REVERSED' } }).sort({ createdAt: -1 }).limit(100).lean();
+  // A reversed deposit stays listed (status REVERSED, with the desk's
+  // reverseRemark); which admin did it is not the user's business.
+  const deposits = await Deposit.find({ userId: req.userId }).select('-reversedBy').sort({ createdAt: -1 }).limit(100).lean();
   sendSuccess(res, deposits);
 });
 

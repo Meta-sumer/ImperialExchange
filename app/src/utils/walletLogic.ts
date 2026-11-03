@@ -488,6 +488,7 @@ const STATUS_COLORS: Readonly<Record<string, StatusColors>> = {
   SETTLED: { dot: '#16A34A', fg: '#15803D' },
   REJECTED: { dot: '#DC2626', fg: '#B91C1C' },
   CANCELLED: SLATE,
+  REVERSED: { dot: '#EA580C', fg: '#C2410C' },
 };
 
 export const statusColors = (status: string | null | undefined): StatusColors =>
@@ -505,6 +506,7 @@ const STATUS_DOT: Readonly<Record<string, string>> = {
   SETTLED: '#16A34A',
   REJECTED: '#DC2626',
   CANCELLED: '#94A3B8',
+  REVERSED: '#EA580C',
 };
 
 export const statusDotColor = (status: string | null | undefined): string =>
@@ -521,6 +523,7 @@ const STRIP_STATUS: Readonly<Record<string, StatusColors>> = {
   PARTIALLY_SETTLED: { dot: '#3B82F6', fg: '#1D4ED8' },
   REJECTED: { dot: '#EF4444', fg: '#B91C1C' },
   CANCELLED: { dot: '#6B7280', fg: '#4B5563' },
+  REVERSED: { dot: '#EA580C', fg: '#C2410C' },
 };
 
 export const stripStatusColors = (status: string | null | undefined): StatusColors | null =>
@@ -838,9 +841,13 @@ export const normalizeDeposit = (
     method: methodLabel(d.method),
     receivedFrom,
     destination: acct,
-    description: movementDescription({
-      kind: 'deposit', method: methodLabel(d.method), amount: d.amount, account: acct, counterparty: flat(receivedFrom), note: d.note,
-    }),
+    description: [
+      movementDescription({
+        kind: 'deposit', method: methodLabel(d.method), amount: d.amount, account: acct, counterparty: flat(receivedFrom), note: d.note,
+      }),
+      // Reversed by the desk (confirmed by mistake): say so, with its remark.
+      d.status === 'REVERSED' ? `Reversed${d.reverseRemark ? `: ${d.reverseRemark}` : ''}` : '',
+    ].filter(Boolean).join(' · '),
     accountId: d.accountId,
     ledgerType: null,
     referenceId: null,
@@ -909,6 +916,7 @@ export const normalizeLedger = (
     if (amt >= 0) { receivedFrom = 'Market'; destination = acct; }
     else { receivedFrom = acct; destination = 'Market'; }
   } else if (l.type === 'FEE') { receivedFrom = acct; destination = 'System'; }
+  else if (l.type === 'ADJUSTMENT' && l.referenceType === 'deposit_reversal') { receivedFrom = acct; destination = 'Deposit reversed'; }
   else if (l.type === 'ADJUSTMENT') {
     // A wallet top-up from this account debits it (a refund credits it back).
     const ref = String(l.referenceType || '');
@@ -930,7 +938,7 @@ export const normalizeLedger = (
     amount: amt,
     currency: l.currency || 'INR',
     status: 'COMPLETED',
-    type,
+    type: l.referenceType === 'deposit_reversal' ? 'Deposit Reversed' : type,
     method,
     receivedFrom,
     destination,
@@ -1082,7 +1090,7 @@ export const TYPE_CATEGORIES: readonly string[] = [
 ];
 
 /** Every status a row can carry. */
-export const ALL_STATUSES: readonly string[] = ['PENDING', 'PROCESSING', 'CONFIRMED', 'APPROVED', 'COMPLETED', 'PARTIALLY_SETTLED', 'SETTLED', 'REJECTED', 'CANCELLED'];
+export const ALL_STATUSES: readonly string[] = ['PENDING', 'PROCESSING', 'CONFIRMED', 'APPROVED', 'COMPLETED', 'PARTIALLY_SETTLED', 'SETTLED', 'REJECTED', 'CANCELLED', 'REVERSED'];
 
 /** Exactly one category per row. */
 export const categoryOf = (row: RowSansCategory): string => {
@@ -1092,6 +1100,8 @@ export const categoryOf = (row: RowSansCategory): string => {
   if (row.kind === 'deposit') return 'Deposit';
   if (row.kind === 'withdrawal') return 'Withdrawal';
   const t = row.ledgerType;
+  // The desk's reversal of a deposit sits under Deposit, next to what it undoes.
+  if (row.type === 'Deposit Reversed') return 'Deposit';
   if (t === 'TRANSFER') return 'Transfer - Internal';
   if (t === 'INTERNAL_TRANSFER_OUT' || t === 'INTERNAL_TRANSFER_IN') return 'Transfer - External';
   if (t === 'TRADE_OPEN') return 'Trade Open';

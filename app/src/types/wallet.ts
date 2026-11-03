@@ -181,7 +181,7 @@ export const ledgerCounterpartyLabel = (
 
 /* ══ Deposits ═════════════════════════════════════════════════════════ */
 
-export type DepositStatus = 'PENDING' | 'CONFIRMED' | 'COMPLETED' | 'REJECTED' | 'CANCELLED' | (string & {});
+export type DepositStatus = 'PENDING' | 'CONFIRMED' | 'COMPLETED' | 'REJECTED' | 'CANCELLED' | 'REVERSED' | (string & {});
 
 export interface Deposit {
   id: string;
@@ -210,6 +210,8 @@ export interface Deposit {
   status: DepositStatus;
   rejectionReason: string | null;
   note: string | null;
+  /** Why the desk reversed it (status REVERSED: confirmed by mistake). */
+  reverseRemark: string | null;
   confirmedAt: string | null;
   createdAt: string | null;
 }
@@ -239,6 +241,7 @@ export const toDeposit = (body: unknown): Deposit => {
     status: str(raw.status) || 'PENDING',
     rejectionReason: strOrNull(raw.rejectionReason),
     note: strOrNull(raw.note),
+    reverseRemark: strOrNull(raw.reverseRemark),
     confirmedAt: strOrNull(raw.confirmedAt) ?? strOrNull(raw.completedAt),
     createdAt: strOrNull(raw.createdAt),
   };

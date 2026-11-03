@@ -1125,8 +1125,8 @@ const rejectDeposit = asyncHandler(async (req, res) => {
 // POST /admin/deposits/:id/reverse { remark } — undo a deposit confirmed by
 // mistake. Exactly what the confirmation credited (its DEPOSIT ledger row) is
 // debited back off the trading wallet and the deposit becomes REVERSED. The
-// user no longer sees the deposit or the reversal (they net to zero); admins
-// keep both, with the remark, under the Deposits page's REVERSED tab.
+// user sees the deposit as REVERSED with the remark, and the debit as a
+// "Deposit Reversed" row; admins find it under the Deposits page's REVERSED tab.
 const reverseDeposit = asyncHandler(async (req, res) => {
   const remark = String(req.body?.remark || '').trim().slice(0, 300);
   if (!remark) throw new AppError('Write a remark for this reversal', 400, 'REMARK_REQUIRED');

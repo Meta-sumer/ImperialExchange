@@ -170,10 +170,14 @@ function normalizeDeposit(d, ledgerByRef, acctName) {
     method: methodLabel(d.method),
     receivedFrom,
     destination: acct,
-    description: movementDescription({
-      kind: 'deposit', method: methodLabel(d.method), amount: d.amount, currency: d.currency || 'INR',
-      base: baseEquivalent(d, 1), account: acct, counterparty: flat(receivedFrom), note: d.note,
-    }),
+    description: [
+      movementDescription({
+        kind: 'deposit', method: methodLabel(d.method), amount: d.amount, currency: d.currency || 'INR',
+        base: baseEquivalent(d, 1), account: acct, counterparty: flat(receivedFrom), note: d.note,
+      }),
+      // Reversed by the desk (confirmed by mistake): say so, with its remark.
+      d.status === 'REVERSED' ? `Reversed${d.reverseRemark ? `: ${d.reverseRemark}` : ''}` : '',
+    ].filter(Boolean).join(' · '),
     accountId: d.accountId ? String(d.accountId) : null,
     beforeBal: snap ? snap.before : null,
     afterBal: snap ? snap.after : null,
@@ -257,10 +261,12 @@ function normalizeLedger(l, acctName) {
     // The fee is debited from the trading account, not from nowhere.
     receivedFrom = acct; destination = 'System';
   }
+  else if (l.type === 'ADJUSTMENT' && l.referenceType === 'deposit_reversal') { receivedFrom = acct; destination = 'Deposit reversed'; }
   else if (l.type === 'ADJUSTMENT') { receivedFrom = 'System'; destination = 'Main Wallet'; }
   else if (l.type === 'INTERNAL_TRANSFER_OUT') { method = 'Internal'; receivedFrom = 'Main Wallet'; destination = cp || 'User Wallet'; }
   else if (l.type === 'INTERNAL_TRANSFER_IN') { method = 'Internal'; receivedFrom = cp || 'User Wallet'; destination = 'Main Wallet'; }
   else if (l.type === 'TRANSFER') { method = 'Internal'; receivedFrom = amt >= 0 ? 'Wallet' : 'Main Wallet'; destination = amt >= 0 ? 'Main Wallet' : 'Wallet'; }
+  const label = l.referenceType === 'deposit_reversal' ? 'Deposit Reversed' : type;
   return {
     id: String(l._id || l.id),
     kind: 'ledger',
@@ -268,8 +274,8 @@ function normalizeLedger(l, acctName) {
     amount: amt,
     currency: l.currency || 'INR',
     status: 'COMPLETED',
-    type,
-    typeKey: type,
+    type: label,
+    typeKey: label,
     method,
     receivedFrom,
     destination,
@@ -420,6 +426,7 @@ function StatusPill({ status }) {
     PENDING: { dot: '#D97706', bg: '#D9770614', fg: '#B45309' },
     REJECTED: { dot: '#DC2626', bg: '#DC262614', fg: '#B91C1C' },
     CANCELLED: { dot: '#64748B', bg: '#64748B14', fg: '#475569' },
+    REVERSED: { dot: '#EA580C', bg: '#EA580C14', fg: '#C2410C' },
   };
   const c = map[s] || { dot: '#64748B', bg: '#64748B14', fg: '#475569' };
   return (
@@ -534,13 +541,13 @@ function typeIcon(label) {
 const STATUS_COLOR = {
   COMPLETED: '#16A34A', CONFIRMED: '#16A34A', APPROVED: '#16A34A', DONE: '#16A34A',
   PROCESSING: '#2563EB', PENDING: '#D97706', REJECTED: '#DC2626', CANCELLED: '#94A3B8',
-  SETTLED: '#16A34A', PARTIALLY_SETTLED: '#2563EB',
+  SETTLED: '#16A34A', PARTIALLY_SETTLED: '#2563EB', REVERSED: '#EA580C',
 };
 // Every status a deposit / withdrawal / ledger row can carry — so the Status
 // filter always offers the full set, even when the current history has none of
 // a given status yet. (Deposit: PENDING/CONFIRMED/REJECTED/CANCELLED,
 // Withdrawal: PENDING/APPROVED/PROCESSING/COMPLETED/REJECTED/CANCELLED.)
-const ALL_STATUSES = ['PENDING', 'PROCESSING', 'CONFIRMED', 'APPROVED', 'COMPLETED', 'PARTIALLY_SETTLED', 'SETTLED', 'REJECTED', 'CANCELLED'];
+const ALL_STATUSES = ['PENDING', 'PROCESSING', 'CONFIRMED', 'APPROVED', 'COMPLETED', 'PARTIALLY_SETTLED', 'SETTLED', 'REJECTED', 'CANCELLED', 'REVERSED'];
 const statusDot = (status) => (
   <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: STATUS_COLOR[String(status).toUpperCase()] || '#94A3B8' }} />
 );
@@ -603,6 +610,7 @@ function categoryOf(row) {
   if (row.kind === 'withdrawal') return 'Withdrawal';
   if (row.kind === 'credit') return 'Credit';
   const t = row.raw?.type;
+  if (row.raw?.referenceType === 'deposit_reversal') return 'Deposit';
   if (t === 'TRANSFER') return 'Transfer - Internal';
   if (t === 'INTERNAL_TRANSFER_OUT' || t === 'INTERNAL_TRANSFER_IN') return 'Transfer - External';
   if (t === 'TRADE_OPEN') return 'Trade Open';
