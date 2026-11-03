@@ -12,6 +12,8 @@ import React, {
 } from 'react';
 import { StyleSheet, View } from 'react-native';
 
+import { ConfirmCtx } from './confirmContext';
+
 /**
  * The overlay layer every modal, sheet, confirm and toast renders into —
  * this app's `createPortal(…, document.body)`.
@@ -105,11 +107,17 @@ export function PortalHost({ children }: { children: ReactNode }): React.JSX.Ele
 export function Portal({ z, children }: { z: number; children: ReactNode }): React.JSX.Element | null {
   const host = useContext(PortalContext);
   const key = useId();
+  // The host sits above ConfirmProvider, so overlay content would otherwise
+  // get the no-provider confirm, which answers "no" without asking: a Remove
+  // or Delete inside a modal silently did nothing. Carry the caller's confirm
+  // into the overlay layer with the content.
+  const confirm = useContext(ConfirmCtx);
+  const node = <ConfirmCtx.Provider value={confirm}>{children}</ConfirmCtx.Provider>;
 
   // Mount once and unmount on the way out; the effect below pushes updates.
   useLayoutEffect(() => {
     if (!host) return undefined;
-    host.mount(key, z, children);
+    host.mount(key, z, node);
     return () => host.unmount(key);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [host, key]);
@@ -119,10 +127,10 @@ export function Portal({ z, children }: { z: number; children: ReactNode }): Rea
   const first = useRef(true);
   useEffect(() => {
     if (first.current) { first.current = false; return; }
-    host?.update(key, z, children);
+    host?.update(key, z, node);
   });
 
-  if (!host) return <>{children}</>;
+  if (!host) return node;
   return null;
 }
 

@@ -96,7 +96,7 @@ import { accountApi } from '@/api/account.api';
 import { walletApi } from '@/api/wallet.api';
 import { ConfirmProvider, PortalHost } from '@/components/ui';
 import { toast, toastStore } from '@/components/ui/toast';
-import { WithdrawalMethodsView } from '@/components/wallet/WithdrawalMethods';
+import { WithdrawalMethodsModal, WithdrawalMethodsView } from '@/components/wallet/WithdrawalMethods';
 import type { RootStackParamList } from '@/navigation/types';
 import { DepositView } from '@/screens/wallet/views/DepositView';
 import { WithdrawView } from '@/screens/wallet/views/WithdrawView';
@@ -551,6 +551,20 @@ describe('the withdrawal-methods manager', () => {
     expect(text()).toContain('Reason: Name mismatch');
     expect(text()).toContain('Verified');
     expect(text()).toContain('Pending');
+    await press(byLabel('Remove My UPI'));
+    expect(text()).toContain(REMOVE_METHOD_CONFIRM);
+    await press(byText('Remove'));
+    expect(W.removeWithdrawalMethod).toHaveBeenCalledWith('u1');
+    expect(toasts()).toContain('success:Withdrawal method removed');
+  });
+
+  // The withdraw flow's "Manage" opens the list in a modal. Modal content
+  // renders in the overlay layer, above ConfirmProvider; without the confirm
+  // carried across, the confirm answered "no" unseen and Remove did nothing.
+  it('removes from inside the Manage modal too (the confirm reaches the overlay)', async () => {
+    W.withdrawalMethods!.mockResolvedValue(METHODS);
+    W.removeWithdrawalMethod!.mockResolvedValue(undefined);
+    await mount(<WithdrawalMethodsModal open onClose={() => {}} />);
     await press(byLabel('Remove My UPI'));
     expect(text()).toContain(REMOVE_METHOD_CONFIRM);
     await press(byText('Remove'));

@@ -1,13 +1,14 @@
 import React, {
-  createContext,
   useCallback,
-  useContext,
   useRef,
   useState,
   type ReactNode,
 } from 'react';
 
 import { ConfirmDialog } from './ConfirmDialog';
+import { ConfirmCtx, useConfirm, type ConfirmFn, type ConfirmOptions } from './confirmContext';
+
+export { useConfirm, type ConfirmFn, type ConfirmOptions };
 
 /**
  * App-wide confirmation dialog, ported from client/src/components/ConfirmProvider.jsx —
@@ -24,16 +25,6 @@ import { ConfirmDialog } from './ConfirmDialog';
  * a confirm raised from INSIDE an open modal (delete a watchlist from the
  * manager) sits above that modal instead of level with it.
  */
-
-export interface ConfirmOptions {
-  message?: string;
-  title?: string;
-  confirmText?: string;
-  cancelText?: string;
-  danger?: boolean;
-}
-
-export type ConfirmFn = (opts?: string | ConfirmOptions) => Promise<boolean>;
 
 interface ConfirmState {
   message: string;
@@ -54,12 +45,6 @@ export const normaliseConfirm = (opts?: string | ConfirmOptions): ConfirmState =
     danger: !!o.danger,
   };
 };
-
-// Outside a provider the web resolves false — "not confirmed" is the safe
-// answer for a question nobody could see.
-const ConfirmCtx = createContext<ConfirmFn>(() => Promise.resolve(false));
-
-export const useConfirm = (): ConfirmFn => useContext(ConfirmCtx);
 
 export function ConfirmProvider({ children }: { children: ReactNode }): React.JSX.Element {
   const [state, setState] = useState<ConfirmState | null>(null);
