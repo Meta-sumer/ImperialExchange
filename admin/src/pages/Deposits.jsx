@@ -12,12 +12,22 @@ const TARGET_WALLET_LABEL = {
   bonus: 'Bonus Wallet',
 };
 
+const STATUS_CLS = {
+  CONFIRMED: 'bg-green-900/30 text-green-400',
+  REJECTED: 'bg-red-900/30 text-red-400',
+  REVERSED: 'bg-orange-900/30 text-orange-300',
+};
+const statusCls = (s) => STATUS_CLS[s] || 'bg-yellow-900/30 text-yellow-400';
+// Only trading-account deposits can be reversed (the backend refuses the rest).
+const canReverse = (d) => d.status === 'CONFIRMED' && (d.targetWallet || 'trading') === 'trading';
+
 export default function Deposits() {
   const askConfirm = useConfirm();
   const [items, setItems] = useState([]);
   const [filter, setFilter] = useState('PENDING');
   const [mode, setMode] = useState('');   // '' = all accounts, 'real', 'demo'
   const [viewing, setViewing] = useState(null); // deposit being viewed in detail modal
+  const [reversing, setReversing] = useState(null); // confirmed deposit being reversed
   const [refreshing, setRefreshing] = useState(false);
 
   const load = async () => {
@@ -80,7 +90,7 @@ export default function Deposits() {
       />
 
       <div className="flex items-center space-x-2">
-        {['PENDING', 'CONFIRMED', 'REJECTED', ''].map((s) => (
+        {['PENDING', 'CONFIRMED', 'REJECTED', 'REVERSED', ''].map((s) => (
           <button
             key={s || 'all'}
             onClick={() => setFilter(s)}
@@ -161,16 +171,20 @@ export default function Deposits() {
                   )}
                 </td>
                 <td className="p-3">
-                  <span className={`text-xs px-2 py-0.5 rounded ${
-                    d.status === 'CONFIRMED' ? 'bg-green-900/30 text-green-400' :
-                    d.status === 'REJECTED' ? 'bg-red-900/30 text-red-400' :
-                    'bg-yellow-900/30 text-yellow-400'
-                  }`}>{d.status}</span>
+                  <span className={`text-xs px-2 py-0.5 rounded ${statusCls(d.status)}`}>{d.status}</span>
+                  {d.status === 'REVERSED' && d.reverseRemark && (
+                    <div className="text-[10px] text-gray-500 mt-1 max-w-[200px] truncate" title={d.reverseRemark}>{d.reverseRemark}</div>
+                  )}
                 </td>
                 <td className="p-3 text-right">
                   {d.status === 'PENDING' && (
                     <button onClick={() => setViewing(d)} className="btn-secondary text-xs">
                       Review
+                    </button>
+                  )}
+                  {canReverse(d) && (
+                    <button onClick={() => setReversing(d)} className="text-xs px-2.5 py-1 rounded border border-bear/40 text-bear hover:bg-bear/10" title="Confirmed by mistake? Take the amount back off the wallet">
+                      Reverse
                     </button>
                   )}
                 </td>
@@ -188,13 +202,90 @@ export default function Deposits() {
           onClose={() => setViewing(null)}
           onConfirm={() => confirm(viewing._id)}
           onReject={() => reject(viewing._id)}
+          onReverse={() => { setReversing(viewing); setViewing(null); }}
+        />
+      )}
+
+      {reversing && (
+        <ReverseDepositModal
+          deposit={reversing}
+          onClose={() => setReversing(null)}
+          onDone={() => { setReversing(null); load(); }}
         />
       )}
     </div>
   );
 }
 
-function DepositDetailModal({ deposit, onClose, onConfirm, onReject }) {
+/**
+ * Reverse a deposit confirmed by mistake: the credited amount comes back off
+ * the user's trading wallet, the deposit moves to REVERSED, and the user no
+ * longer sees it (or the reversal). The remark is required and stays with
+ * the deposit for admins.
+ * POST /admin/deposits/:id/reverse { remark }
+ */
+function ReverseDepositModal({ deposit, onClose, onDone }) {
+  const [remark, setRemark] = useState('');
+  const [saving, setSaving] = useState(false);
+  const symbol = (cur) => ({ INR: '₹', USD: '$', EUR: '€', GBP: '£' }[cur] || (cur + ' '));
+  const amountText = `${symbol(deposit.currency)}${Number(deposit.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+  const submit = async () => {
+    if (!remark.trim()) { toast.error('Write a remark first'); return; }
+    setSaving(true);
+    try {
+      await api.post(`/admin/deposits/${deposit._id}/reverse`, { remark: remark.trim() });
+      toast.success(`Deposit reversed · ${amountText} taken back from the wallet`);
+      onDone();
+    } catch (e) {
+      toast.error(errorMessage(e));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50" onClick={onClose}>
+      <div className="bg-bg-card border border-border-dark rounded-xl max-w-md w-full" onClick={(e) => e.stopPropagation()}>
+        <div className="p-4 border-b border-border-dark flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-base font-bold text-white">Reverse Deposit</h2>
+            <p className="text-xs text-gray-500 mt-0.5">For a deposit confirmed by mistake.</p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-white text-xl leading-none">✕</button>
+        </div>
+        <div className="p-4 space-y-3">
+          <div className="rounded-lg border border-border-dark bg-bg-dark/60 p-3 text-sm">
+            <div className="text-2xl font-bold font-mono text-white">{amountText}</div>
+            <div className="text-xs text-gray-400 mt-1">
+              {deposit.user?.userUid || String(deposit.userId).slice(-6)}{deposit.user?.name ? ` · ${deposit.user.name}` : ''}
+              {deposit.accountNumber ? ` · ${deposit.accountNumber}` : ''} · {deposit.method || '-'}
+            </div>
+            <div className="text-[11px] text-gray-500 mt-0.5">Confirmed {deposit.confirmedAt ? new Date(deposit.confirmedAt).toLocaleString('en-IN') : '-'}</div>
+          </div>
+          <ul className="text-xs text-gray-400 space-y-1 list-disc pl-4">
+            <li>The credited amount is debited back from the user&apos;s trading wallet.</li>
+            <li>The deposit disappears from the user&apos;s history. It stays here under REVERSED.</li>
+            <li>Money already locked as margin cannot be taken back.</li>
+          </ul>
+          <div>
+            <label className="label">Remark <span className="text-gray-500 font-normal">· required, admins only</span></label>
+            <textarea className="input min-h-[72px]" value={remark} onChange={(e) => setRemark(e.target.value)} maxLength={300}
+              placeholder="e.g. Confirmed by mistake, payment not received" autoFocus />
+          </div>
+        </div>
+        <div className="px-4 py-3 border-t border-border-dark flex justify-end gap-2">
+          <button onClick={onClose} className="btn-secondary text-sm">Cancel</button>
+          <button onClick={submit} disabled={saving || !remark.trim()} className="btn-bear text-sm disabled:opacity-40">
+            {saving ? 'Reversing…' : 'Reverse Amount'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DepositDetailModal({ deposit, onClose, onConfirm, onReject, onReverse }) {
   const symbol = (cur) => ({ INR: '₹', USD: '$', EUR: '€', GBP: '£' }[cur] || (cur + ' '));
 
   return (
@@ -283,12 +374,19 @@ function DepositDetailModal({ deposit, onClose, onConfirm, onReject }) {
 
             <div>
               <div className="text-xs text-gray-500 uppercase mb-1">Status</div>
-              <span className={`text-sm px-2 py-1 rounded ${
-                deposit.status === 'CONFIRMED' ? 'bg-green-900/30 text-green-400' :
-                deposit.status === 'REJECTED' ? 'bg-red-900/30 text-red-400' :
-                'bg-yellow-900/30 text-yellow-400'
-              }`}>{deposit.status}</span>
+              <span className={`text-sm px-2 py-1 rounded ${statusCls(deposit.status)}`}>{deposit.status}</span>
             </div>
+
+            {deposit.status === 'REVERSED' && (
+              <div>
+                <div className="text-xs text-gray-500 uppercase mb-1">Reversed</div>
+                <div className="text-orange-300 text-sm">{deposit.reverseRemark || '-'}</div>
+                <div className="text-[11px] text-gray-500 mt-0.5">
+                  {deposit.reversedAt ? new Date(deposit.reversedAt).toLocaleString('en-IN') : ''}
+                  {deposit.reversedAmount ? ` · ₹${Number(deposit.reversedAmount).toLocaleString('en-IN', { minimumFractionDigits: 2 })} taken back` : ''}
+                </div>
+              </div>
+            )}
 
             {deposit.rejectionReason && (
               <div>
@@ -329,6 +427,11 @@ function DepositDetailModal({ deposit, onClose, onConfirm, onReject }) {
           <div className="p-5 border-t border-border-dark flex gap-3 justify-end">
             <button onClick={onReject} className="btn-bear">Reject</button>
             <button onClick={onConfirm} className="btn-bull">✓ Approve & Credit</button>
+          </div>
+        )}
+        {canReverse(deposit) && (
+          <div className="p-5 border-t border-border-dark flex gap-3 justify-end">
+            <button onClick={onReverse} className="btn-bear">Reverse Deposit</button>
           </div>
         )}
       </div>

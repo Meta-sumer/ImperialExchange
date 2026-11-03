@@ -42,7 +42,9 @@ const depositSchema = new mongoose.Schema(
     senderBankAccount: String, // last 4 digits only
     status: {
       type: String,
-      enum: ['PENDING', 'CONFIRMED', 'REJECTED', 'CANCELLED'],
+      // REVERSED = confirmed by mistake and taken back off the wallet by an
+      // admin (POST /admin/deposits/:id/reverse). Hidden from the user.
+      enum: ['PENDING', 'CONFIRMED', 'REJECTED', 'CANCELLED', 'REVERSED'],
       default: 'PENDING',
       index: true,
     },
@@ -50,6 +52,10 @@ const depositSchema = new mongoose.Schema(
     confirmedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     rejectionReason: String,
     note: String,
+    reversedAt: Date,
+    reversedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    reverseRemark: String,   // why it was reversed; admins only
+    reversedAmount: String,  // wallet amount debited back (base currency)
 
     // ─── Finance auto-distribution (workload-balanced; NOT user ownership) ──
     // The DEPOSIT_OFFICER currently responsible for this request. Set

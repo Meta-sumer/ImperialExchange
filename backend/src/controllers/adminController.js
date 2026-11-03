@@ -1122,6 +1122,61 @@ const rejectDeposit = asyncHandler(async (req, res) => {
   sendSuccess(res, dep);
 });
 
+// POST /admin/deposits/:id/reverse { remark } — undo a deposit confirmed by
+// mistake. Exactly what the confirmation credited (its DEPOSIT ledger row) is
+// debited back off the trading wallet and the deposit becomes REVERSED. The
+// user no longer sees the deposit or the reversal (they net to zero); admins
+// keep both, with the remark, under the Deposits page's REVERSED tab.
+const reverseDeposit = asyncHandler(async (req, res) => {
+  const remark = String(req.body?.remark || '').trim().slice(0, 300);
+  if (!remark) throw new AppError('Write a remark for this reversal', 400, 'REMARK_REQUIRED');
+  const dep = await Deposit.findById(req.params.id);
+  if (!dep) throw new AppError('Deposit not found', 404);
+  if (dep.status !== 'CONFIRMED') throw new AppError('Only a confirmed deposit can be reversed', 400, 'NOT_CONFIRMED');
+  if ((dep.targetWallet || 'trading') !== 'trading') {
+    throw new AppError('Only deposits into a trading account can be reversed here', 400, 'UNSUPPORTED_WALLET');
+  }
+
+  const { WalletLedger } = require('../models/Wallet');
+  const row = await WalletLedger.findOne({ referenceId: dep._id, referenceType: 'deposit', type: WALLET_TX_TYPE.DEPOSIT }).lean();
+  const gross = dep.baseAmount && Number(dep.baseAmount) > 0 ? dep.baseAmount : dep.amount;
+  const amount = row ? String(row.amount).replace(/^[+-]/, '') : sub(gross, dep.fee || '0');
+  const currency = row?.currency || dep.baseCurrency || BASE_CURRENCY;
+  const accountId = row?.accountId || dep.accountId;
+
+  // Money already committed as margin cannot be taken back.
+  if (gt(amount, '0')) {
+    const w = await Wallet.findOne({ userId: dep.userId, accountId, currency }).lean();
+    const free = sub(w?.balance || '0', w?.locked || '0');
+    if (gt(amount, free)) {
+      throw new AppError(`Free balance ₹${Number(free).toLocaleString('en-IN', { maximumFractionDigits: 2 })} is less than the ₹${Number(amount).toLocaleString('en-IN', { maximumFractionDigits: 2 })} to reverse`, 400, 'INSUFFICIENT_FUNDS');
+    }
+  }
+
+  // Claim first so a double click can never debit twice.
+  const stamp = { status: 'REVERSED', reversedAt: new Date(), reversedBy: req.userId, reverseRemark: remark, reversedAmount: amount };
+  const claimed = await Deposit.findOneAndUpdate({ _id: dep._id, status: 'CONFIRMED' }, { $set: stamp }, { new: true });
+  if (!claimed) throw new AppError('This deposit changed meanwhile. Reload and try again.', 409, 'ALREADY_PROCESSED');
+  if (gt(amount, '0')) {
+    try {
+      await walletService.debit({
+        userId: dep.userId, accountId, currency, amount,
+        type: WALLET_TX_TYPE.ADJUSTMENT, referenceType: 'deposit_reversal', referenceId: dep._id,
+        note: `Deposit reversed · ${remark}`,
+      });
+    } catch (err) {
+      await Deposit.updateOne({ _id: dep._id, status: 'REVERSED' }, {
+        $set: { status: 'CONFIRMED' },
+        $unset: { reversedAt: '', reversedBy: '', reverseRemark: '', reversedAmount: '' },
+      });
+      if (err.code === 'INSUFFICIENT_FUNDS') throw new AppError('Wallet balance is less than the amount to reverse', 400, 'INSUFFICIENT_FUNDS');
+      throw err;
+    }
+  }
+  await logAction(req, 'DEPOSIT_REVERSED', { type: 'DEPOSIT', id: dep._id }, { remark, amount, currency, userId: String(dep.userId) });
+  sendSuccess(res, claimed);
+});
+
 // AUDIT
 const listAuditLog = asyncHandler(async (req, res) => {
   const { q, from, to } = req.query;
@@ -3356,6 +3411,7 @@ module.exports = {
   listDeposits,
   confirmDeposit,
   rejectDeposit,
+  reverseDeposit,
   listAuditLog,
   listFeedback,
   getFeedback,

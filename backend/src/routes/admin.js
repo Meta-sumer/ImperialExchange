@@ -118,6 +118,7 @@ router.get('/withdrawal-methods/:id/reveal', c.revealWithdrawalMethod);
 router.get('/deposits', c.listDeposits);
 router.post('/deposits/:id/confirm', c.confirmDeposit);
 router.post('/deposits/:id/reject', c.rejectDeposit);
+router.post('/deposits/:id/reverse', c.reverseDeposit); // confirmed by mistake → take it back
 
 router.get('/audit-log', c.listAuditLog);
 router.get('/reports/trades', c.tradesReport);
