@@ -724,10 +724,11 @@ const detail = asyncHandler(async (req, res) => {
     AuditLog.find({ targetType: 'ORDER', targetId: String(p._id) }).sort({ createdAt: -1 }).limit(50).lean(),
     Trade.find({ symbol: p.symbol, $or: [{ buyAccountId: p.accountId }, { sellAccountId: p.accountId }] }).sort({ executedAt: -1 }).limit(20).lean(),
     userTradingStats(p.userId),
-    Instrument.findById(p.instrumentId).select('symbol lastPrice pricePrecision').lean(),
+    Instrument.findById(p.instrumentId).select('symbol lastPrice pricePrecision lotSize').lean(),
   ]);
   const mark = num(inst?.lastPrice) || num(p.entryPrice);
-  const live = { ...p, currentPrice: mark, floatingPnl: round(floatingPnl(p, mark), 2) };
+  // lotSize lets the edit form show and take the size in lots.
+  const live = { ...p, currentPrice: mark, floatingPnl: round(floatingPnl(p, mark), 2), lotSize: inst?.lotSize || null };
   const timeline = [
     { at: p.openedAt, event: 'Position opened', detail: `${p.side} ${p.quantity} @ ${p.entryPrice}` },
     ...(history || []).map((h) => ({ at: h.createdAt, event: h.action, detail: JSON.stringify(h.metadata || {}) })),

@@ -33,6 +33,12 @@ const toIso = (local) => (local ? new Date(local).toISOString() : null);
 const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
 const money = (n) => `${n < 0 ? '-' : ''}₹${fmtNum(Math.abs(n), 2)}`;
 const str = (v) => (v == null ? '' : String(v));
+// Size is entered in lots: quantity = lots × the script's lot size (GOLD 100,
+// CRUDEOIL 100, NSE/BSE shares 1). A lot size under 1 is the model default
+// (never set), so it counts as 1.
+const lotOf = (lotSize) => { const n = Number(lotSize); return n >= 1 ? n : 1; };
+const clean = (n) => Number(n.toFixed(6));
+const qtyLabel = (n) => fmtNum(n, Number.isInteger(n) ? 0 : 4);
 
 function Shell({ title, subtitle, onClose, children, footer }) {
   return (
@@ -110,7 +116,7 @@ export function ManualTradeModal({ onClose, onSaved }) {
   const [pxHint, setPxHint] = useState({ entry: null, close: null }); // null | 'none' | { price, timeframe, candleTime }
   const [saving, setSaving] = useState(false);
   const [f, setF] = useState({
-    accountId: '', side: 'BUY', quantity: '', entryPrice: '',
+    accountId: '', side: 'BUY', lots: '', entryPrice: '',
     openedAt: toLocalInput(new Date()), status: 'CLOSED', closePrice: '', closedAt: toLocalInput(new Date()),
     leverage: '', stopLoss: '', takeProfit: '', commission: '0', note: '', remark: '',
   });
@@ -215,7 +221,9 @@ export function ManualTradeModal({ onClose, onSaved }) {
 
   // First selected user's account — drives the preview's leverage default.
   const account = targets[0]?.accounts?.find((a) => String(a._id) === targets[0].accountId) || null;
-  const canSave = targets.length > 0 && targets.every((t) => t.accountId) && instrument && num(f.quantity) > 0 && num(f.entryPrice) > 0 && f.openedAt
+  const lot = lotOf(instrument?.lotSize);
+  const qty = clean(num(f.lots) * lot);
+  const canSave = targets.length > 0 && targets.every((t) => t.accountId) && instrument && qty > 0 && num(f.entryPrice) > 0 && f.openedAt
     && (f.status === 'OPEN' || (num(f.closePrice) > 0 && f.closedAt));
 
   const save = async () => {
@@ -225,7 +233,7 @@ export function ManualTradeModal({ onClose, onSaved }) {
       const body = {
         targets: targets.map((t) => ({ userId: t.user._id, accountId: t.accountId })),
         symbol: instrument.symbol, side: f.side,
-        quantity: f.quantity, entryPrice: f.entryPrice, openedAt: toIso(f.openedAt), status: f.status,
+        quantity: String(qty), entryPrice: f.entryPrice, openedAt: toIso(f.openedAt), status: f.status,
         leverage: f.leverage === '' ? undefined : f.leverage,
         stopLoss: f.stopLoss === '' ? undefined : f.stopLoss,
         takeProfit: f.takeProfit === '' ? undefined : f.takeProfit,
@@ -357,7 +365,9 @@ export function ManualTradeModal({ onClose, onSaved }) {
             <option value="OPEN">Open (live position, margin locked)</option>
           </select>
         </Field>
-        <Field label="Quantity"><input className="input" value={f.quantity} onChange={(e) => set('quantity', e.target.value)} placeholder="e.g. 10" /></Field>
+        <Field label="Lots" hint={!instrument ? 'pick a script first' : `1 lot = ${qtyLabel(lot)} qty${qty > 0 ? ` · ${qtyLabel(num(f.lots))} lot${num(f.lots) === 1 ? '' : 's'} = ${qtyLabel(qty)} qty` : ''}`}>
+          <input className="input" inputMode="decimal" value={f.lots} onChange={(e) => set('lots', e.target.value)} placeholder="e.g. 1" />
+        </Field>
         <Field label="Entry price" hint={priceHint('entry')}><input className="input" value={f.entryPrice} onChange={(e) => { set('entryPrice', e.target.value); setAuto((a) => ({ ...a, entry: false })); }} placeholder="e.g. 2948.40" /></Field>
         <Field label="Open date & time" hint="past, local time"><input type="datetime-local" className="input" value={f.openedAt} max={toLocalInput(new Date())} onChange={(e) => set('openedAt', e.target.value)} /></Field>
         <Field label="Leverage" hint="blank = each account's own leverage"><input className="input" value={f.leverage} onChange={(e) => set('leverage', e.target.value)} placeholder={account ? `${account.leverage || 1}` : '1'} /></Field>
@@ -372,7 +382,7 @@ export function ManualTradeModal({ onClose, onSaved }) {
         <Field label="Remark (shown to user)" hint="replaces the automatic 'closed by admin' text in their Trade History"><input className="input" value={f.remark} onChange={(e) => set('remark', e.target.value)} placeholder="e.g. Booked as per client request" /></Field>
       </div>
 
-      <Preview side={f.side} quantity={f.quantity} entryPrice={f.entryPrice} leverage={f.leverage || account?.leverage || 1} status={f.status} closePrice={f.closePrice} commission={f.commission} />
+      <Preview side={f.side} quantity={qty} entryPrice={f.entryPrice} leverage={f.leverage || account?.leverage || 1} status={f.status} closePrice={f.closePrice} commission={f.commission} />
     </Shell>
   );
 
@@ -398,9 +408,10 @@ export function EditTradeModal({ row, onClose, onSaved }) {
         const p = data.data?.position;
         if (!on || !p) return;
         const closed = p.status === 'CLOSED';
+        const q = closed ? (num(p.closedQuantity) > 0 ? num(p.closedQuantity) : num(p.quantity)) : num(p.quantity);
         const form = {
           side: p.side,
-          quantity: closed ? (num(p.closedQuantity) > 0 ? str(p.closedQuantity) : str(p.quantity)) : str(p.quantity),
+          lots: String(clean(q / lotOf(p.lotSize))),
           entryPrice: str(p.entryPrice), openedAt: toLocalInput(p.openedAt),
           leverage: str(p.leverage ?? ''), stopLoss: str(p.stopLoss ?? ''), takeProfit: str(p.takeProfit ?? ''),
           commission: str(p.commission ?? '0'),
@@ -415,6 +426,8 @@ export function EditTradeModal({ row, onClose, onSaved }) {
   }, [row._id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const closed = pos?.status === 'CLOSED';
+  const lot = lotOf(pos?.lotSize);
+  const qty = f ? clean(num(f.lots) * lot) : 0;
   const changed = useMemo(() => {
     if (!f || !init) return {};
     const out = {};
@@ -429,7 +442,8 @@ export function EditTradeModal({ row, onClose, onSaved }) {
     try {
       const body = {};
       for (const [k, v] of Object.entries(changed)) {
-        if (k === 'openedAt' || k === 'closedAt') body[k] = toIso(v);
+        if (k === 'lots') body.quantity = String(clean(num(v) * lot));
+        else if (k === 'openedAt' || k === 'closedAt') body[k] = toIso(v);
         else if (k === 'stopLoss' || k === 'takeProfit') body[k] = v === '' ? null : v;
         else body[k] = v;
       }
@@ -460,7 +474,9 @@ export function EditTradeModal({ row, onClose, onSaved }) {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Side"><SideToggle value={f.side} onChange={(v) => set('side', v)} /></Field>
-            <Field label={closed ? 'Closed quantity' : 'Open quantity'}><input className="input" value={f.quantity} onChange={(e) => set('quantity', e.target.value)} /></Field>
+            <Field label={closed ? 'Closed lots' : 'Open lots'} hint={`1 lot = ${qtyLabel(lot)} qty · = ${qtyLabel(qty)} qty`}>
+              <input className="input" inputMode="decimal" value={f.lots} onChange={(e) => set('lots', e.target.value)} />
+            </Field>
             <Field label="Entry price"><input className="input" value={f.entryPrice} onChange={(e) => set('entryPrice', e.target.value)} /></Field>
             <Field label="Open date & time" hint="local time"><input type="datetime-local" className="input" value={f.openedAt} max={toLocalInput(new Date())} onChange={(e) => set('openedAt', e.target.value)} /></Field>
             {closed && <>
@@ -473,7 +489,7 @@ export function EditTradeModal({ row, onClose, onSaved }) {
             <Field label="Take profit" hint="blank = none"><input className="input" value={f.takeProfit} onChange={(e) => set('takeProfit', e.target.value)} /></Field>
           </div>
           <Field label="Remark (shown to user)" hint="replaces the automatic 'closed by admin' / 'closed by user' text in Trade History; blank = automatic"><input className="input" value={f.remark} onChange={(e) => set('remark', e.target.value)} placeholder="e.g. Closed on client's instruction" /></Field>
-          <Preview side={f.side} quantity={f.quantity} entryPrice={f.entryPrice} leverage={f.leverage || 1} status={closed ? 'CLOSED' : 'OPEN'} closePrice={f.closePrice} commission={f.commission} />
+          <Preview side={f.side} quantity={qty} entryPrice={f.entryPrice} leverage={f.leverage || 1} status={closed ? 'CLOSED' : 'OPEN'} closePrice={f.closePrice} commission={f.commission} />
         </>
       )}
     </Shell>

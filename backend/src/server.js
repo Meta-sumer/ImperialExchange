@@ -433,6 +433,15 @@ const start = async () => {
     logger.error('Instrument commissionType backfill failed', { err: e });
   }
 
+  // MCX lot sizes (GOLD 1 lot = 100, CRUDEOIL = 100, …) on rows still at the
+  // model default; admin-set lot sizes are left alone.
+  try {
+    const n = await require('./services/mcxCommodities').ensureMcxLotSizes();
+    if (n) logger.info(`MCX lot-size backfill: ${n} instrument(s) set`);
+  } catch (e) {
+    logger.error('MCX lot-size backfill failed', { err: e });
+  }
+
   const server = http.createServer(app);
   // Attach WebSocket and wire the engine's broadcaster BEFORE hydrating from
   // DB. hydrateFromDB doesn't currently broadcast, but the engine's book.add
