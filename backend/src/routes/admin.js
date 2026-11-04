@@ -85,6 +85,7 @@ router.post('/impersonate/:userId', c.startImpersonation);
 router.get('/users', c.listUsers);
 router.get('/users/:id', c.getUser);
 router.put('/users/:id/status', c.updateUserStatus);
+router.post('/users/:id/delete', c.deleteUser);
 router.post('/users/:id/kyc-review', c.reviewKyc);
 // Re-open uploads for an already-verified user (expired document, etc).
 router.post('/users/:id/kyc-upload-unlock', c.setKycUploadUnlocked);

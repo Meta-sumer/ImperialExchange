@@ -104,6 +104,8 @@ const listUsers = asyncHandler(async (req, res) => {
     ];
   }
   if (kyc) match.kycStatus = kyc;
+  // Deleted users are gone from every list unless asked for explicitly.
+  match.deletedAt = status === 'deleted' ? { $ne: null } : null;
   if (status === 'active') match.isActive = true;
   if (status === 'inactive') match.isActive = false;
   // "Dormant" = hasn't used the platform in the last 6 months: last login is
@@ -414,6 +416,73 @@ const updateUserStatus = asyncHandler(async (req, res) => {
   if (!user) throw new AppError('User not found', 404);
   await logAction(req, isActive ? 'USER_UNBLOCK' : 'USER_BLOCK', { type: 'USER', id: user._id });
   sendSuccess(res, user.toSafeJSON());
+});
+
+/**
+ * POST /admin/users/:id/delete { reason? } — delete a user from the admin panel.
+ *
+ * The record stays (its trades, deposits and ledger rows need an owner), but
+ * the person is gone: login off, every session revoked, email and phone freed
+ * for a fresh sign-up (originals kept in deletedEmail/deletedPhone), and the
+ * user disappears from user lists. Pending deposits are rejected. Refused
+ * while money is in motion — open trades, pending orders or withdrawals — so
+ * nothing is left half-settled; the message says what to close first.
+ * Staff accounts can only be deleted by a Super Admin, and nobody deletes
+ * themselves or a Super Admin.
+ */
+const deleteUser = asyncHandler(async (req, res) => {
+  const reason = String(req.body?.reason || '').trim().slice(0, 300);
+  const user = await User.findById(req.params.id);
+  if (!user || user.deletedAt) throw new AppError('User not found', 404);
+  if (String(user._id) === String(req.userId)) throw new AppError('You cannot delete your own account', 400, 'SELF_DELETE');
+  if (user.role === 'SUPER_ADMIN') throw new AppError('A Super Admin cannot be deleted', 403, 'FORBIDDEN');
+  if (user.role !== 'USER' && req.user.role !== 'SUPER_ADMIN') {
+    throw new AppError('Only a Super Admin can delete a staff account', 403, 'FORBIDDEN');
+  }
+  const scope = await adminScopeUserIds(req);
+  if (scope && !scope.some((id) => String(id) === String(user._id))) {
+    throw new AppError('This user is outside your assigned users', 403, 'FORBIDDEN');
+  }
+
+  const [openTrades, pendingOrders, pendingWithdrawals] = await Promise.all([
+    Position.countDocuments({ userId: user._id, status: { $in: ['OPEN', 'CLOSING'] }, deletedAt: null }),
+    Order.countDocuments({ userId: user._id, status: { $in: ['PENDING', 'PARTIALLY_FILLED'] } }),
+    Withdrawal.countDocuments({ userId: user._id, status: { $in: ['PENDING', 'APPROVED', 'PROCESSING'] } }),
+  ]);
+  const blockers = [
+    openTrades && `${openTrades} open trade${openTrades === 1 ? '' : 's'}`,
+    pendingOrders && `${pendingOrders} pending order${pendingOrders === 1 ? '' : 's'}`,
+    pendingWithdrawals && `${pendingWithdrawals} pending withdrawal${pendingWithdrawals === 1 ? '' : 's'}`,
+  ].filter(Boolean);
+  if (blockers.length) {
+    throw new AppError(`Close or settle first: ${blockers.join(', ')}`, 409, 'USER_HAS_ACTIVITY');
+  }
+
+  const rejected = await Deposit.updateMany(
+    { userId: user._id, status: 'PENDING' },
+    { $set: { status: 'REJECTED', rejectionReason: 'Account deleted' } },
+  );
+  const originalEmail = user.email;
+  const originalPhone = user.phone || null;
+  await User.updateOne({ _id: user._id }, {
+    $set: {
+      isActive: false,
+      deletedAt: new Date(),
+      deletedBy: req.userId,
+      deleteReason: reason || null,
+      deletedEmail: originalEmail,
+      deletedPhone: originalPhone,
+      email: `deleted.${user._id}@deleted.invalid`,
+      refreshTokens: [],
+    },
+    $unset: { phone: '' },
+  });
+  await logAction(req, 'USER_DELETED', { type: 'USER', id: user._id }, {
+    email: originalEmail, userUid: user.userUid || null, reason, pendingDepositsRejected: rejected.modifiedCount || 0,
+  });
+  // Kick any open session off the live channels too (best effort).
+  try { require('../websocket/server').notifyUser(String(user._id), 'session', { action: 'revoked', reason: 'ACCOUNT_DELETED' }); } catch (_) {}
+  sendSuccess(res, { id: user._id, deleted: true, pendingDepositsRejected: rejected.modifiedCount || 0 });
 });
 
 /**
@@ -3393,6 +3462,7 @@ module.exports = {
   listUsers,
   getUser,
   updateUserStatus,
+  deleteUser,
   reviewKyc,
   setKycUploadUnlocked,
   reviewKycDocument,

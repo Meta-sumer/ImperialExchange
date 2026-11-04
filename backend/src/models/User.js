@@ -42,6 +42,15 @@ const userSchema = new mongoose.Schema(
     role: { type: String, enum: Object.values(ROLES), default: ROLES.USER },
 
     isActive: { type: Boolean, default: true },
+    // Deleted from the admin panel (POST /admin/users/:id/delete). The row is
+    // kept so trades, deposits and the ledger still have an owner; login is off,
+    // sessions are gone, and email/phone are freed for a fresh sign-up (the
+    // originals are kept below for audit). Hidden from user lists.
+    deletedAt: { type: Date, default: null },
+    deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    deleteReason: { type: String, default: null },
+    deletedEmail: { type: String, default: null },
+    deletedPhone: { type: String, default: null },
     isEmailVerified: { type: Boolean, default: false },
     isPhoneVerified: { type: Boolean, default: false },
 

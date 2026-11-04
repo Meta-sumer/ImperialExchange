@@ -269,7 +269,7 @@ export default function Users() {
       case 'kyc': return u.kycStatus || '';
       case 'referredBy': return u.referredBy ? (fullName(u.referredBy) || u.referredBy.email || '') : '';
       case 'referralEarnings': return Number(u.referralEarnings || 0).toFixed(2);
-      case 'status': return u.isActive ? 'Active' : 'Blocked';
+      case 'status': return u.deletedAt ? 'Deleted' : u.isActive ? 'Active' : 'Blocked';
       case 'joined': return u.createdAt ? new Date(u.createdAt).toISOString() : '';
       case 'lastLogin': return u.lastLoginAt ? new Date(u.lastLoginAt).toISOString() : '';
       case 'manager': return u.manager?.name || '';
@@ -352,7 +352,7 @@ export default function Users() {
         );
       }
       case 'status':
-        return <span className={u.isActive ? 'text-bull text-xs' : 'text-bear text-xs'}>{u.isActive ? 'Active' : 'Blocked'}</span>;
+        return <span className={u.isActive ? 'text-bull text-xs' : 'text-bear text-xs'}>{u.deletedAt ? 'Deleted' : u.isActive ? 'Active' : 'Blocked'}</span>;
       case 'joined': return <span className="text-xs text-gray-400">{fmtDate(u.createdAt)}</span>;
       case 'lastLogin': return <span className="text-xs text-gray-400">{u.lastLoginAt ? fmtDate(u.lastLoginAt) : '—'}</span>;
       case 'manager': return <span className="text-xs text-gray-300">{u.manager?.name || '—'}</span>;
@@ -398,6 +398,7 @@ export default function Users() {
             <option value="active">Active</option>
             <option value="inactive">Blocked</option>
             <option value="dormant">Inactive (6mo+)</option>
+            <option value="deleted">Deleted</option>
           </select>
         </div>
         <div>
@@ -846,6 +847,7 @@ function UserDetail({ userId, onClose, onJumpToUser }) {
   const [leverageEditOpen, setLeverageEditOpen] = useState(false);
   const [leverageHistoryOpen, setLeverageHistoryOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   // Affiliate-bonus form state. Lives here so opening/closing it
   // doesn't trigger a remount-driven data refetch.
@@ -1304,6 +1306,13 @@ function UserDetail({ userId, onClose, onJumpToUser }) {
               onSave={saveLeverage}
             />
           )}
+          {deleteOpen && (
+            <DeleteUserModal
+              user={{ ...user, _id: user._id || userId }}
+              onClose={() => setDeleteOpen(false)}
+              onDone={() => { setDeleteOpen(false); onClose(); }}
+            />
+          )}
           {editOpen && (
             <EditUserModal
               user={{ ...user, _id: user._id || userId }}
@@ -1360,9 +1369,22 @@ function UserDetail({ userId, onClose, onJumpToUser }) {
           )}
 
           <div className="flex flex-wrap gap-2 pt-2">
-            <button onClick={toggleStatus} className={user.isActive ? 'btn-bear' : 'btn-bull'}>
-              {user.isActive ? 'Block User' : 'Unblock User'}
-            </button>
+            {user.deletedAt ? (
+              <span className="text-xs text-bear self-center">
+                Deleted {fmtDate(user.deletedAt)}{user.deletedEmail ? ` · was ${user.deletedEmail}` : ''}{user.deleteReason ? ` · ${user.deleteReason}` : ''}
+              </span>
+            ) : (
+              <>
+                <button onClick={toggleStatus} className={user.isActive ? 'btn-bear' : 'btn-bull'}>
+                  {user.isActive ? 'Block User' : 'Unblock User'}
+                </button>
+                {user.role !== 'SUPER_ADMIN' && (
+                  <button onClick={() => setDeleteOpen(true)} className="px-3 py-1.5 rounded-lg text-sm font-semibold border border-bear/50 text-bear hover:bg-bear/10">
+                    Delete User
+                  </button>
+                )}
+              </>
+            )}
             {user.kycStatus === 'PENDING' && (
               <>
                 <button onClick={() => reviewKyc('APPROVE')} className="btn-bull">Approve KYC</button>
@@ -1563,6 +1585,73 @@ function UserDetail({ userId, onClose, onJumpToUser }) {
               })}
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Delete a user. Login goes off, sessions end, email/phone are freed for a new
+ * sign-up and the user leaves every list (Status → Deleted shows them). Their
+ * trades, deposits and ledger stay on record. The server refuses while open
+ * trades, pending orders or withdrawals exist, and says which.
+ * POST /admin/users/:id/delete { reason }
+ */
+function DeleteUserModal({ user, onClose, onDone }) {
+  const [reason, setReason] = useState('');
+  const [typed, setTyped] = useState('');
+  const [saving, setSaving] = useState(false);
+  const name = [user.firstName, user.lastName].filter(Boolean).join(' ') || user.email;
+  const ok = typed.trim().toUpperCase() === 'DELETE';
+
+  const submit = async () => {
+    if (!ok) return;
+    setSaving(true);
+    try {
+      const { data } = await api.post(`/admin/users/${user._id}/delete`, { reason: reason.trim() });
+      const n = data.data?.pendingDepositsRejected || 0;
+      toast.success(`User ${name} deleted${n ? ` · ${n} pending deposit${n === 1 ? '' : 's'} rejected` : ''}`);
+      onDone();
+    } catch (e) {
+      toast.error(errorMessage(e));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/70 z-[60] flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-bg-card border border-border-dark rounded-xl max-w-md w-full" onClick={(e) => e.stopPropagation()}>
+        <div className="p-4 border-b border-border-dark flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-base font-bold text-white">Delete User</h2>
+            <p className="text-xs text-gray-500 mt-0.5">{name} · {user.email}{user.userUid ? ` · ${user.userUid}` : ''}</p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-white text-xl leading-none">✕</button>
+        </div>
+        <div className="p-4 space-y-3">
+          <ul className="text-xs text-gray-400 space-y-1 list-disc pl-4">
+            <li>The user can no longer log in, and every open session ends now.</li>
+            <li>Their email and phone are freed, so they could sign up again as a new user.</li>
+            <li>They disappear from user lists. Status → Deleted still shows them.</li>
+            <li>Past trades, deposits and wallet history stay on record. Pending deposits are rejected.</li>
+            <li>Not possible while they have open trades, pending orders or pending withdrawals.</li>
+          </ul>
+          <div>
+            <label className="label">Reason <span className="text-gray-500 font-normal">· optional, admins only</span></label>
+            <input className="input" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={300} placeholder="e.g. Duplicate / test account" />
+          </div>
+          <div>
+            <label className="label">Type DELETE to confirm</label>
+            <input className="input font-mono" value={typed} onChange={(e) => setTyped(e.target.value)} placeholder="DELETE" autoFocus />
+          </div>
+        </div>
+        <div className="px-4 py-3 border-t border-border-dark flex justify-end gap-2">
+          <button onClick={onClose} className="btn-secondary text-sm">Cancel</button>
+          <button onClick={submit} disabled={saving || !ok} className="btn-bear text-sm disabled:opacity-40">
+            {saving ? 'Deleting…' : 'Delete User'}
+          </button>
         </div>
       </div>
     </div>
