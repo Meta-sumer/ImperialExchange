@@ -28,6 +28,10 @@ const { updateCandlesForTrade } = require('./candleService');
 const { derivedPrice } = require('../utils/derivedPrice');
 
 const POLL_MS = Number(process.env.YAHOO_POLL_MS) || 5000;
+// Indices (NIFTY, BANKNIFTY, …) and the derived MCX rows run on their own fast
+// loop: one batched request every FAST_MS instead of waiting behind the ~200
+// stock requests of the slow loop (which left them 6–13 s apart).
+const FAST_MS = Number(process.env.YAHOO_FAST_MS) || 1500;
 const TIMEOUT_MS = Number(process.env.YAHOO_TIMEOUT_MS) || 7000;
 const MAX = Number(process.env.YAHOO_MAX_SYMBOLS) || 300;
 const CONC = Number(process.env.YAHOO_CONCURRENCY) || 8;
@@ -45,6 +49,7 @@ const INDEX_YH = {
 let broadcaster = null;
 let active = false;
 let _timer = null;
+let _fastTimer = null;
 let _warnedCap = false;
 // Fallback override: when Upstox (the primary Indian feed) dies, the
 // indianFeedSupervisor flips this ON so Yahoo starts pricing Indian instruments
@@ -99,6 +104,47 @@ async function _yahooQuote(sym) {
   } finally { clearTimeout(t); }
 }
 
+// Many symbols in one request through Yahoo's spark endpoint (no crumb, a
+// browser User-Agent is enough). Up to 20 symbols per call. The live price is
+// meta.regularMarketPrice; when Yahoo leaves it out (it does for some futures)
+// the last 1-minute close stands in. Anything spark misses comes back from the
+// per-symbol chart endpoint. Returns Map(symbol → price).
+async function _batchQuotes(symbols) {
+  const out = new Map();
+  for (let i = 0; i < symbols.length; i += 20) {
+    const chunk = symbols.slice(i, i + 20);
+    const url = `https://query1.finance.yahoo.com/v8/finance/spark?symbols=${chunk.map(encodeURIComponent).join(',')}&range=1d&interval=1m`;
+    const ctl = new AbortController();
+    const t = setTimeout(() => ctl.abort(), TIMEOUT_MS);
+    try {
+      const res = await fetch(url, { headers: { 'User-Agent': UA, Accept: 'application/json' }, signal: ctl.signal });
+      if (res.ok) {
+        const j = await res.json();
+        for (const r of (j && j.spark && j.spark.result) || []) {
+          const resp = r && r.response && r.response[0];
+          const m = (resp && resp.meta) || {};
+          let px = m.regularMarketPrice;
+          if (px == null) {
+            const closes = (resp && resp.indicators && resp.indicators.quote && resp.indicators.quote[0] && resp.indicators.quote[0].close) || [];
+            for (let k = closes.length - 1; k >= 0; k -= 1) { if (closes[k] != null) { px = closes[k]; break; } }
+          }
+          if (px == null) px = m.previousClose != null ? m.previousClose : m.chartPreviousClose;
+          if (px != null && Number.isFinite(Number(px))) out.set(r.symbol, Number(px));
+        }
+      }
+    } catch (_) { /* fall through to per-symbol */ } finally { clearTimeout(t); }
+  }
+  const missing = symbols.filter((sym) => !out.has(sym));
+  if (missing.length) {
+    for (const [sym, px] of await _mapPool(missing, CONC, async (x) => [x, await _yahooQuote(x)])) {
+      if (px != null) out.set(sym, px);
+    }
+  }
+  return out;
+}
+
+const _isIndexTicker = (sym) => typeof sym === 'string' && sym.startsWith('^');
+
 // Bounded-concurrency map.
 async function _mapPool(items, n, fn) {
   const out = new Array(items.length);
@@ -138,10 +184,12 @@ async function _pollOnce() {
   if (!insts.length) return;
 
   // Map each instrument → its underlying spot symbol; collect the unique set.
+  // Index tickers (^NSEI, ^NSEBANK, …) are priced by the fast loop.
   const symFor = new Map();
   const uniq = new Set();
   for (const i of insts) {
     const s = spotSymbol(i);
+    if (_isIndexTicker(s)) continue;
     symFor.set(String(i._id), s);
     if (s) uniq.add(s);
   }
@@ -160,6 +208,7 @@ async function _pollOnce() {
 
   let wrote = 0;
   for (const i of insts) {
+    if (!symFor.has(String(i._id))) continue;
     const s = symFor.get(String(i._id));
     const px = priceFor(i, s ? spotMap.get(s) : null);
     if (px == null) continue;
@@ -175,16 +224,23 @@ async function _pollOnce() {
 // last close outside hours). This is what makes "add from the admin form → live
 // price, no API key" work for global forex/stocks/indices/commodities/crypto.
 // Returns how many such instruments exist so the loop can idle-back-off.
-async function _pollGlobalYahoo() {
+async function _pollGlobalYahoo(indexInsts = []) {
   const insts = await Instrument.find({
     externalProvider: 'YAHOO', externalFeedSymbol: { $exists: true, $ne: null }, isActive: true, marketDataEnabled: { $ne: false },
   }).select('_id symbol externalFeedSymbol pricePrecision feedConvert').lean();
-  if (!insts.length) return 0;
+  if (!insts.length && !indexInsts.length) return 0;
   const uniq = [...new Set(insts.map((i) => String(i.externalFeedSymbol).trim()).filter(Boolean))].slice(0, MAX);
   // Derived rows (MCX commodities) need the USD→INR rate in the same poll.
   if (insts.some((i) => i.feedConvert && i.feedConvert.fx === 'USDINR') && !uniq.includes('INR=X')) uniq.push('INR=X');
-  const prices = new Map(await _mapPool(uniq, CONC, async (s) => [s, await _yahooQuote(s)]));
+  // Indian index rows ride the same batched request.
+  for (const i of indexInsts) { const sym = spotSymbol(i); if (sym && !uniq.includes(sym)) uniq.push(sym); }
+  const prices = await _batchQuotes(uniq);
   let wrote = 0;
+  for (const i of indexInsts) {
+    const px = prices.get(spotSymbol(i));
+    if (px == null) continue;
+    await _publishTick(i, px); wrote += 1;
+  }
   for (const i of insts) {
     let px = prices.get(String(i.externalFeedSymbol).trim());
     if (px == null) continue;
@@ -199,17 +255,36 @@ async function _pollGlobalYahoo() {
     await _publishTick(i, px); wrote += 1;   // spot instruments → price is the LTP as-is
   }
   if (wrote) { try { require('./feedOrchestrator').recordTick('YAHOO'); } catch (_) {} }
-  return insts.length;
+  return insts.length + indexInsts.length;
+}
+
+// Indian index rows (spot ticker ^…), when Yahoo is the Indian feed and NSE is open.
+async function _indexInstruments() {
+  if (!(_enabled() || _indianFallback)) return [];
+  let open = true;
+  try { open = require('./marketHours').isExchangeOpen('NSE'); } catch (_) { open = true; }
+  if (!open) return [];
+  const rows = await Instrument.find({
+    exchange: { $in: ['NSE', 'BSE'] }, isActive: true, marketDataEnabled: { $ne: false }, segment: { $ne: 'EQ' },
+  }).select('_id symbol exchange segment underlying pricePrecision tickSize').lean();
+  return rows.filter((i) => _isIndexTicker(spotSymbol(i)));
+}
+
+// The fast loop: indices + derived MCX rows, one batched request per tick.
+async function _fastLoop() {
+  if (!active) return;
+  let n = 0;
+  try { n = await _pollGlobalYahoo(await _indexInstruments()); }
+  catch (e) { console.error('[Yahoo] fast poll error:', e.message); }
+  _fastTimer = setTimeout(_fastLoop, n ? FAST_MS : 60000);
 }
 
 async function _loop() {
   if (!active) return;
-  // 1) Global YAHOO-provider instruments — always polled (own market decides freshness).
-  let globalN = 0;
-  try { globalN = await _pollGlobalYahoo(); }
-  catch (e) { console.error('[Yahoo] global poll error:', e.message); }
+  // Global YAHOO-provider rows and the index rows are the fast loop's job.
+  const globalN = 0;
 
-  // 2) Indian instruments — only when Yahoo is the ACTIVE Indian provider AND
+  // Indian instruments — only when Yahoo is the ACTIVE Indian provider AND
   //    NSE is open (unchanged behaviour; off in prod where INDIAN_FEED=upstox).
   let indianOpen = false;
   if (_enabled() || _indianFallback) {
@@ -231,11 +306,16 @@ async function _loop() {
 const start = () => {
   if (active) return;
   active = true;
-  console.log(`[Yahoo] FREE feed started (poll ${POLL_MS}ms, no API key) — global via externalProvider=YAHOO; Indian NSE-gated when active.`);
+  console.log(`[Yahoo] FREE feed started (stocks every ${POLL_MS}ms, indices + MCX every ${FAST_MS}ms, no API key) — global via externalProvider=YAHOO; Indian NSE-gated when active.`);
+  _fastLoop().catch((e) => console.error('[Yahoo] fast start error:', e.message));
   _loop().catch((e) => console.error('[Yahoo] start error:', e.message));
 };
 
-const stop = () => { active = false; if (_timer) { clearTimeout(_timer); _timer = null; } };
+const stop = () => {
+  active = false;
+  if (_timer) { clearTimeout(_timer); _timer = null; }
+  if (_fastTimer) { clearTimeout(_fastTimer); _fastTimer = null; }
+};
 
 // ─── Fundamentals (real, on-demand) ──────────────────────────────────
 // Two sources, both free:
@@ -363,4 +443,4 @@ async function getNews(inst) {
   })).filter((n) => n.title && n.link);
 }
 
-module.exports = { start, stop, setBroadcaster, setIndianFallback, isActive: () => active, _enabled, spotSymbol, priceFor, getFundamentals, getNews, quoteRaw: _yahooQuote };
+module.exports = { start, stop, setBroadcaster, setIndianFallback, isActive: () => active, _enabled, spotSymbol, priceFor, getFundamentals, getNews, quoteRaw: _yahooQuote, batchQuotes: _batchQuotes };
