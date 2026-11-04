@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { api, errorMessage } from '../services/api';
 import PageHero from '../components/PageHero';
+import DeleteBankAccountModal from '../components/DeleteBankAccountModal';
 
 /**
  * Payments — everything that governs money moving in or out, on one page.
@@ -145,6 +147,12 @@ function PaymentMethodsCard({ mode = 'deposit' }) {
       {on ? 'Shown' : 'Hidden'}
     </button>
   );
+
+  // Blank the default bank details; nothing is stored until Save.
+  const clearBank = () => setD((prev) => ({
+    ...prev,
+    BANK: { ...(prev?.BANK || {}), accountName: '', accountNumber: '', ifsc: '', bankName: '', note: '' },
+  }));
 
   const save = async () => {
     setSaving(true);
@@ -365,6 +373,13 @@ function PaymentMethodsCard({ mode = 'deposit' }) {
             {field('BANK', 'ifsc', 'IFSC', 'HDFC0000001')}
             {field('BANK', 'bankName', 'Bank name', 'HDFC Bank')}
             <div className="sm:col-span-2">{field('BANK', 'note', 'Note (optional)', '')}</div>
+            {!isWithdrawal && (d?.BANK?.accountName || d?.BANK?.accountNumber || d?.BANK?.ifsc || d?.BANK?.bankName) && (
+              <div className="sm:col-span-2 flex items-center justify-between gap-2 flex-wrap">
+                <span className="text-[10px] text-text-muted">Default details, shown when a client has no account from the list below. Save to apply.</span>
+                <button type="button" onClick={clearBank} className="text-[11px] font-semibold text-bear hover:underline">Remove these bank details</button>
+              </div>
+            )}
+            {!isWithdrawal && <ReceivingBankAccounts />}
             {wFixedFields('BANK')}
             {feeRow('BANK')}
           </div>
@@ -578,6 +593,56 @@ function PaymentMethodsCard({ mode = 'deposit' }) {
  * MANUAL uses the entered rates and needs a positive deposit + withdrawal rate.
  */
 const BLANK_CCY = { code: '', symbol: '', mode: 'MANUAL', displayRate: '', depositRate: '', withdrawalRate: '' };
+
+/**
+ * The receiving bank accounts (the Bank Accounts pool) right under the Bank
+ * transfer rail: every account clients are assigned to, with Delete. Adding
+ * and editing stay on the Bank Accounts page. The pool is Super Admin only,
+ * so for anyone else this renders nothing.
+ */
+function ReceivingBankAccounts() {
+  const [rows, setRows] = useState(null);
+  const [deleting, setDeleting] = useState(null);
+  const load = () => api.get('/admin/bank-accounts')
+    .then((r) => setRows(Array.isArray(r.data.data) ? r.data.data : []))
+    .catch(() => setRows(false));
+  useEffect(() => { load(); }, []);
+  if (rows === false || rows === null) return null;
+
+  return (
+    <div className="sm:col-span-2 border-t border-border-dark/40 pt-2 mt-1">
+      <div className="flex items-center justify-between gap-2 mb-1.5">
+        <span className="text-[10px] font-bold text-text-muted uppercase tracking-wider">Receiving bank accounts · {rows.length}</span>
+        <Link to="/bank-accounts" className="text-[11px] font-semibold text-primary-400 hover:underline">Add / edit →</Link>
+      </div>
+      {rows.length === 0 ? (
+        <p className="text-[11px] text-text-muted">No extra accounts. Every client sees the default details above.</p>
+      ) : (
+        <div className="space-y-1.5">
+          {rows.map((a) => (
+            <div key={a._id} className="flex items-center justify-between gap-2 rounded border border-border-dark px-2.5 py-1.5">
+              <div className="min-w-0 text-xs">
+                <span className="text-white font-semibold">{a.label}</span>
+                <span className="text-text-muted"> · {a.bankName || 'Bank'} · ••{String(a.accountNumber || '').slice(-4)}{a.ifsc ? ` · ${a.ifsc}` : ''}</span>
+                <span className="text-text-muted"> · {Number(a.assignedUsers || 0)} user{Number(a.assignedUsers || 0) === 1 ? '' : 's'}</span>
+                {!a.isActive && <span className="ml-1.5 text-[9px] font-bold px-1 py-0.5 rounded bg-bear/20 text-bear">INACTIVE</span>}
+              </div>
+              <button type="button" onClick={() => setDeleting(a)} className="text-[11px] font-semibold text-bear hover:underline shrink-0">Delete</button>
+            </div>
+          ))}
+        </div>
+      )}
+      {deleting && (
+        <DeleteBankAccountModal
+          account={deleting}
+          accounts={rows}
+          onClose={() => setDeleting(null)}
+          onDone={() => { setDeleting(null); load(); }}
+        />
+      )}
+    </div>
+  );
+}
 
 function ExchangeRatesCard() {
   const [rows, setRows] = useState([]);

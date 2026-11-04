@@ -24,5 +24,6 @@ router.get('/:id/users', c.users);
 router.put('/:id', c.update);
 router.post('/:id/deactivate', c.deactivate);
 router.post('/:id/activate', c.activate);
+router.delete('/:id', c.remove); // gone for good; its users move or re-assign
 
 module.exports = router;

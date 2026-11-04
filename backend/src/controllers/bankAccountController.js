@@ -203,7 +203,34 @@ const distribute = asyncHandler(async (req, res) => {
   sendSuccess(res, result);
 });
 
+// DELETE /:id { moveTo? } — remove an account from the pool for good.
+// Users on it move to `moveTo` (another ACTIVE account) when given; otherwise
+// they are unassigned, and each is given the least-loaded active account the
+// next time they open Add Funds (or the Payment Settings bank details when the
+// pool is empty). Past deposits keep the sender details they recorded.
+const remove = asyncHandler(async (req, res) => {
+  const doc = await loadOr404(req.params.id);
+  const moveTo = String(req.body?.moveTo || req.query.moveTo || '').trim();
+  let target = null;
+  if (moveTo) {
+    if (!isObjectId(moveTo) || moveTo === String(doc._id)) throw new AppError('Pick another account to move the users to', 400);
+    target = await BankAccount.findOne({ _id: moveTo, isActive: true }).lean();
+    if (!target) throw new AppError('The account to move the users to is not active', 400);
+  }
+  const moved = await User.updateMany(
+    { depositBankAccountId: doc._id },
+    { $set: { depositBankAccountId: target ? target._id : null } },
+  );
+  await BankAccount.deleteOne({ _id: doc._id });
+  await audit(req, 'BANK_ACCOUNT_DELETED', doc._id, {
+    label: doc.label, last4: last4(doc.accountNumber), bankName: doc.bankName,
+    usersMoved: moved.modifiedCount || 0, movedTo: target ? target.label : null,
+  });
+  sendSuccess(res, { deleted: true, usersMoved: moved.modifiedCount || 0, movedTo: target ? { _id: target._id, label: target.label } : null });
+});
+
 module.exports = {
+  remove,
   unassignedUsers,
   assignMany,
   list,

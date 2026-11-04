@@ -3,6 +3,7 @@ import toast from 'react-hot-toast';
 import { api, errorMessage } from '../services/api';
 import PageHero from '../components/PageHero';
 import { useConfirm } from '../components/ConfirmProvider';
+import DeleteBankAccountModal from '../components/DeleteBankAccountModal';
 
 /**
  * Bank Accounts — the pool of company deposit accounts.
@@ -35,6 +36,7 @@ export default function BankAccounts() {
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState(null);       // null | { row?: account }
   const [usersFor, setUsersFor] = useState(null); // account whose users are open
+  const [deleting, setDeleting] = useState(null); // account being deleted
   const [revealed, setRevealed] = useState(() => new Set());
   const [busy, setBusy] = useState('');
 
@@ -215,6 +217,9 @@ export default function BankAccounts() {
                         >
                           {r.isActive ? 'Deactivate' : 'Activate'}
                         </button>
+                        <button type="button" onClick={() => setDeleting(r)} className="text-xs px-2 py-1 rounded text-bear hover:bg-bear/10" title="Remove this account from the pool for good">
+                          Delete
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -237,6 +242,14 @@ export default function BankAccounts() {
           row={modal.row || null}
           onClose={() => setModal(null)}
           onSaved={async () => { setModal(null); await load(); }}
+        />
+      )}
+      {deleting && (
+        <DeleteBankAccountModal
+          account={deleting}
+          accounts={rows}
+          onClose={() => setDeleting(null)}
+          onDone={async () => { setDeleting(null); await load(); }}
         />
       )}
       {usersFor && (
