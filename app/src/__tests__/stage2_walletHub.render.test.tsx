@@ -468,7 +468,7 @@ describe('WalletScreen — the rail, the strip and deep links', () => {
     let s = text(r);
     expect(s).toContain('Recent Transactions');
     expect(s).toContain('Need help?');
-    expect(s).toContain('support@tradepro.com');
+    expect(s).toContain('support@imperialexchange.in');
     expect(s).toContain('Deposit');
     expect(byText(r, 'View All')).toBeDefined();
 

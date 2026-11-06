@@ -200,13 +200,13 @@ export function RecentTransactions({
 }
 
 /**
- * "Need help? Live chat · support@tradepro.com" — Wallet.jsx, the
+ * "Need help? Live chat · support@imperialexchange.in" — Wallet.jsx, the
  * discreet support line under each view.
  */
 export function SupportStrip(): React.JSX.Element {
   const t = useTheme();
   const nav = useAppNavigation();
-  const mail = 'support@tradepro.com';
+  const mail = 'support@imperialexchange.in';
   const openMail = async (): Promise<void> => {
     try {
       await Linking.openURL(`mailto:${mail}`);

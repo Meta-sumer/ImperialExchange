@@ -564,8 +564,8 @@ export default function Wallet() {
             <ChatGlyph /> Live chat
           </a>
           <span className="text-border-dark">·</span>
-          <a href="mailto:support@tradepro.com" className="inline-flex items-center gap-1.5 font-semibold text-primary-600 hover:text-primary-700">
-            <MailGlyph /> support@tradepro.com
+          <a href="mailto:support@imperialexchange.in" className="inline-flex items-center gap-1.5 font-semibold text-primary-600 hover:text-primary-700">
+            <MailGlyph /> support@imperialexchange.in
           </a>
         </div>
         </>
