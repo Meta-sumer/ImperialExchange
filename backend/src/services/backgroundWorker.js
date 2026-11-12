@@ -81,6 +81,13 @@ const notifyUser = (userId, channel, data) => {
  * Check pending STOP orders. If the stopPrice has been crossed by lastPrice,
  * convert the order to MARKET and send it to the matching engine.
  */
+// Pending orders, SL/TP and trailing stops only fire while the instrument's
+// market is open (services/marketHours.js) — never on a weekend, an exchange
+// holiday or after hours, matching the gate on trader-placed orders.
+const _marketOpen = (inst) => {
+  try { return require('./marketHours').isInstrumentTradeable(inst).tradeable; } catch (_) { return true; }
+};
+
 const triggerStopOrders = async (cache = createTickCache()) => {
   // Only consider stops that haven't fired yet. triggeredAt=null is the gate.
   const stopOrders = await Order.find({
@@ -95,6 +102,7 @@ const triggerStopOrders = async (cache = createTickCache()) => {
   for (const order of stopOrders) {
     const inst = await cache.getInstrument(order.instrumentId);
     if (!inst || !inst.lastPrice) continue;
+    if (!_marketOpen(inst)) continue; // weekend / holiday / after hours
     // Staleness guard: a frozen feed can otherwise fire stops at an outdated
     // tick. 60s matches the slowest data feed cadence we run.
     if (inst.lastPriceUpdatedAt && Date.now() - new Date(inst.lastPriceUpdatedAt).getTime() > 60_000) continue;
@@ -178,6 +186,7 @@ const triggerLimitOrders = async (cache = createTickCache()) => {
   for (const order of limitOrders) {
     const inst = await cache.getInstrument(order.instrumentId);
     if (!inst || !inst.lastPrice) continue;
+    if (!_marketOpen(inst)) continue; // weekend / holiday / after hours
     // Staleness guard — same 60s window the STOP trigger uses.
     if (inst.lastPriceUpdatedAt && Date.now() - new Date(inst.lastPriceUpdatedAt).getTime() > 60_000) continue;
 
@@ -243,6 +252,7 @@ const checkSlTp = async (cache = createTickCache()) => {
   for (const pos of positions) {
     const inst = await cache.getInstrument(pos.instrumentId);
     if (!inst || !inst.lastPrice) continue;
+    if (!_marketOpen(inst)) continue; // weekend / holiday / after hours
     const price = inst.lastPrice;
 
     let shouldClose = false;
@@ -569,6 +579,7 @@ const updateTrailingStops = async (cache = createTickCache()) => {
   for (const pos of positions) {
     const inst = await cache.getInstrument(pos.instrumentId);
     if (!inst || !inst.lastPrice) continue;
+    if (!_marketOpen(inst)) continue; // weekend / holiday / after hours
     const price = inst.lastPrice;
 
     // Update watermark and check exit

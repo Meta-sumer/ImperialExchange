@@ -53,7 +53,8 @@ const { POSITION_STATUS } = require('../config/constants');
 
 // The fields any worker stage reads off an instrument. Lean + projected gives
 // the same values those fields had on the full lean document it replaces.
-const INSTRUMENT_FIELDS = '_id symbol lastPrice lastPriceUpdatedAt spreadValue spreadType';
+// exchange + category: the worker skips triggers while the market is shut.
+const INSTRUMENT_FIELDS = '_id symbol lastPrice lastPriceUpdatedAt spreadValue spreadType exchange category';
 
 // The fields calculateAccountMetrics and computeAccountEquity read off a
 // position, plus accountId to group them.

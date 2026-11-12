@@ -227,7 +227,7 @@ async function _pollOnce() {
 async function _pollGlobalYahoo(indexInsts = []) {
   const insts = await Instrument.find({
     externalProvider: 'YAHOO', externalFeedSymbol: { $exists: true, $ne: null }, isActive: true, marketDataEnabled: { $ne: false },
-  }).select('_id symbol externalFeedSymbol pricePrecision feedConvert').lean();
+  }).select('_id symbol exchange externalFeedSymbol pricePrecision feedConvert').lean();
   if (!insts.length && !indexInsts.length) return 0;
   const uniq = [...new Set(insts.map((i) => String(i.externalFeedSymbol).trim()).filter(Boolean))].slice(0, MAX);
   // Derived rows (MCX commodities) need the USD→INR rate in the same poll.
@@ -241,7 +241,12 @@ async function _pollGlobalYahoo(indexInsts = []) {
     if (px == null) continue;
     await _publishTick(i, px); wrote += 1;
   }
+  const mh = require('./marketHours');
   for (const i of insts) {
+    // An exchange-bound derived row (MCX) holds its last price while that
+    // exchange is shut, as the real contract does: COMEX keeps trading
+    // overnight and on Sunday night, MCX does not.
+    if (i.exchange && mh.SESSIONS[i.exchange] && !mh.isExchangeOpen(i.exchange)) continue;
     let px = prices.get(String(i.externalFeedSymbol).trim());
     if (px == null) continue;
     const conv = i.feedConvert || null;

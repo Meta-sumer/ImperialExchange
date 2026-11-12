@@ -262,6 +262,30 @@ function resolveLimitTabOrderType({ side, limitPrice, currentBid, currentAsk }) 
   return 'INVALID';
 }
 
+// ─── Market-session gate ────────────────────────────────────────────
+// Exchange-bound instruments (NSE/BSE/MCX) trade only in-session — never on
+// weekends or exchange holidays; forex/commodity/index CFDs close on weekends
+// (Fri 22:00 → Sun 22:00 UTC); crypto stays 24/7. Every trader-initiated
+// trade goes through this: new orders, OCO, and closing (full, partial, all),
+// so nothing fills off a stale price while the market is shut. Admin desk
+// actions (manual / backdated trades, desk close) are not gated.
+function assertMarketOpen(instrument) {
+  const { isInstrumentTradeable } = require('../services/marketHours');
+  const { tradeable, session } = isInstrumentTradeable(instrument);
+  if (tradeable) return;
+  const label = instrument.exchange || instrument.category || 'Market';
+  const hours = session.opensAt ? ` Hours: ${session.opensAt}–${session.closesAt} ${session.tz || ''}`.trimEnd() + '.' : '';
+  throw new AppError(`${label} is closed (${session.reason}).${hours}`, 400, 'MARKET_CLOSED');
+}
+
+// Same gate for a position, by its instrument (missing position → caller's 404).
+async function assertMarketOpenForPosition(positionId, userId) {
+  const pos = await Position.findOne({ _id: positionId, userId }).select('instrumentId').lean();
+  if (!pos) return;
+  const inst = await Instrument.findById(pos.instrumentId).select('symbol exchange category').lean();
+  if (inst) assertMarketOpen(inst);
+}
+
 const placeOrder = asyncHandler(async (req, res) => {
   const {
     accountId,
@@ -301,23 +325,8 @@ const placeOrder = asyncHandler(async (req, res) => {
   if (!instrument) throw new AppError('Instrument not active', 404);
   assertInMarketScope(instrument);
 
-  // ─── Market-session gate ────────────────────────────────────────────
-  // Exchange-bound instruments (NSE/BSE/NFO/...) trade only in-session; forex/
-  // commodity/index CFDs close on weekends (Fri 22:00 → Sun 22:00 UTC); crypto
-  // stays 24/7. Keeps orders off stale prices when the market is shut.
-  {
-    const { isInstrumentTradeable } = require('../services/marketHours');
-    const { tradeable, session } = isInstrumentTradeable(instrument);
-    if (!tradeable) {
-      const label = instrument.exchange || instrument.category || 'Market';
-      const hours = session.opensAt ? ` Hours: ${session.opensAt}–${session.closesAt} ${session.tz || ''}`.trimEnd() + '.' : '';
-      throw new AppError(
-        `${label} is closed (${session.reason}).${hours}`,
-        400,
-        'MARKET_CLOSED'
-      );
-    }
-  }
+  // Market-session gate (weekends, holidays, outside exchange hours).
+  assertMarketOpen(instrument);
 
   // ─── Account-tier guards ────────────────────────────────────────────
   // 1. Leverage cap — STANDARD = 1:100, all others unlimited. When the
@@ -1278,6 +1287,8 @@ const listPositions = asyncHandler(async (req, res) => {
 });
 
 const closePosition = asyncHandler(async (req, res) => {
+  // No closing while the market is shut (weekend, holiday, after hours).
+  await assertMarketOpenForPosition(req.params.id, req.userId);
   // Atomic claim: only the request that flips OPEN → CLOSING proceeds.
   // A second concurrent click (or the worker firing SL/TP at the same
   // instant) sees position=null and gets a clean "already settling" 409
@@ -1696,6 +1707,8 @@ const partialClose = asyncHandler(async (req, res) => {
   if (!Number.isFinite(qtyNum) || qtyNum <= 0) {
     throw new AppError('Quantity must be a positive number', 400);
   }
+  // No closing while the market is shut (weekend, holiday, after hours).
+  await assertMarketOpenForPosition(req.params.id, req.userId);
 
   // Atomic claim: ensure (a) status=OPEN, (b) no other partial in flight, and
   // (c) current quantity strictly greater than the requested partial size.
@@ -1785,6 +1798,7 @@ const placeOcoOrder = asyncHandler(async (req, res) => {
   const instrument = await Instrument.findOne({ symbol: symbol.toUpperCase(), isActive: true });
   if (!instrument) throw new AppError('Instrument not active', 404);
   assertInMarketScope(instrument);
+  assertMarketOpen(instrument);
 
   // Validate min/max order size (same as placeOrder).
   if (instrument.minOrderSize && lt(quantity, instrument.minOrderSize)) {
@@ -1942,10 +1956,23 @@ const closeAllPositions = asyncHandler(async (req, res) => {
   const { accountId } = req.body || {};
   const filter = { userId: req.userId, status: POSITION_STATUS.OPEN };
   if (accountId) filter.accountId = accountId;
-  const positions = await Position.find(filter);
+  const allPositions = await Position.find(filter);
+
+  // Positions whose market is shut (weekend, holiday, after hours) stay open.
+  const { isInstrumentTradeable } = require('../services/marketHours');
+  const insts = await Instrument.find({ _id: { $in: [...new Set(allPositions.map((p) => String(p.instrumentId)))] } })
+    .select('symbol exchange category').lean();
+  const instById = new Map(insts.map((i) => [String(i._id), i]));
+  const marketShut = [];
+  const positions = allPositions.filter((p) => {
+    const inst = instById.get(String(p.instrumentId));
+    if (inst && !isInstrumentTradeable(inst).tradeable) { marketShut.push(p); return false; }
+    return true;
+  });
+  if (allPositions.length && !positions.length) assertMarketOpen(instById.get(String(marketShut[0].instrumentId)));
 
   let closed = 0;
-  const failed = [];
+  const failed = marketShut.map((p) => ({ positionId: String(p._id), symbol: p.symbol, reason: 'Market closed' }));
   for (const pos of positions) {
     const claimed = await Position.findOneAndUpdate(
       { _id: pos._id, status: POSITION_STATUS.OPEN, settled: { $ne: true } },
@@ -1996,7 +2023,7 @@ const closeAllPositions = asyncHandler(async (req, res) => {
       failed.push({ positionId: String(pos._id), symbol: pos.symbol, reason: err.message });
     }
   }
-  sendSuccess(res, { closed, failed, total: positions.length });
+  sendSuccess(res, { closed, failed, total: allPositions.length });
 });
 
 module.exports = {
