@@ -564,7 +564,18 @@ export default function Wallet() {
             <ChatGlyph /> Live chat
           </a>
           <span className="text-border-dark">·</span>
-          <a href="mailto:support@imperialexchange.in" className="inline-flex items-center gap-1.5 font-semibold text-primary-600 hover:text-primary-700">
+          {/* mailto opens the device's mail app — and silently does nothing on
+              a computer with none set up (common on Windows). Copy the address
+              too, and say so, so a click always gives the user something. */}
+          <a
+            href="mailto:support@imperialexchange.in"
+            onClick={() => {
+              try { navigator.clipboard?.writeText('support@imperialexchange.in'); } catch (_) { /* no clipboard */ }
+              toast.success('Email copied: support@imperialexchange.in');
+            }}
+            title="Opens your mail app and copies the address"
+            className="inline-flex items-center gap-1.5 font-semibold text-primary-600 hover:text-primary-700"
+          >
             <MailGlyph /> support@imperialexchange.in
           </a>
         </div>
