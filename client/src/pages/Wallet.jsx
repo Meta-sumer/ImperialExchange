@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { NAV_ITEMS } from '../components/WalletSidebar';
 import toast from 'react-hot-toast';
+import { SUPPORT_EMAIL, SUPPORT_MAILTO, copyEmail } from '../utils/support';
 import { api, errorMessage } from '../services/api';
 import { wsClient } from '../services/ws';
 import { fmtNum, fmtMoney, fmtMoneyDual, fmtMoneyBoth, fmtDate, currencySymbol } from '../utils/format';
@@ -564,19 +565,14 @@ export default function Wallet() {
             <ChatGlyph /> Live chat
           </a>
           <span className="text-border-dark">·</span>
-          {/* mailto opens the device's mail app — and silently does nothing on
-              a computer with none set up (common on Windows). Copy the address
-              too, and say so, so a click always gives the user something. */}
+          {/* Opens the mail app and copies the address (utils/support.js). */}
           <a
-            href="mailto:support@imperialexchange.in"
-            onClick={() => {
-              try { navigator.clipboard?.writeText('support@imperialexchange.in'); } catch (_) { /* no clipboard */ }
-              toast.success('Email copied: support@imperialexchange.in');
-            }}
+            href={SUPPORT_MAILTO}
+            onClick={() => copyEmail()}
             title="Opens your mail app and copies the address"
             className="inline-flex items-center gap-1.5 font-semibold text-primary-600 hover:text-primary-700"
           >
-            <MailGlyph /> support@imperialexchange.in
+            <MailGlyph /> {SUPPORT_EMAIL}
           </a>
         </div>
         </>

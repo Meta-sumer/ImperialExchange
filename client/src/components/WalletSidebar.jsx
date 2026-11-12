@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { SUPPORT_EMAIL, SUPPORT_MAILTO, copyEmail } from '../utils/support';
 
 /**
  * WalletSidebar — left-rail nav shared between the Wallet page and the
@@ -96,8 +97,12 @@ export default function WalletSidebar({ activeId = null, onSelect = null }) {
       <div className="hidden lg:block bg-white border border-border-dark rounded-2xl p-4">
         <div className="text-sm font-bold text-text-primary">Need Help?</div>
         <div className="text-[11px] text-text-muted mt-0.5">Our support team is available 24/7</div>
-        <Link
-          to="/helpdesk"
+        <div className="text-[11px] font-semibold text-primary-600 mt-1 break-all">{SUPPORT_EMAIL}</div>
+        {/* Mails support (and copies the address, utils/support.js). */}
+        <a
+          href={SUPPORT_MAILTO}
+          onClick={() => copyEmail()}
+          title="Opens your mail app and copies the address"
           className="mt-3 inline-flex items-center justify-center gap-1.5 w-full px-3 py-2 rounded-xl border border-border-dark text-text-primary text-xs font-semibold hover:shadow-card transition-all"
         >
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -106,7 +111,7 @@ export default function WalletSidebar({ activeId = null, onSelect = null }) {
             <path d="M3 14v3a2 2 0 0 0 2 2h1v-7H5a2 2 0 0 0-2 2z" />
           </svg>
           Contact Support
-        </Link>
+        </a>
       </div>
 
       {/* Secure footer card — hidden on mobile */}

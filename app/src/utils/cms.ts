@@ -61,7 +61,7 @@ export const DEFAULT_FOOTER_COLUMNS: readonly FooterColumn[] = [
     { label: 'FAQ', href: '#' }, { label: 'Guidelines', href: '#' },
   ] },
   { name: 'Support', items: [
-    { label: 'Knowledge Base', href: '#' }, { label: 'Contact Support', href: '#' },
+    { label: 'Knowledge Base', href: '#' }, { label: 'Contact Support', href: 'mailto:support@imperialexchange.in' },
     { label: 'Privacy Policy', href: '#' }, { label: 'Terms & Conditions', href: '#' },
   ] },
 ];
@@ -95,7 +95,7 @@ export type FooterTarget =
 export const footerTarget = (item: Pick<FooterItem, 'href' | 'openInNewTab'>): FooterTarget => {
   const href = String(item.href || '').trim();
   if (!href || href === '#') return { kind: 'none' };
-  if (/^https?:/i.test(href)) return { kind: 'external', url: href };
+  if (/^(https?|mailto|tel):/i.test(href)) return { kind: 'external', url: href };
   // "Open in new tab" on a site path has no second tab here — it opens in app.
   return { kind: 'internal', path: href.startsWith('/') ? href : `/${href}` };
 };

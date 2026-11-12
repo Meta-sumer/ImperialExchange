@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../services/api';
+import { SUPPORT_MAILTO, copyEmail } from '../utils/support';
 
 /**
  * CMS-driven multi-column footer.
@@ -42,7 +43,7 @@ const DEFAULT_COLUMNS = [
     { label: 'FAQ', href: '#' }, { label: 'Guidelines', href: '#' },
   ] },
   { name: 'Support', items: [
-    { label: 'Knowledge Base', href: '#' }, { label: 'Contact Support', href: '#' },
+    { label: 'Knowledge Base', href: '#' }, { label: 'Contact Support', href: SUPPORT_MAILTO },
     { label: 'Privacy Policy', href: '#' }, { label: 'Terms & Conditions', href: '#' },
   ] },
 ];
@@ -50,6 +51,11 @@ const DEFAULT_COLUMNS = [
 // Render a footer link — '#' dummy (non-navigating), external, or internal route.
 function FooterLink({ l }) {
   if (l.href === '#') return <a href="#" onClick={(e) => e.preventDefault()} className={linkCls}>{l.label}</a>;
+  // mailto:/tel: are not routes — a plain anchor, and a mail link also copies its address.
+  if (/^mailto:/i.test(l.href)) {
+    return <a href={l.href} onClick={() => copyEmail(l.href.slice(7).split('?')[0])} className={linkCls}>{l.label}</a>;
+  }
+  if (/^tel:/i.test(l.href)) return <a href={l.href} className={linkCls}>{l.label}</a>;
   if (l.openInNewTab || /^https?:/i.test(l.href)) {
     return <a href={l.href} target="_blank" rel="noopener noreferrer" className={linkCls}>{l.label}</a>;
   }
