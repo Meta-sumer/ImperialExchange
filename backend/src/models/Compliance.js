@@ -88,7 +88,10 @@ commissionSchema.index(
 const kycDocumentSchema = new mongoose.Schema(
   {
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
-    docType: { type: String, enum: ['ID_FRONT', 'ID_BACK', 'SELFIE', 'ADDRESS_PROOF', 'OTHER'], required: true },
+    // PAN_CARD: the app's KYC is PAN first, then the rest; the type was
+    // missing here, so the app's first upload failed validation and its
+    // Step 2 never unlocked.
+    docType: { type: String, enum: ['PAN_CARD', 'ID_FRONT', 'ID_BACK', 'SELFIE', 'ADDRESS_PROOF', 'OTHER'], required: true },
     originalFilename: String,
     storagePath: String, // local path or S3 key
     mimeType: String,

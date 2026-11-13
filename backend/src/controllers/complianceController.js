@@ -53,7 +53,7 @@ function sniffMime(buf) {
  * to avoid pulling in multer just for this. For large files in production,
  * switch to multer + S3 multipart upload.
  *
- * Body: { docType: 'ID_FRONT' | 'ID_BACK' | 'SELFIE' | 'ADDRESS_PROOF', filename, mimeType, dataBase64 }
+ * Body: { docType: 'PAN_CARD' | 'ID_FRONT' | 'ID_BACK' | 'SELFIE' | 'ADDRESS_PROOF', filename, mimeType, dataBase64 }
  */
 const uploadKycDocument = asyncHandler(async (req, res) => {
   const { docType, filename, mimeType, dataBase64 } = req.body;
