@@ -12,16 +12,17 @@
  *
  * Env:
  *   DHAN_SCRIP_URL           (optional override)
- *   DHAN_SYNC_EQUITY=all|curated             default 'curated'
+ *   DHAN_SYNC_EQUITY=all|curated             default 'all'
  */
 const Instrument = require('../models/Instrument');
 const { LIQUID_NSE_SET } = require('../config/indianLiquidStocks');
 
 const CSV_URL = process.env.DHAN_SCRIP_URL || 'https://images.dhan.co/api-data/api-scrip-master-detailed.csv';
 
-// Default 'curated': only keep the liquid universe (real-price-able on the free
-// Yahoo feed). Set DHAN_SYNC_EQUITY=all to import every listed scrip again.
-const EQUITY_MODE = (process.env.DHAN_SYNC_EQUITY || 'curated').toLowerCase();
+// Default 'all': every NSE EQ/BE scrip (~3,000). The free Yahoo feed prices
+// them in batches (yahooFeed _batchQuotes, ~3 s for the whole universe).
+// DHAN_SYNC_EQUITY=curated keeps only the liquid list in config/indianLiquidStocks.
+const EQUITY_MODE = (process.env.DHAN_SYNC_EQUITY || 'all').toLowerCase();
 const EQ_CURATED = LIQUID_NSE_SET;
 
 

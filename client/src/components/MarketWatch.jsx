@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { loadInstruments } from '../hooks/useInstruments';
+import { liveSubset } from '../utils/liveSubset';
 import { wsClient } from '../services/ws';
 import { fmtNum, fmtPriceDual } from '../utils/format';
 import { useFxRate } from '../hooks/useFxRate';
@@ -122,7 +123,9 @@ export default function MarketWatch({ activeSymbol, onSelect, search = '' }) {
   // Live tickers
   useEffect(() => {
     if (!rows.length) return;
-    const unsubs = rows.map((r) =>
+    // Bounded set (utils/liveSubset.js) — the catalogue holds ~3,000 NSE scrips.
+    const live = new Set(liveSubset(rows, { always: [activeSymbol] }));
+    const unsubs = rows.filter((r) => live.has(r.symbol)).map((r) =>
       wsClient.subscribe(`ticker:${r.symbol}`, (data) => {
         const last = Number(data.lastPrice);
         if (!Number.isFinite(last) || last <= 0) return;

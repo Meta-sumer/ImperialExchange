@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useInstruments } from '../hooks/useInstruments';
 import { wsClient } from '../services/ws';
+import { liveSubset } from '../utils/liveSubset';
 import { api } from '../services/api';
 import { fmtNum } from '../utils/format';
 import { EconomicCalendarCard } from '../components/EconomicCalendar';
@@ -165,10 +166,13 @@ export default function MarketList() {
   const navigate = useNavigate();
   const { rows: instruments, loading } = useInstruments();
   const [priceMap, setPriceMap] = useState({});
+  // Rows shown; "Show more" adds a page. The full NSE universe is ~3,000 rows.
+  const [limit, setLimit] = useState(100);
+  useEffect(() => { setLimit(100); }, [view]);
 
-  // Live WS subs for every instrument we'll render.
+  // Live WS subs for a bounded set (utils/liveSubset.js), not all ~3,000 rows.
   const symbolsKey = useMemo(
-    () => instruments.map((r) => r.symbol).sort().join('|'),
+    () => liveSubset(instruments).sort().join('|'),
     [instruments]
   );
   useEffect(() => {
@@ -224,7 +228,7 @@ export default function MarketList() {
             </div>
           )}
 
-          {!loading && list.map((r, idx) => {
+          {!loading && list.slice(0, limit).map((r, idx) => {
             const change = Number(r.change24h);
             const price = Number(r.lastPrice);
             const absChange = Number.isFinite(change) && Number.isFinite(price)
@@ -279,6 +283,13 @@ export default function MarketList() {
               </button>
             );
           })}
+          {!loading && list.length > limit && (
+            <div className="px-6 py-4 text-center">
+              <button type="button" onClick={() => setLimit((n) => n + 100)} className="btn-secondary text-sm">
+                Show more ({list.length - limit} more)
+              </button>
+            </div>
+          )}
         </div>
       </div>
 

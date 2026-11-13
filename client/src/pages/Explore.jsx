@@ -5,6 +5,7 @@ import AssetIcon from '../components/AssetIcon';
 import WatchlistButton from '../components/WatchlistButton';
 import { useInstruments } from '../hooks/useInstruments';
 import { useRecentlyViewed } from '../hooks/useRecentlyViewed';
+import { liveSubset } from '../utils/liveSubset';
 import { wsClient } from '../services/ws';
 import { api, errorMessage } from '../services/api';
 import { useSelectedAccount } from '../store/selectedAccount';
@@ -362,34 +363,6 @@ export default function Explore() {
   const [selectedSector, setSelectedSector] = useState(null);
   const [priceMap, setPriceMap] = useState({});
 
-  // Subscribe to live tickers for every instrument. Same model the
-  // InstrumentStrip uses — the WS multiplexes to one socket so this is
-  // bounded by symbol count, not subscriber count.
-  const symbolsKey = useMemo(
-    () => instruments.map((r) => r.symbol).sort().join('|'),
-    [instruments]
-  );
-  useEffect(() => {
-    if (!symbolsKey) return;
-    const symbols = symbolsKey.split('|').filter(Boolean);
-    const unsubs = symbols.map((sym) =>
-      wsClient.subscribe(`ticker:${sym}`, (data) => {
-        const last = Number(data.lastPrice);
-        if (!Number.isFinite(last) || last <= 0) return;
-        // Some feeds (crypto/Binance) also push a live 24h %; keep it when
-        // present so we use the exchange value instead of deriving one.
-        const change = Number(data.change24h);
-        setPriceMap((prev) => {
-          const cur = prev[sym];
-          const nextLast = String(last);
-          const nextChange = Number.isFinite(change) ? change : (cur ? cur.change : undefined);
-          if (cur && cur.last === nextLast && cur.change === nextChange) return prev;
-          return { ...prev, [sym]: { last: nextLast, change: nextChange } };
-        });
-      })
-    );
-    return () => unsubs.forEach((u) => u && u());
-  }, [symbolsKey]);
 
   // Instruments with LIVE price + 24h % applied (everything downstream reads
   // from this). Most feeds only push lastPrice, so the % — which drives the
@@ -426,6 +399,37 @@ export default function Explore() {
   // without any extra fan-out.
   const [positions, setPositions] = useState([]);
   const [pendingOrders, setPendingOrders] = useState([]);
+
+  // Live tickers. The WS multiplexes to one socket, so the cost is the symbol
+  // count: with the whole NSE universe listed, subscribe to a bounded set
+  // (utils/liveSubset.js) plus the user's open positions and pending orders.
+  const symbolsKey = useMemo(
+    () => liveSubset(instruments, {
+      always: [...positions.map((p) => p.symbol), ...pendingOrders.map((o) => o.symbol)],
+    }).sort().join('|'),
+    [instruments, positions, pendingOrders]
+  );
+  useEffect(() => {
+    if (!symbolsKey) return;
+    const symbols = symbolsKey.split('|').filter(Boolean);
+    const unsubs = symbols.map((sym) =>
+      wsClient.subscribe(`ticker:${sym}`, (data) => {
+        const last = Number(data.lastPrice);
+        if (!Number.isFinite(last) || last <= 0) return;
+        // Some feeds (crypto/Binance) also push a live 24h %; keep it when
+        // present so we use the exchange value instead of deriving one.
+        const change = Number(data.change24h);
+        setPriceMap((prev) => {
+          const cur = prev[sym];
+          const nextLast = String(last);
+          const nextChange = Number.isFinite(change) ? change : (cur ? cur.change : undefined);
+          if (cur && cur.last === nextLast && cur.change === nextChange) return prev;
+          return { ...prev, [sym]: { last: nextLast, change: nextChange } };
+        });
+      })
+    );
+    return () => unsubs.forEach((u) => u && u());
+  }, [symbolsKey]);
   // Tab inside the "Your activity" card — flips between live positions
   // and pending limit / stop orders. Defaults to positions so the user
   // sees their actual P/L first.

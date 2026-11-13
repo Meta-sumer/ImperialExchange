@@ -33,7 +33,9 @@ const POLL_MS = Number(process.env.YAHOO_POLL_MS) || 5000;
 // stock requests of the slow loop (which left them 6–13 s apart).
 const FAST_MS = Number(process.env.YAHOO_FAST_MS) || 1500;
 const TIMEOUT_MS = Number(process.env.YAHOO_TIMEOUT_MS) || 7000;
-const MAX = Number(process.env.YAHOO_MAX_SYMBOLS) || 300;
+// The whole NSE cash universe is ~3,000 scrips; batched 20 per request that is
+// ~150 requests a cycle, fewer than the one-per-symbol polling of 200 stocks.
+const MAX = Number(process.env.YAHOO_MAX_SYMBOLS) || 4000;
 const CONC = Number(process.env.YAHOO_CONCURRENCY) || 8;
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36';
 
@@ -105,39 +107,63 @@ async function _yahooQuote(sym) {
 }
 
 // Many symbols in one request through Yahoo's spark endpoint (no crumb, a
-// browser User-Agent is enough). Up to 20 symbols per call. The live price is
-// meta.regularMarketPrice; when Yahoo leaves it out (it does for some futures)
-// the last 1-minute close stands in. Anything spark misses comes back from the
-// per-symbol chart endpoint. Returns Map(symbol → price).
+// browser User-Agent is enough), up to 20 per call, CONC calls at a time.
+// Yahoo answers in one of two shapes and has switched between them:
+//   { spark: { result: [{ symbol, response: [{ meta, indicators }] }] } }
+//   { "<SYM>": { symbol, close: [...], previousClose, chartPreviousClose } }
+// The live price is meta.regularMarketPrice when present, else the last
+// 1-minute close (Yahoo keeps the current bar's close live). A symbol spark
+// leaves out is asked once on the per-symbol chart endpoint; one that fails
+// there too is not asked again for 10 minutes (delisted / not on Yahoo).
+// Returns Map(symbol → price).
+const _noQuoteUntil = new Map();
+const NO_QUOTE_RETRY_MS = 10 * 60 * 1000;
+
+function _lastClose(closes) {
+  if (!Array.isArray(closes)) return null;
+  for (let k = closes.length - 1; k >= 0; k -= 1) { if (closes[k] != null) return closes[k]; }
+  return null;
+}
+
+function _readSpark(j, out) {
+  if (j && j.spark && Array.isArray(j.spark.result)) {
+    for (const r of j.spark.result) {
+      const resp = r && r.response && r.response[0];
+      const m = (resp && resp.meta) || {};
+      let px = m.regularMarketPrice;
+      if (px == null) px = _lastClose(resp && resp.indicators && resp.indicators.quote && resp.indicators.quote[0] && resp.indicators.quote[0].close);
+      if (px == null) px = m.previousClose != null ? m.previousClose : m.chartPreviousClose;
+      if (r && r.symbol && px != null && Number.isFinite(Number(px))) out.set(r.symbol, Number(px));
+    }
+    return;
+  }
+  if (!j || typeof j !== 'object') return;
+  for (const [key, v] of Object.entries(j)) {
+    if (!v || typeof v !== 'object' || !Array.isArray(v.close)) continue;
+    let px = _lastClose(v.close);
+    if (px == null) px = v.previousClose != null ? v.previousClose : v.chartPreviousClose;
+    if (px != null && Number.isFinite(Number(px))) out.set(v.symbol || key, Number(px));
+  }
+}
+
 async function _batchQuotes(symbols) {
   const out = new Map();
-  for (let i = 0; i < symbols.length; i += 20) {
-    const chunk = symbols.slice(i, i + 20);
+  const chunks = [];
+  for (let i = 0; i < symbols.length; i += 20) chunks.push(symbols.slice(i, i + 20));
+  await _mapPool(chunks, CONC, async (chunk) => {
     const url = `https://query1.finance.yahoo.com/v8/finance/spark?symbols=${chunk.map(encodeURIComponent).join(',')}&range=1d&interval=1m`;
     const ctl = new AbortController();
     const t = setTimeout(() => ctl.abort(), TIMEOUT_MS);
     try {
       const res = await fetch(url, { headers: { 'User-Agent': UA, Accept: 'application/json' }, signal: ctl.signal });
-      if (res.ok) {
-        const j = await res.json();
-        for (const r of (j && j.spark && j.spark.result) || []) {
-          const resp = r && r.response && r.response[0];
-          const m = (resp && resp.meta) || {};
-          let px = m.regularMarketPrice;
-          if (px == null) {
-            const closes = (resp && resp.indicators && resp.indicators.quote && resp.indicators.quote[0] && resp.indicators.quote[0].close) || [];
-            for (let k = closes.length - 1; k >= 0; k -= 1) { if (closes[k] != null) { px = closes[k]; break; } }
-          }
-          if (px == null) px = m.previousClose != null ? m.previousClose : m.chartPreviousClose;
-          if (px != null && Number.isFinite(Number(px))) out.set(r.symbol, Number(px));
-        }
-      }
+      if (res.ok) _readSpark(await res.json(), out);
     } catch (_) { /* fall through to per-symbol */ } finally { clearTimeout(t); }
-  }
-  const missing = symbols.filter((sym) => !out.has(sym));
+  });
+  const now = Date.now();
+  const missing = symbols.filter((sym) => !out.has(sym) && !((_noQuoteUntil.get(sym) || 0) > now));
   if (missing.length) {
     for (const [sym, px] of await _mapPool(missing, CONC, async (x) => [x, await _yahooQuote(x)])) {
-      if (px != null) out.set(sym, px);
+      if (px != null) { out.set(sym, px); _noQuoteUntil.delete(sym); } else _noQuoteUntil.set(sym, now + NO_QUOTE_RETRY_MS);
     }
   }
   return out;
@@ -177,6 +203,46 @@ async function _publishTick(inst, ltp) {
   if (broadcaster) broadcaster.publish(`ticker:${inst.symbol}`, { lastPrice: price, ts: Date.now(), source: 'YAHOO' });
 }
 
+// The stock loop's publisher: thousands of rows a cycle, so one bulkWrite for
+// the rows whose price changed (same pipeline as _publishTick) and one
+// updateMany that only refreshes the feed timestamps of the rest — the stale-
+// feed guard reads those, and priceChangedAt stays put so a frozen quote still
+// shows as frozen. Candles and the ticker broadcast go out for changed rows only.
+const _lastPublished = new Map(); // symbol → price string last written
+
+async function _publishMany(entries) {
+  const changed = [];
+  const sameIds = [];
+  for (const { inst, px } of entries) {
+    const price = Number(px).toFixed(inst.pricePrecision || 2);
+    if (_lastPublished.get(inst.symbol) === price) sameIds.push(inst._id);
+    else changed.push({ inst, price });
+  }
+  if (changed.length) {
+    await Instrument.bulkWrite(changed.map(({ inst, price }) => ({ updateOne: { filter: { _id: inst._id }, update: [{ $set: {
+      prevPrice: { $ifNull: ['$lastPrice', '0'] },
+      lastPrice: price,
+      lastPriceUpdatedAt: '$$NOW',
+      feedUpdatedAt: '$$NOW',
+      priceChangedAt: { $cond: [
+        { $eq: [{ $toString: { $ifNull: ['$lastPrice', ''] } }, String(price)] },
+        { $ifNull: ['$priceChangedAt', '$$NOW'] },
+        '$$NOW',
+      ] },
+    } }] } })), { ordered: false });
+  }
+  if (sameIds.length) {
+    await Instrument.updateMany({ _id: { $in: sameIds } }, [{ $set: { lastPriceUpdatedAt: '$$NOW', feedUpdatedAt: '$$NOW' } }]);
+  }
+  const ts = Date.now();
+  for (const { inst, price } of changed) {
+    _lastPublished.set(inst.symbol, price);
+    try { await updateCandlesForTrade({ symbol: inst.symbol, price, quantity: '0', ts }); } catch (_) { /* */ }
+    if (broadcaster) broadcaster.publish(`ticker:${inst.symbol}`, { lastPrice: price, ts, source: 'YAHOO' });
+  }
+  return changed.length + sameIds.length;
+}
+
 async function _pollOnce() {
   const insts = await Instrument.find({
     exchange: { $in: ['NSE', 'BSE', 'NFO', 'BFO'] }, isActive: true, marketDataEnabled: { $ne: false },
@@ -203,17 +269,17 @@ async function _pollOnce() {
     if (!_warnedCap) { console.warn(`[Yahoo] ${uniq.size} symbols > cap ${MAX}; polling first ${MAX}. Raise YAHOO_MAX_SYMBOLS or curate instruments.`); _warnedCap = true; }
   }
 
-  const prices = await _mapPool(list, CONC, async (s) => [s, await _yahooQuote(s)]);
-  const spotMap = new Map(prices);
+  const spotMap = await _batchQuotes(list);
 
-  let wrote = 0;
+  const entries = [];
   for (const i of insts) {
     if (!symFor.has(String(i._id))) continue;
     const s = symFor.get(String(i._id));
     const px = priceFor(i, s ? spotMap.get(s) : null);
     if (px == null) continue;
-    await _publishTick(i, px); wrote += 1;
+    entries.push({ inst: i, px });
   }
+  const wrote = entries.length ? await _publishMany(entries) : 0;
   if (wrote) { try { require('./feedOrchestrator').recordTick('YAHOO'); } catch (_) {} }
 }
 
@@ -292,6 +358,7 @@ async function _loop() {
   // Indian instruments — only when Yahoo is the ACTIVE Indian provider AND
   //    NSE is open (unchanged behaviour; off in prod where INDIAN_FEED=upstox).
   let indianOpen = false;
+  const startedAt = Date.now();
   if (_enabled() || _indianFallback) {
     try { indianOpen = require('./marketHours').isExchangeOpen('NSE'); } catch (_) { indianOpen = true; }
     if (indianOpen) {
@@ -304,8 +371,10 @@ async function _loop() {
       }
     }
   }
-  // Fast cadence while something is live to poll; idle-back-off otherwise.
-  _timer = setTimeout(_loop, (globalN || indianOpen) ? POLL_MS : 60000);
+  // A new cycle every POLL_MS measured start to start (a big universe takes a
+  // few seconds to fetch, and the stale-feed guard allows 10 s); idle-back-off
+  // while nothing is live to poll.
+  _timer = setTimeout(_loop, (globalN || indianOpen) ? Math.max(1000, POLL_MS - (Date.now() - startedAt)) : 60000);
 }
 
 const start = () => {

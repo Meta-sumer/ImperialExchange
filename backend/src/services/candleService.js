@@ -137,10 +137,13 @@ const _gapFill = async (symbol, tf, tfMs, lastBucketTs, lastClose, currentBucket
 // that have not been flushed yet.
 //
 // What changes: a crash (not a graceful stop — server.js flushes on SIGTERM)
-// loses up to one interval of candle updates. Unset or 0 = the per-tick path,
-// unchanged.
+// loses up to one interval of candle updates. ON by default (5000 ms) since
+// the whole NSE cash universe is fed; CANDLE_FLUSH_MS=0 restores the per-tick
+// path.
 const flushMs = () => {
-  const v = Number(process.env.CANDLE_FLUSH_MS);
+  const raw = process.env.CANDLE_FLUSH_MS;
+  if (raw == null || raw === '') return 5000;
+  const v = Number(raw);
   return Number.isFinite(v) && v > 0 ? v : 0;
 };
 
