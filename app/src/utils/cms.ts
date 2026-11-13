@@ -50,7 +50,7 @@ export interface FooterColumn {
 export const DEFAULT_FOOTER_COLUMNS: readonly FooterColumn[] = [
   { name: 'Company', items: [
     { label: 'About Us', href: '#' }, { label: 'Daily News Updates', href: '/news' },
-    { label: 'Contact Us', href: '#' }, { label: 'Meet Our Team', href: '#' },
+    { label: 'Contact Us', href: 'mailto:support@imperialexchange.in' }, { label: 'Meet Our Team', href: '#' },
   ] },
   { name: 'Products', items: [
     { label: 'Solutions', href: '#' }, { label: 'Plans & Pricing', href: '#' },

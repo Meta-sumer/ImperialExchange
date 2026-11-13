@@ -32,7 +32,7 @@ const linkCls = 'text-sm text-text-secondary hover:text-primary-500 transition-c
 const DEFAULT_COLUMNS = [
   { name: 'Company', items: [
     { label: 'About Us', href: '#' }, { label: 'Daily News Updates', href: '/news' },
-    { label: 'Contact Us', href: '#' }, { label: 'Meet Our Team', href: '#' },
+    { label: 'Contact Us', href: SUPPORT_MAILTO }, { label: 'Meet Our Team', href: '#' },
   ] },
   { name: 'Products', items: [
     { label: 'Solutions', href: '#' }, { label: 'Plans & Pricing', href: '#' },
