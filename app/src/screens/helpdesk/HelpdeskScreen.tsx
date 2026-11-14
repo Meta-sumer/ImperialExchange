@@ -10,6 +10,7 @@ import { feedbackApi } from '@/api/feedback.api';
 import { HelpdeskChatPanel } from '@/components/helpdesk/HelpdeskChatPanel';
 import { TicketStatusChip } from '@/components/helpdesk/TicketStatusChip';
 import { AppText, Button, Card, Input, Screen, Select, Tabs, toast } from '@/components/ui';
+import { WalletGlyph } from '@/components/wallet/WalletNav';
 import { navigateToPath } from '@/navigation/linking';
 import type { AppScreenProps, HelpdeskTab } from '@/navigation/types';
 import { useTheme } from '@/theme';
@@ -33,6 +34,7 @@ import {
   toEmbedUrl,
   type HelpArticle,
 } from '@/utils/helpdesk';
+import { SUPPORT_EMAIL, copySupportEmail, openSupportMail } from '@/utils/support';
 import { subscribeChat, subscribeTickets } from '@/websocket/channels';
 
 /**
@@ -189,6 +191,8 @@ export function HelpdeskScreen({ navigation, route }: AppScreenProps<'Helpdesk'>
             Browse the knowledge base, or open a ticket — our team responds in &lt; 24 hours.
           </AppText>
         </View>
+
+        <SupportEmailCard />
 
         <Tabs tabs={tabs} value={tab} onChange={setTab} />
 
@@ -355,6 +359,45 @@ export function HelpdeskScreen({ navigation, route }: AppScreenProps<'Helpdesk'>
   );
 }
 
+/**
+ * The support mailbox, highlighted at the top of the Helpdesk so it is the
+ * first thing seen from Support. Tap opens the mail app; Copy copies it.
+ */
+function SupportEmailCard(): React.JSX.Element {
+  const t = useTheme();
+  return (
+    <Pressable
+      accessibilityRole="link"
+      accessibilityLabel={`Email support at ${SUPPORT_EMAIL}`}
+      onPress={() => { void openSupportMail(); }}
+      style={({ pressed }) => [styles.mailCard, {
+        borderColor: t.colors.primary,
+        backgroundColor: t.alpha(t.colors.primary, pressed ? 0.18 : 0.1),
+      }]}
+      testID="helpdesk-support-email"
+    >
+      <View style={[styles.mailIcon, { backgroundColor: t.colors.primary }]}>
+        <WalletGlyph name="mail" size={20} color="#FFFFFF" strokeWidth={2} />
+      </View>
+      <View style={styles.flex}>
+        <AppText variant="micro" weight="700" color={t.colors.primaryText} style={styles.mailTag}>EMAIL SUPPORT</AppText>
+        <AppText variant="bodyStrong" color={t.colors.primaryText} numberOfLines={1} adjustsFontSizeToFit>{SUPPORT_EMAIL}</AppText>
+        <AppText variant="caption" tone="muted">Tap to write to us</AppText>
+      </View>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Copy support email"
+        hitSlop={8}
+        onPress={() => { void copySupportEmail(); }}
+        style={({ pressed }) => [styles.copyBtn, { borderColor: t.alpha(t.colors.primary, 0.5), opacity: pressed ? 0.6 : 1 }]}
+      >
+        <WalletGlyph name="copy" size={14} color={t.colors.primaryText} strokeWidth={2} />
+        <AppText variant="small" weight="600" color={t.colors.primaryText}>Copy</AppText>
+      </Pressable>
+    </Pressable>
+  );
+}
+
 /** One knowledge-base article; tap to open the answer. */
 function KbCard({ article }: { article: HelpArticle }): React.JSX.Element {
   const t = useTheme();
@@ -405,6 +448,10 @@ const styles = StyleSheet.create({
   page: { gap: 20 },
   sub: { marginTop: 6 },
   flex: { flex: 1, minWidth: 0 },
+  mailCard: { flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1.5, borderRadius: 12, padding: 14 },
+  mailIcon: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+  mailTag: { letterSpacing: 1, marginBottom: 2 },
+  copyBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, borderWidth: 1, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
   stack: { gap: 12 },
   center: { alignItems: 'center', paddingVertical: 32 },
   cta: { marginTop: 16 },

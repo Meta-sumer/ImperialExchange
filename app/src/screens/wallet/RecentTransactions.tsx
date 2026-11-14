@@ -1,12 +1,13 @@
 import React, { useMemo, type ReactNode } from 'react';
-import { Linking, Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
-import { AppText, Card, toast } from '@/components/ui';
+import { AppText, Card } from '@/components/ui';
 import { WalletGlyph, type WalletGlyphName } from '@/components/wallet/WalletNav';
 import { useAppNavigation } from '@/navigation/types';
 import { useTheme } from '@/theme';
 import type { Deposit, Withdrawal } from '@/types/wallet';
 import { fmtMoney } from '@/utils/money';
+import { SUPPORT_EMAIL, openSupportMail } from '@/utils/support';
 import {
   fmtLocalDateTime,
   recentMethodText,
@@ -206,15 +207,9 @@ export function RecentTransactions({
 export function SupportStrip(): React.JSX.Element {
   const t = useTheme();
   const nav = useAppNavigation();
-  const mail = 'support@imperialexchange.in';
-  const openMail = async (): Promise<void> => {
-    try {
-      await Linking.openURL(`mailto:${mail}`);
-    } catch {
-      // No mail app configured: say where to write rather than fail silently.
-      toast(`Write to ${mail}`);
-    }
-  };
+  const mail = SUPPORT_EMAIL;
+  // No mail app configured: openSupportMail copies the address instead.
+  const openMail = openSupportMail;
   return (
     <View style={styles.support}>
       <AppText variant="small" tone="muted">Need help?</AppText>

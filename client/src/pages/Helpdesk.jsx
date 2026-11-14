@@ -4,6 +4,7 @@ import toast from 'react-hot-toast';
 import { api, errorMessage } from '../services/api';
 import { wsClient } from '../services/ws';
 import { fmtDate } from '../utils/format';
+import { SUPPORT_EMAIL, SUPPORT_MAILTO, copyEmail } from '../utils/support';
 import HelpdeskChat from './HelpdeskChat';
 
 // Valid Helpdesk tabs — used to validate/restore the tab from the URL.
@@ -216,6 +217,41 @@ export default function Helpdesk() {
         <p className="text-sm text-text-secondary mt-2">
           Browse the knowledge base, or open a ticket — our team responds in &lt; 24 hours.
         </p>
+      </div>
+
+      {/* The support mailbox, highlighted first thing on the page (same card as
+          the app's Helpdesk). The card opens the mail app and copies the
+          address (utils/support.js); Copy only copies. */}
+      <div className="flex items-center gap-3 sm:gap-4 rounded-xl border-2 border-primary-500 bg-primary-500/10 p-4">
+        <a
+          href={SUPPORT_MAILTO}
+          onClick={() => copyEmail()}
+          title="Opens your mail app and copies the address"
+          className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0 group"
+        >
+          <span className="shrink-0 w-11 h-11 rounded-full bg-primary-500 flex items-center justify-center">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <rect x="2" y="4" width="20" height="16" rx="2" />
+              <path d="M22 6l-10 7L2 6" />
+            </svg>
+          </span>
+          <span className="min-w-0">
+            <span className="block text-[10px] font-bold tracking-widest text-primary-500">EMAIL SUPPORT</span>
+            <span className="block text-base sm:text-lg font-semibold text-primary-500 truncate group-hover:underline">{SUPPORT_EMAIL}</span>
+            <span className="block text-xs text-text-muted">Click to write to us</span>
+          </span>
+        </a>
+        <button
+          type="button"
+          onClick={() => copyEmail()}
+          className="shrink-0 inline-flex items-center gap-1.5 rounded-lg border border-primary-500/50 px-3 py-1.5 text-xs font-semibold text-primary-500 hover:bg-primary-500/10"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <rect x="9" y="9" width="13" height="13" rx="2" />
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+          </svg>
+          Copy
+        </button>
       </div>
 
       {/* Tabs */}
